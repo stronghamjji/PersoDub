@@ -1,11 +1,4 @@
-// Which edition the page is in (desktop/src/edition.js), as the shell's
-// preload says (persodubShell.edition). The production edition, the
-// company's build, is PersoDubbing ({app}, ui/src/i18n.mjs): no GitHub anywhere, Perso's own page
-// for its downloads and guide, and Customer support as an inquiry form sent
-// to the support inbox. A plain browser has no shell and is the open-source page.
-export const DESKTOP_APP_URL = "https://perso.ai/dubbing/desktop-app";
-
-const shellOf = () => globalThis.window?.persodubShell;
+// The page's links into Perso.
 
 /** A link into Perso with the app's utm tail (GET /api/settings perso_utm)
     and the pressed button as utm_content, so Perso's web analytics say which
@@ -23,9 +16,4 @@ export function persoResultLink(projectSeq, utm) {
   const page = Number.isInteger(projectSeq) && projectSeq > 0
     ? `https://perso.ai/en/workspace/vt/detail/${projectSeq}` : "https://perso.ai/workspace/vt";
   return persoLink(page, "result", utm);
-}
-
-/** True in the production edition's app. */
-export function isProduction(shell = shellOf()) {
-  return shell?.edition === "production";
 }

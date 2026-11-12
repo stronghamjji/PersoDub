@@ -20,8 +20,8 @@ const tables = {};   // code -> its table, once loadTable has read it
 let language = "en";
 
 /** The sentence `key` in the current language, `{name}` filled from `vars`. */
-// The product's name, in every sentence that says {app}: the name this
-// edition shows (desktop/src/edition.js displayName, through the shell),
+// The product's name, in every sentence that says {app}: the name the
+// shell gives the app (persodubShell.name),
 // "PersoDub" with no shell. Filled in every language, English too.
 let appName = null;
 export function setAppName(name) { appName = name || null; }

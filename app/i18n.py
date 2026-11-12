@@ -110,8 +110,8 @@ APP_NAME_ENV = "PERSODUB_APP_NAME"
 
 
 def app_name() -> str:
-    """What the sentences call the app: the desktop shell passes the edition's
-    name (desktop/src/edition.js displayName); a plain server run is PersoDub."""
+    """What the sentences call the app: the desktop shell passes the name;
+    a plain server run is PersoDub."""
     return os.environ.get(APP_NAME_ENV, "").strip() or "PersoDub"
 
 

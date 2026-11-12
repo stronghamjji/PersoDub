@@ -54,7 +54,6 @@ def test_update_appends_when_the_key_is_absent():
 
 def test_get_reports_unset_keys(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, BASE)
-    monkeypatch.delenv("PERSODUB_EDITION", raising=False)
     r = client.get("/api/settings")
     assert r.status_code == 200
     body = r.json()
@@ -535,18 +534,15 @@ def test_cleared_workspace_pin_does_not_fall_back_to_the_process_env(tmp_path, m
 
 # --- the button events switch ----------------------------------------------
 
-def test_events_are_on_in_both_editions_until_the_switch_is_saved(tmp_path, monkeypatch):
+def test_events_are_on_until_the_switch_is_saved(tmp_path, monkeypatch):
     # The shell decides the same way (desktop/src/events.js eventsOn): no line
-    # in kit.env means on, whichever edition the build is.
+    # in kit.env means on.
     _kit(tmp_path, monkeypatch, BASE)
-    for edition in ("production", "opensource"):
-        monkeypatch.setenv("PERSODUB_BUILD_EDITION", edition)
-        assert client.get("/api/settings").json()["events_enabled"] is True
+    assert client.get("/api/settings").json()["events_enabled"] is True
 
 
 def test_the_events_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch, BASE)
-    monkeypatch.setenv("PERSODUB_BUILD_EDITION", "production")
     assert client.post("/api/settings", json={"events_enabled": False}).status_code == 200
     assert "PERSODUB_EVENTS=0" in (kit / "kit.env").read_text(encoding="utf-8")
     assert client.get("/api/settings").json()["events_enabled"] is False

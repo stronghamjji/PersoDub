@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { STEP_IDS } from "./installSpec.js";
-import { EDITIONS } from "./edition.js";
+import { EDITION } from "./edition.js";
 import { readWindowsText } from "./windowsText.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
@@ -122,9 +122,9 @@ export function timingSeconds(timing) {
 export function buildPayload({ event, os, version, device, edition, errorCode, step,
                                engines, credits, seconds, timing, languages, persoKey }) {
   const payload = { event, os, version, device };
-  // Which app sent it (1.0.1), so the dashboard counts the two apart: one of
-  // the two names, or nothing.
-  if (Object.hasOwn(EDITIONS, edition ?? "")) payload.edition = edition;
+  // Which build sent it (1.0.1), which the dashboard counts by: this build's
+  // name (edition.js EDITION), or nothing.
+  if (edition === EDITION) payload.edition = edition;
   if (FAILURE_EVENTS.has(event)) {
     payload.error_code = ERROR_CODES.has(errorCode) ? errorCode : "unknown";
   }

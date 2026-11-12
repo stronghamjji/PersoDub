@@ -99,27 +99,12 @@ Outside the computer:
 | GitHub Releases | auto-update (packaged builds) | `desktop/src/updateFlow.js` (electron-updater) |
 | Two Cloudflare Workers | usage counts and failure reports, each switchable off in Settings | `desktop/src/usageIpc.js`, `desktop/src/reporting.js`; the report relay's code is `relay/`, the count worker's is not in this repository |
 
-<a id="editions"></a>**Editions.** The same code builds two editions that
-differ in where a dub runs when nothing is chosen: open source (the
-default) dubs on this computer, production dubs with the Perso API. Both
-point at the same repository, `stronghamjji/PersoDub`.
+<a id="repository"></a>**The repository.** The app points at one
+repository, `stronghamjji/PersoDub`.
 The repository decides the update feed, the page's GitHub and Send
 feedback links, the Help window's User guide and FAQ, and the update
-window's release-notes link. `PERSODUB_EDITION` picks the edition when the
-payload is collected, and `scripts/collect-payload.mjs` writes it into the
-payload's `EDITION` file. At launch `desktop/src/edition.js` reads that file
-(the environment cannot override it; without the file, as in `npm start`, it
-reads `PERSODUB_EDITION`), `updater.js resolveFeed` sets the feed from it,
+window's release-notes link. `updater.js resolveFeed` sets the feed from it,
 and the window passes the repository to the page as `persodubShell.repo`.
-The kit remembers the edition it first ran as in `kit.env`
-(`rememberedEdition`), so an update from the public releases keeps it.
-The shell also hands the edition to the backend as `PERSODUB_EDITION`
-(`desktop/src/orchestrator.js startEngines`), and `app/setup.py` makes Perso's
-cloud the dub default for production only; the open-source edition, and a
-backend run without the shell, dub on this computer. The remembered edition
-is for that default only: the Perso sign-in and the button events' default
-follow the app file's own edition, which the backend gets as
-`PERSODUB_BUILD_EDITION`.
 
 ### 1.2 The kit and the other folders
 
@@ -155,10 +140,9 @@ and `timeline.log`, `shell.log`, `persodub.log` and the job logs merged in time
 order by `desktop/src/timeline.js`)
 and `<userData>/ports.json`. `<userData>` is Electron's folder for the app, named
 after the packaged `package.json`'s `name` (`desktop/electron-builder.js`
-sets it per edition):
+sets it):
 `~/Library/Application Support/persodub-desktop-shell` on macOS,
-`%APPDATA%\persodub-desktop-shell` on Windows, and `perso-desktopapp-shell`
-for the production edition, whose kit is in a `PersoDubbing` folder.
+`%APPDATA%\persodub-desktop-shell` on Windows.
 
 ### 1.3 Boot
 
@@ -382,7 +366,7 @@ the finished screen's own files (`edited.srt`,
 per-line voices, the background and the speaker references are kept on
 purpose: re-speaking a single line needs all three.
 
-A **Perso API dub** (`dub_mode="perso"`, the production edition's default when nothing is chosen) runs none of the six: it logs
+A **Perso API dub** (`dub_mode="perso"`) runs none of the six: it logs
 `1/1 Dubbing in the Perso cloud…`, uploads `input.mp4`, lets Perso
 translate and voice it, and downloads `dubbed.mp4`; the Perso project and
 workspace numbers go on the record so its script can be opened later
@@ -485,7 +469,7 @@ else present.
 | Boot and install | `bootFlow`, `config`, `engineCheck`, `installSpec` (every step, the packs, the `kit.env` template), `installer` (step runner with resume and retry), `download`, `extract`, `exec`, `ollamaPull`, `kitEnv`, `platform` |
 | Processes | `orchestrator` (start, health, restart, stop), `runtimeFile`, `health`, `freePort`, `cleanExit` |
 | Window and IPC | `windowFactory`, `zoomReset`, `downloadsIpc` + `downloadPath` + `revealPolicy`, `packIpc`, `usageIpc` |
-| Updates | `updateFlow`, `updater`, `lockCheck`, `edition` (which repository the build points at, see [Editions](#editions)) |
+| Updates | `updateFlow`, `updater`, `lockCheck`, `edition` (which repository the build points at, see [The repository](#repository)) |
 | Counts and failure reports | `analytics`, `reporting`, `report`, `reportLogs`, `reportQueue` |
 | Shared | `errorText` |
 
@@ -493,7 +477,7 @@ Beside them: `preload.cjs` (the page's only door into the shell),
 `screens/` (the loading, installing, error and not-installed pages),
 `fake/` (a fake backend and sidecar for `PERSODUB_FAKE=1` and the smoke
 tests), `scripts/collect-payload.mjs` (gathers the payload a build bundles:
-the app code, the sidecar, the requirement files, `KIT_VERSION`, `EDITION`), and
+the app code, the sidecar, the requirement files, `KIT_VERSION`), and
 `vendor/` (the sidecar, the CAM++ model, and the requirement files of the
 engines and eraser venvs).
 
@@ -756,7 +740,7 @@ masks read them:
 | `Perso workspace: <name> (#<seq>)`, `Perso credits used: <N>` | `app/report_mask.py` (and, for the workspace line, `desktop/src/report.js`), which mask them before a report leaves |
 | `progress <N>%` from the eraser worker | `app/api/erase.py _PROGRESS` |
 | `Cancelled by user request`, `Error: <Type>: <text>` | the screen's raw log and failure reports |
-| `shell.log`, each line `YYYY-MM-DD HH:MM:SS,mmm - shell - <LEVEL> - <text>` in local time (`desktop/src/logLine.js`): `PERSODUB_VERSION`, `PERSODUB_EDITION`, `EDITION <edition>: dubs default to <where> (<kept in kit.env, or first run>; app file: <build> build)`, `PERSODUB_READY`, `PERSODUB_KIT`, `PERSODUB_PACK`, and a run's numbered lines, `INSTALL START`, `Inputs:`, `[Step i/N] <id> START`/`DONE`/`FAILED`, `INSTALL ALL DONE`, `ENGINES START`, `[Engine i/N] <name> START`/`READY`/`FAILED`, `ENGINES ALL READY`, `<name> EXITED` and `Mem[...]` every five minutes and after each exit; under `INSTALL FAILED` and an engine's `FAILED`, the tool's or the engine's own last lines, indented two spaces; and every file the shell downloads or has pip, static-ffmpeg, hf, Whisper or electron-updater download goes between `DOWNLOAD START <what> from <url> to <path>` and `DOWNLOAD DONE` (size, seconds, and what checked it) or `DOWNLOAD FAILED` at ERROR, with `CONNECTED` where the shell's own `download.js` fetches, a `FILE` line for each file a tool fetched, an update's check between `UPDATE CHECK START` and `UPDATE CHECK DONE` (the version found, or up to date) or `UPDATE CHECK FAILED`, `UPDATE CHECK OFF` when it is switched off, and `CONNECTED update`, `REDIRECT update` and `CONNECT FAILED update` for what its requests met; an update's failure is one line without the server's headers, its saved file's home folder reads `~`, and every address's query is cut to `?…` | the end-to-end update test (`PERSODUB_VERSION`) and anyone reading a support log |
+| `shell.log`, each line `YYYY-MM-DD HH:MM:SS,mmm - shell - <LEVEL> - <text>` in local time (`desktop/src/logLine.js`): `PERSODUB_VERSION`, `PERSODUB_EDITION`, `PERSODUB_READY`, `PERSODUB_KIT`, `PERSODUB_PACK`, and a run's numbered lines, `INSTALL START`, `Inputs:`, `[Step i/N] <id> START`/`DONE`/`FAILED`, `INSTALL ALL DONE`, `ENGINES START`, `[Engine i/N] <name> START`/`READY`/`FAILED`, `ENGINES ALL READY`, `<name> EXITED` and `Mem[...]` every five minutes and after each exit; under `INSTALL FAILED` and an engine's `FAILED`, the tool's or the engine's own last lines, indented two spaces; and every file the shell downloads or has pip, static-ffmpeg, hf, Whisper or electron-updater download goes between `DOWNLOAD START <what> from <url> to <path>` and `DOWNLOAD DONE` (size, seconds, and what checked it) or `DOWNLOAD FAILED` at ERROR, with `CONNECTED` where the shell's own `download.js` fetches, a `FILE` line for each file a tool fetched, an update's check between `UPDATE CHECK START` and `UPDATE CHECK DONE` (the version found, or up to date) or `UPDATE CHECK FAILED`, `UPDATE CHECK OFF` when it is switched off, and `CONNECTED update`, `REDIRECT update` and `CONNECT FAILED update` for what its requests met; an update's failure is one line without the server's headers, its saved file's home folder reads `~`, and every address's query is cut to `?…` | the end-to-end update test (`PERSODUB_VERSION`) and anyone reading a support log |
 
 <a id="ipc-channels"></a>**Preload IPC.** `window.persodubShell` exposes
 `retry`, `rememberJob`, `onDownloadDone`, `revealPath`, `relaunch`,
@@ -771,7 +755,7 @@ masks read them:
 three halves (preload, main-process handlers, page) and fails on a channel
 that is not wired the whole way through. Besides the functions it carries two
 values the window passes on its command line: `repo`, the repository the build
-points at ([Editions](#editions)), and `locale`, the computer's language (`ko`
+points at ([The repository](#repository)), and `locale`, the computer's language (`ko`
 or `en`) that a language setting of Auto means; the same test checks that the
 window and the preload name the same flags and that the page reads them.
 

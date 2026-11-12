@@ -1,17 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isProduction, persoLink, persoResultLink, DESKTOP_APP_URL } from "./edition.mjs";
-
-test("the page is the production edition only when the shell says so", () => {
-  assert.equal(isProduction({ edition: "production" }), true);
-  assert.equal(isProduction({ edition: "opensource" }), false);
-  assert.equal(isProduction({ edition: "" }), false);
-  assert.equal(isProduction(undefined), false, "a plain browser is the open-source page");
-});
-
-test("the production links go to Perso's desktop app page", () => {
-  assert.equal(DESKTOP_APP_URL, "https://perso.ai/dubbing/desktop-app");
-});
+import { persoLink, persoResultLink } from "./edition.mjs";
 
 // Every link into Perso says which app, version and button it came from.
 test("persoLink puts the app's utm tail and the button on a Perso link, or leaves it bare without a tail", () => {

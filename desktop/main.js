@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, safeStorage, screen, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname } from "node:path";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -13,12 +13,10 @@ import { createBoot } from "./src/bootFlow.js";
 import { registerDownloadIpc } from "./src/downloadsIpc.js";
 import { registerPackIpc } from "./src/packIpc.js";
 import { createWindow } from "./src/windowFactory.js";
-import { EDITIONS, displayName, readEdition, readBuildEnv, findPayloadDir } from "./src/edition.js";
+import { EDITION, PRODUCT, REPO, readBuildEnv, findPayloadDir } from "./src/edition.js";
 import { setAppName, useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
-import { createShellAuth, keyMadeCheck, registerAuthIpc } from "./src/authIpc.js";
-import { clearSignInStorage, keyWindowFactory, signInWindowFactory } from "./src/signInWindow.js";
 
 // Two launches must never both start backends: the second would overwrite
 // pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
@@ -33,16 +31,12 @@ if (!gotLock) app.quit();
 const lastRunClosedByUser = gotLock && takeCleanExit(join(app.getPath("userData"), "logs"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// Which build this is, and so which repository the updates come from and the
-// page's GitHub links open (src/edition.js). Read once, from the same payload
-// the boot installs from; the window is made before the boot runs.
-const payloadDir = findPayloadDir(HERE);
-const edition = readEdition({ payloadDir, env: process.env });
-// ...and what the production build was given when it was made: its support
-// web app (src/edition.js readBuildEnv).
-const built = readBuildEnv({ payloadDir, env: process.env });
-// Every sentence that names the app says this edition's name (src/edition.js).
-setAppName(displayName(edition));
+// What the build was given when it was made: its support web app
+// (src/edition.js readBuildEnv). Read once, from the same payload the boot
+// installs from; the window is made before the boot runs.
+const built = readBuildEnv({ payloadDir: findPayloadDir(HERE), env: process.env });
+// Every sentence that names the app says its name (src/edition.js).
+setAppName(PRODUCT.name);
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
 const ctx = {
@@ -56,9 +50,6 @@ const ctx = {
   // page that arrives after the check (boot) or reloads mid-download still
   // shows the right pill. Null until an update is found.
   updateState: null,
-  // The signed-in Perso account, hashed, for the button events (src/events.js
-  // eventsUserId). Empty until the production edition's sign-in fills it.
-  userId: "",
 };
 
 // Fired on the FIRST instance when a second launch is attempted; bring the
@@ -87,35 +78,22 @@ function shellLog(line, level = "INFO") {
 }
 
 // The page's buttons and screens, and the steps of a person's way through the
-// app (src/events.js): made first, since the sign-in, the boot and the
-// updater each record theirs.
-const events = createEvents({ app, ctx, edition, shellLog });
+// app (src/events.js): made first, since the boot and the updater each
+// record theirs.
+const events = createEvents({ app, ctx, shellLog });
 
-// Perso sign-in in a window of the app's own, over the app's window,
-// production edition only (src/auth.js, src/signInWindow.js). The window
-// comes back through a port on this computer, so nothing is registered with
-// the system. A sign-out wipes that window's cookies, so the next sign-in asks
-// Perso for the account again, and drops the inquiries still waiting: each
-// holds the account's full e-mail (src/reporting.js dropInquiries).
-const auth = createShellAuth({ app, safeStorage, net, shell, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
-                               makeSignInWindow: signInWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }),
-                               clearSignInSession: () => clearSignInStorage(session),
-                               logoPath: join(HERE, "screens", "logo.png"), onSignOut: () => reporter.dropInquiries(ctx.kitDir),
-                               track: events.track });
-
-const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "",
-                                  account: () => auth.signedInAccount(), edition });
-const countUsage = usageCounter(app, edition);
+const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "" });
+const countUsage = usageCounter(app);
 // The last batch of events, sent once as the app goes (src/events.js quit):
 // before Restart to update quits, or at the first will-quit, which waits for it.
 let eventsSent = false;
 function sendLastEvents() {
   eventsSent = true;
-  return events.quit({ signed_in: Boolean(auth.signedInAccount()) });
+  return events.quit({ signed_in: false });
 }
-const updater = createUpdater({ app, dialog, ctx, shellLog, edition, track: events.track, beforeQuit: sendLastEvents });
+const updater = createUpdater({ app, dialog, ctx, shellLog, track: events.track, beforeQuit: sendLastEvents });
 const boot = createBoot({
-  app, ctx, appDir: HERE, edition, shellLog, countUsage, track: events.track,
+  app, ctx, appDir: HERE, shellLog, countUsage, track: events.track,
   sendReport: reporter.sendReport, flushReports: reporter.flushReports, startUpdater: updater.startUpdater,
 });
 
@@ -133,7 +111,7 @@ app.whenReady().then(() => {
   // any future bug report) reads it instead of guessing from filenames.
   shellLog(`PERSODUB_VERSION ${app.getVersion()}`);
   // ...and the edition, so a support log says which repository this build updates from.
-  shellLog(`PERSODUB_EDITION ${edition} ${EDITIONS[edition] || "no repository"}`);
+  shellLog(`PERSODUB_EDITION ${EDITION} ${REPO}`);
 
   // This computer's random id, made on the first launch and kept: every report
   // and job record names the computer by it (src/analytics.js keepDevice).
@@ -147,8 +125,8 @@ app.whenReady().then(() => {
   useLanguage({ osLocale: app.getLocale() });
 
   session.defaultSession.on("will-download", downloads.willDownload);
-  ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: EDITIONS[edition], locale: systemLocale(),
-                          edition, inquiry: Boolean(built.PERSODUB_INQUIRY_URL) });
+  ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: REPO, locale: systemLocale(),
+                          inquiry: Boolean(built.PERSODUB_INQUIRY_URL) });
   // Re-entrancy guard: mashing "Try again" on the error screen used to run
   // overlapping boots, whose duplicate engines then fought over the fixed
   // sidecar port and blocked the next clean launch.
@@ -160,10 +138,6 @@ app.whenReady().then(() => {
   };
   registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser, track: events.track });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
-  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition),
-                                       onKeyMade: keyMadeCheck({ auth, closeKeyWindow: () => keyWindow.close() }) });
-  registerAuthIpc({ ipcMain, auth, track: events.track, openKeyWindow: keyWindow.open, closeKeyWindow: keyWindow.close });
-  void auth.start();
 
   // What the page needs to say "Report sent - #142": whether reports are on at
   // all, and the last one that went out. A page that loads after the report
@@ -175,7 +149,7 @@ app.whenReady().then(() => {
   // The page's buttons and screens, every 30 seconds (src/events.js). The
   // answer says whether recording is on, so the page knows whether to record.
   ipcMain.handle("shell:events", (_e, list) => events.take(list));
-  // The production edition's Service inquiry, straight to the support web app (src/reporting.js sendInquiry).
+  // Send feedback's inquiry, straight to the support web app (src/reporting.js sendInquiry).
   ipcMain.handle("shell:send-inquiry", (_e, form) => reporter.sendInquiry(form || {}, {
     kitDir: ctx.bootedKitDir, os: osName(), osVersion: process.getSystemVersion(),
   }));

@@ -31,11 +31,9 @@ BASE_URL = "https://api.perso.ai"
 # field rather than inside the host, so the host stays byte-identical wherever Perso reads
 # it -- the header, the User-Agent, or a utm_source -- and mac/Windows stay separable.
 APP_NAME = "desktop_app"
-
-
-def build_edition(env) -> str:
-    """The running app file's edition, as the desktop shell passes it down."""
-    return "production" if env.get("PERSODUB_BUILD_EDITION") == "production" else "opensource"
+# The build's name in the User-Agent and in utm_campaign. Perso's logs and the
+# dashboards count by it, so it stays this word.
+EDITION = "opensource"
 
 
 def resolve_identity(platform: str, env) -> tuple:
@@ -52,9 +50,9 @@ def resolve_identity(platform: str, env) -> tuple:
     # Friendly "mac"/"windows", not sys.platform's raw darwin/win32, so the stats read
     # without a decoder ring. Linux already names itself "linux".
     os_name = {"darwin": "mac", "win32": "windows"}.get(platform, platform)
-    # The edition rides in the User-Agent beside os=, so Perso's logs can tell the two
-    # apart while the host stays the one name (user, 2026-11-02).
-    return version, APP_NAME, "%s/%s (os=%s; edition=%s)" % (APP_NAME, version, os_name, build_edition(env))
+    # The edition rides in the User-Agent beside os=, so Perso's logs can tell this build
+    # from others while the host stays the one name (user, 2026-11-02).
+    return version, APP_NAME, "%s/%s (os=%s; edition=%s)" % (APP_NAME, version, os_name, EDITION)
 
 
 APP_VERSION, CLIENT_HOST, USER_AGENT = resolve_identity(sys.platform, os.environ)
@@ -102,14 +100,10 @@ PERSO_WORKSPACE_URL = os.environ.get("PERSO_WORKSPACE_URL", "https://perso.ai/wo
 # link was clicked, which is what separates new signups from repeat recharges in the report.
 # The tail every link into Perso carries; the page adds utm_content for the
 # button pressed (ui/src/edition.mjs persoLink), so each link says which.
-# utm_campaign names the edition of the running app file, so a visit, a signup
-# or a recharge says which of the two brought it (user, 2026-10-30); utm_source
-# stays the API's CLIENT_HOST for the reason above.
-def utm_campaign(env) -> str:
-    return f"{APP_NAME}_{build_edition(env)}"
-
-
-UTM_CAMPAIGN = utm_campaign(os.environ)
+# utm_campaign names the build, so a visit, a signup or a recharge says this
+# one brought it (user, 2026-10-30); utm_source stays the API's CLIENT_HOST
+# for the reason above.
+UTM_CAMPAIGN = f"{APP_NAME}_{EDITION}"
 UTM_TAIL = f"utm_source={CLIENT_HOST}&utm_medium=desktop-app&utm_campaign={UTM_CAMPAIGN}&utm_term=v{APP_VERSION}"
 
 

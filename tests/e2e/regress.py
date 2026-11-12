@@ -598,29 +598,41 @@ def step_captions(ctx):
             f"subtitles {cues} cues; no subtitles in the file HTTP 422, video not held HTTP 404")
 
 
+SHELL_EDITION_LINE = "PERSODUB_EDITION opensource stronghamjji/PersoDub"
+
+
 def step_edition(ctx):
-    """Which edition the app answers as, against --edition (open-source by
-    default): GET /api/setup's default Dubbing mode is "local" for the
-    open-source edition and "perso" for the production one (app/setup.py
-    _fallback), and with --kit, kit.env holds a PERSODUB_EDITION=production
-    line only for the production edition."""
-    want = ctx["args"].edition
+    """Which edition the app answers as, the open-source one: GET /api/setup's
+    default Dubbing mode is "local" (app/setup.py _fallback), with --kit,
+    kit.env holds no PERSODUB_EDITION=production line, and with --logs, the
+    last PERSODUB_EDITION line of shell.log (desktop/main.js writes one a
+    launch) names the open-source build and its repository."""
     status, setup = api("GET", "/api/setup")
     if status != 200:
         raise Fail(f"GET /api/setup: HTTP {status} {detail(setup)}")
     mode = (setup.get("defaults") or {}).get("dub_mode")
-    expected = "perso" if want == "production" else "local"
-    if mode != expected:
-        raise Fail(f"the default Dubbing mode is {mode!r}, not {expected!r} ({want} edition)")
-    said = f"{want}: defaults.dub_mode {mode}, choices {setup['choices']['dub_mode']}"
+    if mode != "local":
+        raise Fail(f"the default Dubbing mode is {mode!r}, not 'local' (opensource edition)")
+    said = f"opensource: defaults.dub_mode {mode}, choices {setup['choices']['dub_mode']}"
     if not ctx["args"].kit:
-        return said + "; kit.env not read (no --kit)"
-    with open(os.path.join(ctx["args"].kit, "kit.env"), encoding="utf-8") as f:
-        editions = [line.strip() for line in f if line.strip().startswith("PERSODUB_EDITION=")]
-    production = [line for line in editions if line.split("=", 1)[1].strip() == "production"]
-    if bool(production) != (want == "production"):
-        raise Fail(f"kit.env has {len(production)} PERSODUB_EDITION=production line(s) for the {want} edition")
-    return said + f"; kit.env: {len(production)} production lines, edition lines {editions or 'none'}"
+        said += "; kit.env not read (no --kit)"
+    else:
+        with open(os.path.join(ctx["args"].kit, "kit.env"), encoding="utf-8") as f:
+            editions = [line.strip() for line in f if line.strip().startswith("PERSODUB_EDITION=")]
+        production = [line for line in editions if line.split("=", 1)[1].strip() == "production"]
+        if production:
+            raise Fail(f"kit.env has {len(production)} PERSODUB_EDITION=production line(s) for the opensource edition")
+        said += f"; kit.env: {len(production)} production lines, edition lines {editions or 'none'}"
+    if not ctx["args"].logs:
+        return said + "; shell.log not read (no --logs)"
+    # A line is "<day> <time> - shell - INFO - <text>" (desktop/src/logLine.js).
+    with open(os.path.join(ctx["args"].logs, "shell.log"), encoding="utf-8", errors="replace") as f:
+        said_edition = [text for text in (line.split(" - ", 3)[-1].strip() for line in f)
+                        if text.startswith("PERSODUB_EDITION ")]
+    if not said_edition or said_edition[-1] != SHELL_EDITION_LINE:
+        raise Fail(f"shell.log's last PERSODUB_EDITION line is {said_edition[-1] if said_edition else 'missing'!r}, "
+                   f"not {SHELL_EDITION_LINE!r}")
+    return said + f"; shell.log: {said_edition[-1]}"
 
 
 def step_srt_dub(ctx):
@@ -879,10 +891,8 @@ def main():
     parser.add_argument("--srt", help="a subtitle file for step 11's dub, cues in Korean; "
                                       "default: three cues the run writes")
     parser.add_argument("--kit", help="the app's kit folder, whose kit.env step 10 reads")
-    parser.add_argument("--edition", choices=("opensource", "production"), default="opensource",
-                        help="the edition step 10 expects (default: opensource)")
-    parser.add_argument("--logs", help="the app's logs folder, whose job-<id>.log steps 15 and 16 read; "
-                                       "default: the job record's log")
+    parser.add_argument("--logs", help="the app's logs folder, whose shell.log step 10 reads and whose "
+                                       "job-<id>.log steps 15 and 16 read; default: the job record's log")
     args = parser.parse_args()
     global BASE, FFPROBE
     BASE, FFPROBE = args.base.rstrip("/"), find_ffprobe()

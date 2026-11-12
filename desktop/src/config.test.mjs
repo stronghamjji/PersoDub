@@ -51,17 +51,6 @@ test("ignoreLegacy asks for the fresh-install location instead", () => {
   );
 });
 
-test("the production edition keeps its kit in a PersoDubbing folder and never takes the old one", () => {
-  // So both editions can be installed on one computer, each with its own kit.
-  const home = mkdtempSync(join(tmpdir(), "odhome-"));
-  mkdirSync(join(home, "persodub_full_mac"));
-  const at = (platform) => defaultKitDir({ platform, home, env: { LOCALAPPDATA: "C:\\U\\AppData\\Local" }, edition: "production" });
-  assert.equal(at("win32"), join("C:\\U\\AppData\\Local", "PersoDubbing"));
-  assert.equal(at("darwin"), join(home, "Library", "Application Support", "PersoDubbing"));
-  assert.equal(at("linux"), join(home, ".persodubbing"));
-  assert.equal(defaultKitDir({ platform: "darwin", home, env: {}, edition: "opensource" }), join(home, "persodub_full_mac"));
-});
-
 test("Windows falls back to a home-relative AppData when LOCALAPPDATA is unset", () => {
   const home = mkdtempSync(join(tmpdir(), "odhome-"));
   assert.equal(

@@ -153,47 +153,6 @@
   * { box-sizing: border-box; }
   /* Plenty of the classes below set a `display`, which would otherwise beat
      the `hidden` attribute that showScreen() and setTopbar() toggle. */
-  /* The production edition's (the data-edition the shell's preload stamps on
-     the page): Perso's own workspace dark, measured off it -- a violet-grey
-     ground, white hairlines, and its green, amber and red -- under our blue,
-     which stays (owner, 2026-10-27). The open-source edition keeps the sheet
-     above. */
-  :root[data-edition="production"] {
-    --desk: #121119;
-    --background: #17161f;
-    --canvas: #17161f;
-    --agent-bg: #17161f;
-    --well: #1f1e28;
-    --trim-track: #1f1e28;
-    --head-bg: #1f1e28;
-    --agent-head-bg: #1f1e28;
-    --secondary: #26252f;
-    --agent-box: #26252f;
-    --field: #121119;
-    --agent-field: #121119;
-    --border: rgba(255, 255, 255, 0.07);
-    --agent-border: rgba(255, 255, 255, 0.07);
-    --head-line: rgba(255, 255, 255, 0.07);
-    --hair: rgba(255, 255, 255, 0.07);
-    --agent-field-line: rgba(255, 255, 255, 0.07);
-    --control-line: rgba(255, 255, 255, 0.2);
-    --divider: rgba(255, 255, 255, 0.2);
-    --well-line: rgba(255, 255, 255, 0.2);
-    --dropzone-line: rgba(255, 255, 255, 0.2);
-    --foreground: #ededf0;
-    --agent-fg: #ededf0;
-    --agent-me-fg: #ededf0;
-    --muted-foreground: #a3a2ad;
-    --agent-muted: #a3a2ad;
-    --success: #0bc673;
-    --success-ink: #0bc673;
-    --chip-done-fg: #0bc673;
-    --agent-ok: #0bc673;
-    --warning: #ffa31a;
-    --agent-warn: #ffa31a;
-    --destructive: #f03d3d;
-  }
-
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
 
@@ -220,18 +179,6 @@
     line-height: 1.5;
     background: var(--background);
     overflow: hidden; /* the app fills the window; only inner panes scroll */
-  }
-  /* The production edition's type is Perso's, Pretendard, from static/fonts
-     too (origin in NOTICE); after the flags only, which it does not draw. */
-  @font-face {
-    font-family: "Pretendard Variable";
-    src: url(/fonts/pretendard-variable.woff2) format("woff2");
-    font-weight: 45 920;
-    font-display: swap;
-  }
-  :root[data-edition="production"] body {
-    font-family: "Twemoji Country Flags", "Pretendard Variable", Onest, "Noto Sans KR", -apple-system, "Segoe UI",
-      "Apple SD Gothic Neo", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
   }
   /* Korean wraps between words, never inside one: left to itself a line may
      end mid-word, which reads as a typo. The page names its language on
@@ -1016,16 +963,6 @@
      150.1 of the artwork's 303 (0.4955), the label's 0.72 x 12px = 8.64px,
      and 8.64 / 0.4955 = 17.4, so 17.5px. */
   .home-perso img { display: block; height: 17.5px; width: auto; }
-  /* The production edition's: the logo alone heads the sidebar, as wide as
-     the box and 41px tall (mockup m6-home, owner, 2026-10-23). */
-  .home-side .home-perso.big { padding: 9.5px 6px; }
-  .home-perso.big img { height: 22px; }
-  /* ...and on Perso's dark, the wordmark alone with white letters, 170px wide
-     from the sidebar's left edge, no box round it: the header of Perso's own
-     workspace (owner, 2026-10-27). */
-  :root[data-edition="production"] .home-gh { background: none; border: none; padding: 6px 0 4px; }
-  :root[data-edition="production"] .home-side .home-perso { justify-content: flex-start; padding: 0; background: none; }
-  :root[data-edition="production"] .home-perso img { width: 170px; height: auto; content: url(/perso-dubbing-white.svg); }
   .home-grp { color: var(--muted-foreground); font-size: 11px; font-weight: 500; margin: 10px 0 -4px; }
   .home-sep { height: 1px; background: var(--border); margin: 12px 0 0; flex: none; }
   .home-grow { flex: 1; }
@@ -2445,7 +2382,7 @@
   .help-item b { display: block; margin-bottom: 2px; }
   .help-item p { margin: 0; line-height: 1.45; }
   .help-where { color: var(--muted-foreground); font-size: 11px; margin-top: 2px; }
-  /* Customer support's Service inquiry (ui/src/feedbackSheet.mjs): the fields
+  /* Send feedback's Service inquiry (ui/src/feedbackSheet.mjs): the fields
      one under another, Details a box of a few lines dressed like the inputs. */
   #feedbackOverlay .field + .field { margin-top: 12px; }
   #feedbackOverlay textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; padding: 7px 9px;
@@ -2992,48 +2929,5 @@
   .np-window { width: min(520px, 92vw); }
   #newProjError { margin-top: 10px; }
 
-  /* ---------------- Perso sign-in (production edition) ---------------- */
-  /* The whole window, over everything (ui/src/signIn.mjs), measured off the
-     mockup (2026-10-25): a 36px strip that moves the window, then one centred
-     column -- the logo, a 240px-wide pair of 40px buttons, short grey lines. */
-  .signin { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column;
-    background: var(--desk); color: var(--foreground); }
-  .signin-bar { height: 36px; flex: none; -webkit-app-region: drag; }
-  .signin-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 0 24px; }
-  .signin-logo { width: 96px; height: 96px; border-radius: 22px; margin: 0 0 18px; }
-  .signin-logo.sm { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 16px; }
-  .signin-name { font-size: 24px; font-weight: 600; letter-spacing: .01em; margin: 0 0 34px; }
-  .signin h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
-  .signin p { margin: 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
-  .signin-acct { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
-  .signin-acct:empty { display: none; }
-  .signin .signin-btn { height: 40px; min-width: 240px; padding: 0 24px; border-radius: 8px; font-size: 15px; }
-  .signin .btn-secondary.signin-btn { font-weight: 500; }
-  .signin-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
-  .signin-hint { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
-  .signin-hint.danger { color: var(--destructive); }
-  .signin-hint:empty { display: none; }
-  .signin-link { margin-top: 18px; padding: 0; border: none; background: none; font: inherit; font-size: 13px;
-    color: var(--primary-ink); cursor: pointer; }
-  .signin-prog { position: relative; width: 240px; height: 4px; margin: 22px 0 0; border-radius: 2px;
-    background: var(--secondary); overflow: hidden; }
-  .signin-prog b { position: absolute; left: 0; top: 0; width: 38%; height: 100%; border-radius: 2px;
-    background: var(--primary); animation: signin-wait 1.4s ease-in-out infinite alternate; }
-  @keyframes signin-wait { from { transform: translateX(0); } to { transform: translateX(163px); } }
-  @media (prefers-reduced-motion: reduce) { .signin-prog b { animation: none; transform: translateX(60px); } }
   /* A link dressed as a button (the Recharge credits buttons) wears no underline. */
   a.btn, a.btn:hover { text-decoration: none; }
-  /* Home: the signed-in account under the brand (production edition). */
-  .home-account { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 0; border: none; background: none;
-    font-size: 12px; color: var(--muted-foreground); max-width: 100%; }
-  .home-account[hidden] { display: none; }
-  .home-account:hover .home-account-name { color: var(--foreground); }
-  .home-account-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #34c77b; }
-  .home-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Settings > Account and keys: the account's e-mail, in full and wrapped
-     anywhere when it is long, and its key chip, on one line beside it. */
-  .acct-mail { font-size: 11.5px; color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
-  .acct-chip { font-size: 11px; white-space: nowrap; }
-  /* The account row stands first once the key row above it hides: no line over it. */
-  #persoKeyRow[hidden] + .set-row { border-top: none; }

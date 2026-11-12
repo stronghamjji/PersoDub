@@ -5,9 +5,9 @@ import { readFileSync } from "node:fs";
 import { initFeedbackSheet, PRIVACY_URL } from "./feedbackSheet.mjs";
 import { loadTable, setLanguage } from "./i18n.mjs";
 
-// The form's elements, the shell's sendInquiry answering `answer`, the
-// page's language, and the signed-in account's line (an e-mail, or a name).
-function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@test.local", production } = {}) {
+// The form's elements, the shell's sendInquiry answering `answer`, and the
+// page's language.
+function harness({ answer = { id: "7C2E91AB" }, language = "ko" } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) {
@@ -25,7 +25,7 @@ function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@te
   };
   $("feedbackType").value = "problem";
   const sent = [], urls = [], steps = [];
-  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u), account: () => account, production,
+  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u),
                                    send: async (form) => { sent.push(form); return answer; },
                                    record: (name, props) => steps.push([name, props]) });
   const type = (id, text) => { $(id).value = text; $(id).fire("input"); };
@@ -56,16 +56,6 @@ test("only a bug report says it sends the logs", () => {
   h.$("feedbackType").value = "bug";
   h.$("feedbackType").fire("change");
   assert.equal(h.$("feedbackLogsNote").hidden, false);
-});
-
-// An account with no e-mail has no address to answer at: the line under
-// Reply-to would promise one (re-test, 2026-10-27).
-test("the line under Reply-to says an empty one is answered at the account's address only when the account has an e-mail", () => {
-  for (const [account, hidden] of [["a@test.local", false], ["Perso user", true], ["", true]]) {
-    const h = harness({ account });
-    h.open();
-    assert.equal(h.$("feedbackReplyToHint").hidden, hidden, JSON.stringify(account));
-  }
 });
 
 test("the privacy policy opens in the browser in the page's language", () => {
@@ -123,7 +113,7 @@ test("one the shell keeps for later says it goes next launch; one it could not k
   assert.equal(lost.$("feedbackSend").disabled, false);
 });
 
-test("asked for an address (no Reply-to and an account with no e-mail), it says so in the page's language and keeps the form", async () => {
+test("asked for an address (no Reply-to), it says so in the page's language and keeps the form", async () => {
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   const real = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true, json: async () => ko });
@@ -145,16 +135,8 @@ test("asked for an address (no Reply-to and an account with no e-mail), it says 
   }
 });
 
-// The open-source edition has no payments, so its form has no Payment or refund kind.
-test("Payment or refund is a kind in the production edition only", () => {
-  assert.equal(harness({ production: true }).$("feedbackTypePayment").hidden, false);
-  assert.equal(harness({ production: false }).$("feedbackTypePayment").hidden, true);
-  assert.equal(harness().$("feedbackTypePayment").hidden, true, "not said: not production");
-});
-
-test("the title is Service inquiry in the production edition and Feedback in the open-source one", () => {
-  assert.equal(harness({ production: true }).$("feedbackTitle").textContent, "Service inquiry");
-  assert.equal(harness({ production: false }).$("feedbackTitle").textContent, "Feedback");
+test("the title is Feedback", () => {
+  assert.equal(harness().$("feedbackTitle").textContent, "Feedback");
 });
 
 test("Close keeps the draft and sends nothing", () => {

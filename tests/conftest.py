@@ -107,16 +107,6 @@ def chatgpt_signed_in(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def dub_on_this_computer(monkeypatch):
-    """Dubbing goes to Perso by default in the production edition (app/setup.py),
-    which a dub start without a key refuses. The tests that start one watch the
-    local path unless they choose a mode themselves, whatever edition the
-    machine running them names; tests/test_setup_api.py tests the default
-    itself and clears this."""
-    monkeypatch.setenv("DUB_MODE", "local")
-
-
-@pytest.fixture(autouse=True)
 def plenty_of_memory(monkeypatch):
     """Every test runs on a 24 GB computer unless it says otherwise.
 

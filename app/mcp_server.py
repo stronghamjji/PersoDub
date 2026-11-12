@@ -745,8 +745,8 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     dub from then on.
 
     voice picks, FOR THIS DUB ONLY, the engine that speaks a local dub:
-    "qwen3" or "omnivoice" (both free, this machine; omnivoice in the
-    open-source edition only); empty keeps the app's default.
+    "qwen3" or "omnivoice" (both free, this machine); empty keeps the app's
+    default.
 
     perso_model picks the voice model of a perso dub when the user names one
     -- any model Perso lists for the language, such as "linnet_4" (the default,
@@ -901,8 +901,8 @@ def _dub_start_fields(code, dub_mode, source_language, num_speakers, translator,
     field names (tests/test_mcp_dub_contract.py holds the two sides together).
     `voice` is the engine named for this dub and is posted; `speaks` is the
     one the language's name is read from (the app's default when none was named)."""
-    # Always said, local included: the server's own default is Perso in the
-    # production edition (app/setup.py), and a local dub that left it unsaid went to
+    # Always said, local included: the server's own default can be Perso
+    # (app/setup.py), and a local dub that left it unsaid went to
     # Perso and spent credits the agent had promised were not needed (Windows F10, 2026-10-07).
     fields = {"language": languages.lookup(dub_mode, code, speaks)["name"], "language_code": code,
               "dub_mode": dub_mode}

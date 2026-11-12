@@ -28,16 +28,6 @@ export const textOf = (s) => (document.querySelector(s)?.textContent || "").repl
 export const translator = (words, appName) => (key, values = {}) => (Object.hasOwn(words, key) ? words[key] : key)
   .replace(/\{(\w+)\}/g, (_, k) => (k in values ? values[k] : k === "app" ? appName : `{${k}}`));
 
-/** Whether `url` is the production edition's Help: Perso's desktop app page
- *  with the app's utm tail and utm_content=help (ui/src/app.mjs openHelp). */
-export function isProductionHelp(url) {
-  try {
-    const u = new URL(url);
-    return `${u.origin}${u.pathname}` === "https://perso.ai/dubbing/desktop-app" && u.searchParams.has("utm_source")
-      && u.searchParams.get("utm_content") === "help";
-  } catch { return false; }
-}
-
 // What a person would hit at (x, y): a dialog or a toast over the button takes the click instead.
 const HIT = function (x, y) {
   const hit = document.elementFromPoint(x, y);
@@ -246,18 +236,14 @@ export async function connect({ port = 9333, out = "." } = {}) {
   }, looks);
 
   await send("Page.enable");
-  // The edition, as the preload stamps it on the page, and the name the page
-  // calls the app: the production edition has no GitHub button, and its Help
-  // opens Perso's desktop app page instead of the Help dialog.
+  // The page as it stands, and the name it calls the app.
   const page = await inPage(() => ({ lang: document.documentElement.lang || "en", width: innerWidth, height: innerHeight,
                                      visibility: document.visibilityState, screen: document.body.dataset.screen,
-                                     edition: document.documentElement.dataset.edition || window.persodubShell?.edition || "opensource",
                                      name: window.persodubShell?.name || "PersoDub" }));
-  const production = page.edition === "production";
   const words = page.lang === "en" ? {}
     : await (await fetch(`${origin}/i18n/ui.${page.lang}.json`, { signal: AbortSignal.timeout(10000) })).json();
   const tr = translator(words, page.name);
 
-  return { origin, page, production, send, nextEvent, js, inPage, waitFor, api, click, key, type, choose, feed, shot, snippet, tr,
+  return { origin, page, send, nextEvent, js, inPage, waitFor, api, click, key, type, choose, feed, shot, snippet, tr,
            opened, putAway, close: () => ws.close() };
 }

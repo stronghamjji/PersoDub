@@ -24,7 +24,6 @@ import { record, startEvents } from "./events.mjs";
 // (ui/src/events.mjs). Early, so no press goes unseen.
 startEvents();
 import { initSettingsUi } from "./settingsDialog.mjs";
-import { initSignIn } from "./signIn.mjs";
 import { initWhatsNew } from "./whatsNew.mjs";
 import { initKeyWindow } from "./keyWindow.mjs";
 import { initChatgptSignIn } from "./chatgptSignIn.mjs";
@@ -34,7 +33,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, persoLink, persoResultLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { persoResultLink } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -197,22 +196,15 @@ window.addEventListener("resize", () => {
 // and the out-of-credits popup all call settings.openSettings()) and the two
 // things the sheet reaches back for: re-checking which engines a saved key
 // makes usable, and the Models catalog, which modelsDialog.mjs paints.
-// The production edition's Perso sign-in screen (ui/src/signIn.mjs), over the
-// whole window while signed out. The open-source edition never shows it.
-// The window's title is the name this edition shows (desktop/src/edition.js); a plain browser keeps the page's own.
+// The window's title is the name the shell gives the app; a plain browser keeps the page's own.
 if (window.persodubShell?.name) document.title = window.persodubShell.name;
-const signIn = initSignIn({ $, shell: window.persodubShell || null });
 const settings = initSettingsUi({
   $,
   onSaved: () => applyEngineAvailabilityToForm(),
   refreshModelCatalog: () => models.refreshModels(),
   // Storage says where downloads go; only the desktop shell knows.
   shell: window.persodubShell || null,
-  // The Perso account row and its buttons, production edition only.
-  account: signIn,
 });
-// Home's account line (ui/src/signIn.mjs paints it) opens the account's own tab.
-$("homeAccount").addEventListener("click", () => settings.openSettings("keys"));
 
 $("settingsBtn").addEventListener("click", settings.openSettings);
 
@@ -223,20 +215,15 @@ initWhatsNew({ $ });
 
 // Help, from the Home sidebar: what each tool does and where it runs. Escape
 // and the backdrop press OK (ui/src/escapeKey.mjs). The two links open the
-// repo's docs in the system browser, the way the sidebar's links do. The
-// production edition has no repository: its User guide is Perso's desktop app
-// page, and it has no FAQ link. And its Home's Help is that page itself, in
-// the browser, with no dialog first (owner, 2026-10-27).
+// repo's docs in the system browser, the way the sidebar's links do.
 function openHelp() {
-  if (isProduction()) window.open(persoLink(DESKTOP_APP_URL, "help", savedSettings()?.perso_utm), "_blank", "noopener");
-  else $("helpOverlay").classList.add("open");
+  $("helpOverlay").classList.add("open");
 }
 $("helpOk").addEventListener("click", () => $("helpOverlay").classList.remove("open"));
-$("helpFaqItem").hidden = isProduction();
 for (const [id, doc] of [["helpGuide", "usage"], ["helpFaq", "faq"]]) {
   $(id).addEventListener("click", (e) => {
     e.preventDefault();
-    window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "help", savedSettings()?.perso_utm) : `${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
+    window.open(`${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
   });
 }
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
@@ -954,22 +941,10 @@ const languageRow = initLanguageRow({
 // The project's own page, from the logo in Settings > About. window.open
 // rather than an <a>: the shell hands every http(s) open to the OS browser
 // (desktop/src/windowFactory.js), and in a plain browser it is a new tab either way.
-// The shell's edition decides it (desktop/src/edition.js); a plain browser has
-// no shell and shows the public repository. The production edition's logo
-// opens Perso's desktop app page, and is named after the app rather than the
-// repository.
+// The shell names the repository; a plain browser has no shell and shows the
+// public one.
 const REPO_URL = `https://github.com/${window.persodubShell?.repo || "stronghamjji/PersoDub"}`;
-$("brandBtn").addEventListener("click", () => window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "about", savedSettings()?.perso_utm) : REPO_URL, "_blank", "noopener"));
-// OmniVoice is the open-source edition's only (app/setup.py's voice stage):
-// the production edition does not offer it, so its row leaves the list.
-if (isProduction()) $("voiceSelect").querySelector('option[value="omnivoice"]')?.remove();
-if (isProduction()) {
-  const brand = $("brandBtn");
-  brand.removeAttribute("data-i18n-title");
-  brand.removeAttribute("data-i18n-aria-label");
-  brand.title = t("{app}");
-  brand.setAttribute("aria-label", t("{app}"));
-}
+$("brandBtn").addEventListener("click", () => window.open(REPO_URL, "_blank", "noopener"));
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -1039,11 +1014,9 @@ uploadZone.addEventListener("drop", (e) => {
 // The top bar's update icon and the update window (ui/src/updateWindow.mjs).
 // Outside Electron (plain browser, tests) persodubShell is absent: the icon
 // stays grey and the window says the app is up to date.
-// An update with no notes links to its release page, Perso's desktop app page
-// in the production edition.
+// An update with no notes links to its release page.
 wireUpdates({ $, shell: window.persodubShell || null,
-  // The production edition has no release page: the window's own list is enough (owner, 2026-10-26).
-  notesPage: isProduction() ? () => null : (version) => `${REPO_URL}/releases/tag/v${version}` });
+  notesPage: (version) => `${REPO_URL}/releases/tag/v${version}` });
 
 // ---------------- Link source (paste a URL) ----------------
 // Probing is cheap (seconds, no download), so it runs as soon as a URL looks
@@ -1480,18 +1453,16 @@ async function reopenDraft(downloadId) {
 
 // The Home sidebar and the cards under the banner (the mockup's first screen,
 // user 2026-09-30): each one opens a way in this page already has.
-// Customer support (production) and Send feedback (open source): a Service
-// inquiry form, sent through the shell to the support web app
-// (ui/src/feedbackSheet.mjs) -- when the build has its address.
+// Send feedback: a Service inquiry form, sent through the shell to the
+// support web app (ui/src/feedbackSheet.mjs) -- when the build has its address.
 const shellInfo = window.persodubShell || {};
 const openFeedback = shellInfo.inquiry && shellInfo.sendInquiry ? initFeedbackSheet({
-  $, send: (form) => shellInfo.sendInquiry(form), production: isProduction(),
+  $, send: (form) => shellInfo.sendInquiry(form),
   language: currentLanguage,
   openUrl: (url) => window.open(url, "_blank", "noopener"),
-  account: () => signIn.status().account,
 }) : null;
 initHomeSidebar({
-  $, body: document.body, repoUrl: REPO_URL, production: isProduction(), onFeedback: openFeedback,
+  $, body: document.body, repoUrl: REPO_URL, onFeedback: openFeedback,
   // The UTM-tagged link from the start-up's GET /api/settings; the plain page
   // until that has answered.
   persoUrl: () => savedSettings()?.perso_workspace_link || "https://perso.ai/workspace/vt",

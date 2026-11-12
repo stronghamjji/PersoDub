@@ -17,8 +17,7 @@ def _kit(tmp_path, monkeypatch, text="PERSODUB_KIT_DIR=/x\n# PERSO_API_KEY=\n"):
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
     monkeypatch.delenv("TRANSLATE_ENGINE", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
-    monkeypatch.delenv("DUB_MODE", raising=False)  # conftest sets local for the other tests
-    monkeypatch.delenv("PERSODUB_EDITION", raising=False)  # the open-source edition's defaults
+    monkeypatch.delenv("DUB_MODE", raising=False)
     # The report reads the keys the way the stage defaults do (kit.env first,
     # then the process env), so a key exported on the developer's own machine
     # would otherwise decide these tests.
@@ -66,46 +65,50 @@ def test_the_keys_and_the_stt_default_read_the_same_source(tmp_path, monkeypatch
     assert body["keys"]["perso"] is True
 
 
-def test_only_the_production_edition_dubs_on_perso_by_default(tmp_path, monkeypatch):
-    # One build, two defaults (owner, 2026-10-12): the open-source edition dubs
-    # on this computer, key or no key; the production edition dubs on Perso,
-    # key or no key. The desktop shell passes the edition (orchestrator.js).
+def test_a_dub_runs_on_this_computer_by_default_key_or_no_key(tmp_path, monkeypatch):
+    # This computer, key or no key (owner, 2026-10-12).
     _kit(tmp_path, monkeypatch)
-    for edition, key, expected in [(None, None, "local"), (None, "ENVKEY", "local"),
-                                   ("opensource", "ENVKEY", "local"),
-                                   ("production", None, "perso"), ("production", "ENVKEY", "perso")]:
-        for name, value in (("PERSODUB_EDITION", edition), ("PERSO_API_KEY", key)):
-            if value is None:
-                monkeypatch.delenv(name, raising=False)
-            else:
-                monkeypatch.setenv(name, value)
-        assert dub_setup.default_for("dub_mode") == expected, (edition, key)
-        assert client.get("/api/setup").json()["defaults"]["dub_mode"] == expected, (edition, key)
+    for key in (None, "ENVKEY"):
+        if key is None:
+            monkeypatch.delenv("PERSO_API_KEY", raising=False)
+        else:
+            monkeypatch.setenv("PERSO_API_KEY", key)
+        assert dub_setup.default_for("dub_mode") == "local", key
+        assert client.get("/api/setup").json()["defaults"]["dub_mode"] == "local", key
 
 
-def test_a_saved_dub_mode_beats_either_editions_default(tmp_path, monkeypatch):
+def test_an_edition_line_in_an_older_kit_changes_nothing(tmp_path, monkeypatch):
+    # An older version's kit.env carries a PERSODUB_EDITION line. Nothing
+    # reads it: the defaults and the choices are the same with it.
+    _kit(tmp_path, monkeypatch, "PERSODUB_KIT_DIR=/x\nPERSODUB_EDITION=production\n")
+    monkeypatch.setenv("PERSODUB_EDITION", "production")
+    monkeypatch.setenv("PERSODUB_BUILD_EDITION", "production")
+    body = client.get("/api/setup").json()
+    assert body["defaults"]["dub_mode"] == "local"
+    assert body["choices"]["voice"] == ["qwen3", "omnivoice"]
+
+
+def test_a_saved_dub_mode_beats_the_default(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, "PERSODUB_KIT_DIR=/x\nDUB_MODE=perso\n")
     assert dub_setup.default_for("dub_mode") == "perso"
-    monkeypatch.setenv("PERSODUB_EDITION", "production")
     client.post("/api/setup", json={"dub_mode": "local"})
     assert dub_setup.default_for("dub_mode") == "local"
 
 
-def test_without_a_key_start_asks_for_one_only_in_the_production_edition(tmp_path, monkeypatch):
-    # The production edition leads a new user to a key: Start says to save
-    # one first (app/api/dub.py). The open-source edition dubs on this
-    # computer, so a new install is asked for the models it needs, not a key.
-    _kit(tmp_path, monkeypatch)
-    monkeypatch.setenv("PERSODUB_EDITION", "production")
+def test_without_a_key_start_asks_for_the_models_not_a_key(tmp_path, monkeypatch):
+    # A dub runs on this computer, so a new install is asked for the models
+    # it needs, not a key; with Perso saved as where dubs run, Start says to
+    # save a key first (app/api/dub.py).
+    kit = _kit(tmp_path, monkeypatch)
+    r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
+                    data={"language": "Korean", "language_code": "ko"})
+    assert r.status_code == 409 and "missing" in r.json()["detail"]
+
+    (kit / "kit.env").write_text("PERSODUB_KIT_DIR=/x\nDUB_MODE=perso\n# PERSO_API_KEY=\n", encoding="utf-8")
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
                     data={"language": "Korean", "language_code": "ko"})
     assert r.status_code == 422
     assert r.json()["detail"].startswith("Perso API dubbing needs an API key")
-
-    monkeypatch.delenv("PERSODUB_EDITION")
-    r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
-                    data={"language": "Korean", "language_code": "ko"})
-    assert r.status_code == 409 and "missing" in r.json()["detail"]
 
 
 def test_a_key_cleared_in_kit_env_reads_as_no_key(tmp_path, monkeypatch):
@@ -198,20 +201,3 @@ def test_an_install_that_has_hunyuan_keeps_it_as_the_default(tmp_path, monkeypat
     assert client.get("/api/setup").json()["defaults"]["translator"] == "hunyuan"
     monkeypatch.setattr(setup_mod, "_hunyuan_installed", lambda: False)
     assert client.get("/api/setup").json()["defaults"]["translator"] == "chatgpt"
-
-
-def test_production_edition_offers_no_omnivoice(monkeypatch):
-    """OmniVoice's weights are non-commercial, so the production edition
-    (part of a paid service) neither lists the choice nor the catalog rows."""
-    import importlib
-
-    import app.setup as setup_mod
-    monkeypatch.setenv("PERSODUB_EDITION", "production")
-    importlib.reload(setup_mod)
-    try:
-        assert setup_mod.STAGES["voice"][1] == ("qwen3",)
-        from app import models as model_store
-        assert not [r for r in model_store.status_rows() if r["id"].startswith("omnivoice")]
-    finally:
-        monkeypatch.delenv("PERSODUB_EDITION")
-        importlib.reload(setup_mod)

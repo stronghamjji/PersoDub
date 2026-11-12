@@ -1,6 +1,6 @@
 // Auto-update decision logic. Pure functions -- the Electron wiring lives in
 // updateFlow.js; everything testable without Electron lives here.
-import { editionFeed } from "./edition.js";
+import { updateFeed } from "./edition.js";
 import { secondsSince, sizeText, urlText } from "./logLine.js";
 
 /**
@@ -28,22 +28,19 @@ export function resolveUpdateMode({ isPackaged, env }) {
 export const INSTALL_ON_QUIT = false;
 
 /**
- * Which feed to read: the edition's (edition.js editionFeed), set at run time
- * rather than taken from the bundled app-update.yml -- the open-source
- * edition's GitHub Releases, or the production edition's PRODUCTION_UPDATE_URL.
- * Null for the production edition while that address is empty: it does not
- * check for updates, and never reads the public releases (0.8.3). A
- * PERSODUB_UPDATE_URL in the environment points at a generic HTTP feed
- * instead -- how the update flow is tested against a local server without
- * publishing anything.
+ * Which feed to read: the repository's GitHub Releases (edition.js
+ * updateFeed), set at run time rather than taken from the bundled
+ * app-update.yml. A PERSODUB_UPDATE_URL in the environment points at a
+ * generic HTTP feed instead -- how the update flow is tested against a local
+ * server without publishing anything.
  */
-export function resolveFeed(env, edition) {
+export function resolveFeed(env) {
   const url = env.PERSODUB_UPDATE_URL;
   if (url) return { provider: "generic", url };
-  return editionFeed(edition);
+  return updateFeed();
 }
 
-/** The feed as shell.log's UPDATE CHECK line names it: the edition's GitHub
+/** The feed as shell.log's UPDATE CHECK line names it: the repository's GitHub
  *  Releases page, or the test feed's own address, with the provider. */
 export function feedText(feed) {
   const where = feed.provider === "github" ? `https://github.com/${feed.owner}/${feed.repo}/releases` : feed.url;

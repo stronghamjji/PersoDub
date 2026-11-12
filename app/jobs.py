@@ -867,10 +867,9 @@ class JobStore:
             try:
                 rec = self.get(jid) or {}
                 trace("JOB START (%s)" % kind_of(rec))
-                # The edition first: it decides where a dub runs when nothing
-                # is chosen (app/setup.py), and the desktop shell hands it over
-                # (desktop/src/orchestrator.js). A plain server run has none.
-                given = {"edition": os.environ.get("PERSODUB_EDITION") or "opensource",
+                # The edition first: the failure reports carry this line, and
+                # their readers tell builds apart by it.
+                given = {"edition": "opensource",
                          **{k: rec[k] for k in _INPUT_FIELDS if k in rec}}
                 trace("Inputs: " + json.dumps(given, ensure_ascii=False, default=str))
                 _trace_memory(trace)

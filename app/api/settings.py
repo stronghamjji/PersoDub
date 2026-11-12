@@ -77,7 +77,7 @@ def settings_get():
             "perso_utm": UTM_TAIL,
             "analytics_off": read_analytics_off(),
             "reports_off": read_reports_off(),
-            # Button and screen events: on by default in the production edition only.
+            # Button and screen events: on until the switch is turned off.
             "events_enabled": read_events_enabled(),
             # "auto", "en" or "ko" (app/i18n.py): the page resolves "auto"
             # against the computer's language itself.

@@ -30,7 +30,7 @@ REPORTS_OFF_KEY = "PERSODUB_NO_REPORTS"
 
 # Whether the buttons pressed and screens shown are recorded and sent
 # (desktop/src/events.js reads the same line before every batch). "1" or "0";
-# with no line the edition decides: on for production, off for open source.
+# with no line they are recorded.
 EVENTS_KEY = "PERSODUB_EVENTS"
 
 # The app's language ("auto", "en" or "ko"), from Settings > About. One line
@@ -235,7 +235,7 @@ def write_reports_off(off: bool) -> None:
 
 def read_events_enabled() -> bool:
     """Whether button and screen events are recorded: kit.env's line, or on
-    with none, in both editions, as the desktop shell decides (events.js)."""
+    with none, as the desktop shell decides (events.js)."""
     return read_value(EVENTS_KEY) != "0"
 
 

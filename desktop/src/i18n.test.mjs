@@ -128,17 +128,15 @@ test("every sentence the shell says is in the English table (once it has any)", 
 });
 
 test("the tables ship with the app", () => {
-  for (const edition of ["opensource", "production"]) {
-    assert.ok(builderConfig(edition).files.includes("i18n/**"), `desktop/electron-builder.js files leaves desktop/i18n out (${edition})`);
-  }
+  assert.ok(builderConfig().files.includes("i18n/**"), "desktop/electron-builder.js files leaves desktop/i18n out");
 });
 
-test("{app} in a sentence is the name the edition shows, PersoDub until it is set", () => {
+test("{app} in a sentence is the name the app was given, PersoDub until it is set", () => {
   setLanguage("en");
   setAppName(null);
   assert.equal(t("{app} could not start"), "PersoDub could not start");
-  setAppName("PersoDubbing");
-  assert.equal(t("Updating {app}"), "Updating PersoDubbing");
-  assert.equal(t("{app}: {what}", { what: "Installing" }), "PersoDubbing: Installing");
+  setAppName("OtherDub");
+  assert.equal(t("Updating {app}"), "Updating OtherDub");
+  assert.equal(t("{app}: {what}", { what: "Installing" }), "OtherDub: Installing");
   setAppName(null);
 });

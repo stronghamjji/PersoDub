@@ -7,9 +7,7 @@ Area modules for tests/e2e/sweep.mjs. Each file exports:
     ];
 
 `app` is the connection from tests/e2e/lib/cdp.mjs (click, key, type, choose, feed, waitFor, inPage, api, shot, tr, opened).
-It knows the edition from the page's data-edition (`app.production`, `app.page.edition`, `app.page.name`, which `tr` fills
-{app} with): the production edition has no GitHub button and its Help opens Perso's desktop app page, so those steps
-expect that there, or skip.
+It knows the name the page calls the app (`app.page.name`, which `tr` fills {app} with).
 `ctx` has video, srt, out, stamp, fixtures (the import area's odd inputs) and a shared `state` object the steps of one run may pass things through.
 A step returns a one-line note with its numbers, or throws with the reason; it throws
 `Skip` (from lib/cdp.mjs) with the reason when this computer cannot run it (not signed in,
