@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  LANGUAGES, localeLanguage, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t, setAppName } from "./i18n.js";
+  LANGUAGES, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t, setAppName } from "./i18n.js";
 import { screenKeys } from "./screenText.js";
 import { builderConfig } from "../electron-builder.js";
 
@@ -27,9 +27,11 @@ function kitWith(text) {
   return dir;
 }
 
-test("a Korean system locale is Korean, every other is English", () => {
-  for (const l of ["ko", "ko-KR", "KO-kr"]) assert.equal(localeLanguage(l), "ko", l);
-  for (const l of ["en-US", "en", "ja", "fr-FR", "", undefined]) assert.equal(localeLanguage(l), "en", String(l));
+test("a Korean system locale is Korean, every other is English", (ctx) => {
+  ctx.after(() => useLanguage({ osLocale: "en-US" }));
+  const system = (l) => { useLanguage({ osLocale: l }); return systemLocale(); };
+  for (const l of ["ko", "ko-KR", "KO-kr"]) assert.equal(system(l), "ko", l);
+  for (const l of ["en-US", "en", "ja", "fr-FR", "", null]) assert.equal(system(l), "en", String(l));
 });
 
 test("PERSODUB_LANG of en or ko wins; auto, nothing or nonsense is the computer's", () => {

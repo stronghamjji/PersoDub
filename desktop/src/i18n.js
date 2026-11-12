@@ -24,7 +24,7 @@ let language = "en";
 let systemLanguage = "en";
 
 /** "ko" for a Korean system locale (ko, ko-KR), "en" for every other. */
-export function localeLanguage(osLocale) {
+function localeLanguage(osLocale) {
   return String(osLocale || "").toLowerCase().startsWith("ko") ? "ko" : "en";
 }
 

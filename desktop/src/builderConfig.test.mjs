@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { builderConfig } from "../electron-builder.js";
 
@@ -10,7 +11,11 @@ test("the build keeps PersoDub's names", () => {
   const c = builderConfig();
   assert.equal(c.productName, "PersoDub");
   assert.equal(c.appId, "com.persodub.desktop");
-  assert.deepEqual(c.extraMetadata, { name: "persodub-desktop-shell" });
+  // The data folder (userData) is named after the packaged package.json's
+  // name, and the build does not write another one over it.
+  assert.equal(c.extraMetadata, undefined);
+  const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8"));
+  assert.equal(pkg.name, "persodub-desktop-shell");
   assert.equal(c.win.artifactName, "${productName}-Setup-${version}.${ext}");
 });
 

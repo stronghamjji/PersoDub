@@ -18,9 +18,9 @@ export const EDITION = "opensource";
 // What the app is called, and so where it keeps its files: `name` is what the
 // user sees the app called (the window title, the boot screens, every
 // sentence's {app}, the dock and taskbar, the installer, About) and the kit's
-// folder (config.js defaultKitDir); `pkg` is the name Electron gives the
-// app's own data folder (userData: logs, ports.json).
-export const PRODUCT = { name: "PersoDub", appId: "com.persodub.desktop", pkg: "persodub-desktop-shell" };
+// folder (config.js defaultKitDir). The app's own data folder (userData:
+// logs, ports.json) is named after package.json's name.
+export const PRODUCT = { name: "PersoDub", appId: "com.persodub.desktop" };
 
 // What a build takes from the packager's environment, which the packaged app
 // cannot read again: the support web app that Send feedback's inquiries go

@@ -1,17 +1,14 @@
-// electron-builder's settings. The app's name, app id and data folder are
-// src/edition.js PRODUCT.
+// electron-builder's settings. The app's name and app id are src/edition.js
+// PRODUCT; its data folder (userData) is named after package.json's name.
 import { copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PRODUCT } from "./src/edition.js";
+import { PRODUCT, updateFeed } from "./src/edition.js";
 
 export function builderConfig() {
-  const { name, appId, pkg } = PRODUCT;
+  const { name, appId } = PRODUCT;
   return {
     appId,
     productName: name,
-    // Electron names the app's data folder (userData) after the packaged
-    // package.json's name.
-    extraMetadata: { name: pkg },
     copyright: "Copyright © 2026 ESTsoft corp.",
     directories: { output: "dist" },
     // The tests beside the code stay out of app.asar (2026-10-28, 1.0.0's had 47).
@@ -40,7 +37,7 @@ export function builderConfig() {
     nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
     // Where latest.yml and app-update.yml say the updates are: the public
     // releases.
-    publish: [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }],
+    publish: [updateFeed()],
     // The dmg again as <name>-mac.dmg, the name with no version in it that a
     // download button links to.
     afterAllArtifactBuild: ({ artifactPaths }) => artifactPaths.filter((p) => p.endsWith("-arm64.dmg")).map((p) => {

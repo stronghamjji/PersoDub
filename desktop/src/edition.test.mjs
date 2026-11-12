@@ -46,6 +46,6 @@ test("shell.log names the build as the open-source one at launch", () => {
   assert.ok(main.includes("shellLog(`PERSODUB_EDITION ${EDITION} ${REPO}`);"), "main.js writes the launch's line");
 });
 
-test("the app's names: PersoDub on screen, its app id and its data folder", () => {
-  assert.deepEqual(PRODUCT, { name: "PersoDub", appId: "com.persodub.desktop", pkg: "persodub-desktop-shell" });
+test("the app's names: PersoDub on screen, and its app id", () => {
+  assert.deepEqual(PRODUCT, { name: "PersoDub", appId: "com.persodub.desktop" });
 });
