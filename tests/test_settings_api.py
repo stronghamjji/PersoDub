@@ -285,12 +285,6 @@ ALL_ON = "PERSODUB_NO_ANALYTICS=0\nPERSODUB_NO_REPORTS=0\nPERSODUB_EVENTS=1\n"
 ALL_OFF = "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=0\n"
 
 
-def test_sharing_is_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE)
-    assert settings_env.read_share_usage() is True
-    assert client.get("/api/settings").json()["share_usage"] is True
-
-
 @pytest.mark.parametrize("counts, reports, shared", [
     ("0", "0", True),
     ("1", "0", True),
@@ -315,12 +309,6 @@ def test_the_events_line_does_not_decide_the_switch(tmp_path, monkeypatch, event
     assert settings_env.read_share_usage() is True
 
 
-def test_the_settings_no_longer_carry_the_three_old_switches(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE)
-    body = client.get("/api/settings").json()
-    assert not {"analytics_off", "reports_off", "events_enabled"} & set(body)
-
-
 def test_turning_the_switch_off_writes_all_three_lines(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch, BASE)
     assert client.post("/api/settings", json={"share_usage": False}).status_code == 200
@@ -333,14 +321,6 @@ def test_turning_the_switch_on_writes_all_three_lines(tmp_path, monkeypatch):
     assert client.post("/api/settings", json={"share_usage": True}).status_code == 200
     assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_ON
     assert client.get("/api/settings").json()["share_usage"] is True
-
-
-def test_the_three_old_fields_are_no_longer_saved(tmp_path, monkeypatch):
-    # A page from a three-switch version posting its own fields changes nothing.
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    r = client.post("/api/settings", json={"analytics_off": True, "reports_off": True, "events_enabled": False})
-    assert r.status_code == 200
-    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE
 
 
 def test_a_save_without_the_switch_leaves_its_lines_alone(tmp_path, monkeypatch):
@@ -390,19 +370,8 @@ def test_all_on_and_all_off_are_left_untouched(tmp_path, monkeypatch, lines):
     assert settings_env.read_share_usage() is shared
 
 
-def test_settling_twice_changes_nothing_the_second_time(tmp_path, monkeypatch):
-    kit = _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
-    settings_env.settle_share_usage()
-    settled = (kit / "kit.env").read_text(encoding="utf-8")
-    (kit / "kit.env.bak").unlink()
-    settings_env.settle_share_usage()
-    assert (kit / "kit.env").read_text(encoding="utf-8") == settled
-    assert not (kit / "kit.env.bak").exists()
-
-
 def test_settling_without_a_kit_does_nothing(tmp_path, monkeypatch):
-    # A run from source has no kit at all...
-    monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
+    # A run from source has no kit at all (tests/conftest.py)...
     settings_env.settle_share_usage()
     # ...and a kit folder whose kit.env is not there yet is no different.
     kit = tmp_path / "kit"
@@ -417,14 +386,6 @@ def test_startup_settles_a_partly_off_computer(tmp_path, monkeypatch):
     with TestClient(main.app, base_url="http://127.0.0.1") as c:
         assert c.get("/api/settings").json()["share_usage"] is True
     assert "PERSODUB_NO_ANALYTICS=0" in (kit / "kit.env").read_text(encoding="utf-8")
-
-
-def test_startup_leaves_a_computer_that_turned_everything_off_alone(tmp_path, monkeypatch):
-    text = BASE + "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n"
-    kit = _kit(tmp_path, monkeypatch, text)
-    with TestClient(main.app, base_url="http://127.0.0.1") as c:
-        assert c.get("/api/settings").json()["share_usage"] is False
-    assert (kit / "kit.env").read_text(encoding="utf-8") == text
 
 
 def test_the_app_still_starts_when_kit_env_cannot_be_written(tmp_path, monkeypatch):

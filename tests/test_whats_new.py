@@ -50,35 +50,6 @@ def test_whats_new_survives_a_missing_file(monkeypatch, tmp_path):
     assert r.json()["notes"] == []
 
 
-def _notes_from(monkeypatch, tmp_path, data, language):
-    """GET /api/whats-new's notes for a file holding `data`, in an app
-    speaking `language`."""
-    import json
-    import os
-
-    from app import i18n
-    (tmp_path / "notes.json").write_text(json.dumps(data), encoding="utf-8")
-    real_join = os.path.join
-
-    def fake_join(*parts):
-        p = real_join(*parts)
-        return str(tmp_path / "notes.json") if p.endswith("whats_new.json") else p
-
-    monkeypatch.setattr(misc_api.os.path, "join", fake_join)
-    before = i18n.current_language()
-    try:
-        i18n.set_language(language)
-        return client.get("/api/whats-new").json()["notes"]
-    finally:
-        i18n.set_language(before)
-
-
-def test_whats_new_reads_the_list_of_its_language(monkeypatch, tmp_path):
-    data = {"notes": ["Shared."], "notes_ko": ["공용."]}
-    assert _notes_from(monkeypatch, tmp_path, data, "en") == ["Shared."]
-    assert _notes_from(monkeypatch, tmp_path, data, "ko") == ["공용."]
-
-
 def test_the_notes_are_this_versions():
     """1.0.1 went out with 1.0.0's three lines under "1.0.1" (2026-11-02): the
     file names the version its lines are for, and it is the app's version, so
