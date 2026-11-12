@@ -503,9 +503,9 @@ def step_settings(ctx):
     """A setting written, read back, and put back: the interface language,
     turned from "auto" to the language the engine already speaks (or from a
     chosen language to "auto") for the moment it takes to read it. The keys
-    and the two privacy switches are left alone: a key changed even briefly
-    can fail somebody's dub, and a switch written back as "0" can turn the
-    counting on where it was only ever off by the environment."""
+    and the Share usage data switch are left alone: a key changed even briefly
+    can fail somebody's dub, and the switch written back as on can turn the
+    sending on where it was only ever off by the environment."""
     status, now = api("GET", "/api/settings")
     if status != 200:
         raise Fail(f"GET /api/settings: HTTP {status} {detail(now)}")

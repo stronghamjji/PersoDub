@@ -74,7 +74,7 @@ into `%USERPROFILE%\e2e-fixtures` first.
    the route. Saving it into Downloads is the desktop shell's half, and is not run.
 6. A Perso dubbing, only with `--perso`.
 7. The interface language is written, read back and put back. The API keys
-   and the privacy switches are never written.
+   and the Share usage data switch are never written.
 8. The finished dub's record has the times the usage count sends:
    `elapsed_seconds` and `stage_seconds` for separate, transcribe, translate
    and synthesize, each a whole number above 0, the four no more than the whole.
