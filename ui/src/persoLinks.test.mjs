@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { persoLink, persoResultLink } from "./edition.mjs";
+import { persoLink, persoResultLink } from "./persoLinks.mjs";
 
 // Every link into Perso says which app, version and button it came from.
 test("persoLink puts the app's utm tail and the button on a Perso link, or leaves it bare without a tail", () => {

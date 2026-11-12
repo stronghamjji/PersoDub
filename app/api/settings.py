@@ -67,7 +67,7 @@ def settings_get():
             "perso_recharge_link": RECHARGE_LINK,
             # Tagged the same way; the Home sidebar's perso.ai button opens it.
             "perso_workspace_link": WORKSPACE_LINK,
-            # The tail the page puts on its own links into Perso (edition.mjs persoLink).
+            # The tail the page puts on its own links into Perso (persoLinks.mjs persoLink).
             "perso_utm": UTM_TAIL,
             # Settings > Privacy's one switch: usage counts, button and screen
             # events, job records and failure reports. On until it is turned off.

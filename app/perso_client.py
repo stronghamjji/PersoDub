@@ -99,7 +99,7 @@ PERSO_WORKSPACE_URL = os.environ.get("PERSO_WORKSPACE_URL", "https://perso.ai/wo
 # "API usage by this app" with "visits from this app" under one name. utm_content says WHICH
 # link was clicked, which is what separates new signups from repeat recharges in the report.
 # The tail every link into Perso carries; the page adds utm_content for the
-# button pressed (ui/src/edition.mjs persoLink), so each link says which.
+# button pressed (ui/src/persoLinks.mjs persoLink), so each link says which.
 # utm_campaign names the build, so a visit, a signup or a recharge says this
 # one brought it (user, 2026-10-30); utm_source stays the API's CLIENT_HOST
 # for the reason above.
