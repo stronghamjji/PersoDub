@@ -25,6 +25,7 @@ from app.memline import mem_line
 from app.netlog import CUT as _CUT
 from app.netlog import described as _described
 from app.netlog import no_query as _no_query
+from app.perso_client import EDITION
 
 logger = logging.getLogger("persodub.jobs")
 
@@ -869,7 +870,7 @@ class JobStore:
                 trace("JOB START (%s)" % kind_of(rec))
                 # The edition first: the failure reports carry this line, and
                 # their readers tell builds apart by it.
-                given = {"edition": "opensource",
+                given = {"edition": EDITION,
                          **{k: rec[k] for k in _INPUT_FIELDS if k in rec}}
                 trace("Inputs: " + json.dumps(given, ensure_ascii=False, default=str))
                 _trace_memory(trace)

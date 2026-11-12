@@ -18,7 +18,9 @@ from app.settings_env import current_value, write_values
 # A None fallback means "computed": see _fallback below. The translators are
 # the ones app/engines_status.py's TRANSLATORS offers, in its order.
 STAGES = {
-    "dub_mode": ("DUB_MODE", ("local", "perso"), None),
+    # This computer, key or no key: a local dub needs no key
+    # (owner, 2026-10-12).
+    "dub_mode": ("DUB_MODE", ("local", "perso"), "local"),
     # "local" is Demucs and "roformer" Mel-Band RoFormer, both on this
     # computer; the screen lists each with its own download state.
     "separation": ("SEP_ENGINE", ("local", "roformer", "perso"), None),
@@ -51,10 +53,6 @@ def _roformer_installed() -> bool:
 
 
 def _fallback(stage: str) -> str:
-    if stage == "dub_mode":
-        # This computer, key or no key: a local dub needs no key
-        # (owner, 2026-10-12).
-        return "local"
     if stage == "translator":
         # ChatGPT for a new install; a machine that already has the local
         # Hunyuan model keeps translating locally after the update, so no
