@@ -90,8 +90,15 @@ def _assignments(path: str) -> Iterator[Tuple[str, str]]:
     part of the first key, a leading `export ` is dropped, and one pair of
     quotes around a value is taken off. A kit.env saved by Notepad with a mark,
     or one with PERSODUB_NO_ANALYTICS="1", read here as having no such line,
-    so a computer that had turned everything off looked partly on."""
-    with open(path, encoding="utf-8-sig") as f:
+    so a computer that had turned everything off looked partly on.
+
+    Nor does a byte that is not UTF-8 stop the reading, as it does not stop the
+    shell's: a kit.env saved in the computer's own encoding (cp949, a Korean
+    note or folder name in it) reads with U+FFFD where those bytes are and
+    every other line as written. Refusing the whole file answered 500 to every
+    route that reads a setting, and the page then showed Share usage data on
+    for a computer that had turned it off."""
+    with open(path, encoding="utf-8-sig", errors="replace") as f:
         for raw in f:
             line = raw.strip()
             if not line or line.startswith("#"):
@@ -186,7 +193,11 @@ def _write_env(to_set: Dict[str, str]) -> None:
             raise ValueError(t("API keys must be a single line of printable text"))
     if to_set:
         shutil.copy2(path, path + ".bak")
-        with open(path, encoding="utf-8") as f:
+        # A byte that is not UTF-8 is carried through the rewrite as the byte
+        # it was (surrogateescape, in and out), so a line this write does not
+        # set -- a note or a folder name in the computer's own encoding -- is
+        # still what its owner saved.
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
             text = f.read()
         new_text = update_env_text(text, to_set)
         # Written beside it and moved over it, as the shell's writer does
@@ -194,7 +205,7 @@ def _write_env(to_set: Dict[str, str]) -> None:
         # write that stops part way leaves the file as it was.
         tmp = path + ".tmp"
         try:
-            with open(tmp, "w", encoding="utf-8") as f:
+            with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f:
                 f.write(new_text)
             os.chmod(tmp, 0o600)
             try:
@@ -203,7 +214,7 @@ def _write_env(to_set: Dict[str, str]) -> None:
                 # Windows will not replace a file another program has open at
                 # that moment (the shell reading it, a virus scanner): then it
                 # is written in place, as it always was before.
-                with open(path, "w", encoding="utf-8") as f:
+                with open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
                     f.write(new_text)
         finally:
             # No copy of the keys is left lying beside them, whatever happened.

@@ -81,8 +81,8 @@ async def lifespan(_app):
         log.error("Bad setting, using the default instead -- %s", problem)
     # Settings > Privacy was three switches and is one now: a kit.env that had
     # only some of them off is settled here, once. A file that cannot be read
-    # (one saved in another encoding) or written is logged and passed over,
-    # whatever the error, for the reason above -- the app must still open.
+    # or written is logged and passed over, whatever the error, for the reason
+    # above -- the app must still open.
     try:
         settings_env.settle_share_usage()
     except Exception as e:
