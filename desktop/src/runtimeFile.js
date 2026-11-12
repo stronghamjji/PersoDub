@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 // The file a running kit's pack processes announce their ports through:
@@ -27,6 +27,8 @@ export function writeRuntime(kitDir, patch) {
   const next = { ...readRuntime(kitDir), ...patch };
   const path = join(kitDir, RUNTIME_FILE);
   const tmp = `${path}.tmp`;
+  // A kit that was never installed has no folder yet (issue #222).
+  mkdirSync(kitDir, { recursive: true });
   writeFileSync(tmp, JSON.stringify(next));
   renameSync(tmp, path);
 }
@@ -37,6 +39,8 @@ export function clearRuntime(kitDir, keys) {
   for (const key of keys) delete next[key];
   const path = join(kitDir, RUNTIME_FILE);
   const tmp = `${path}.tmp`;
+  // A kit that was never installed has no folder yet (issue #222).
+  mkdirSync(kitDir, { recursive: true });
   writeFileSync(tmp, JSON.stringify(next));
   renameSync(tmp, path);
 }

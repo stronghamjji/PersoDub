@@ -56,3 +56,12 @@ test("the write is atomic: no leftover temp file after writing", () => {
   const body = JSON.parse(readFileSync(join(d, "runtime.json"), "utf8"));
   assert.equal(body.ollama_url, "http://127.0.0.1:1111");
 });
+
+test("a kit folder that does not exist yet is made, not an ENOENT (issue #222)", () => {
+  const d = join(kit(), "PersoDub");
+  clearRuntime(d, ["ollama_url"]);
+  assert.deepEqual(readRuntime(d), { version: 1 });
+  const e = join(kit(), "PersoDub");
+  writeRuntime(e, { tts_url: "http://127.0.0.1:2222" });
+  assert.equal(readRuntime(e).tts_url, "http://127.0.0.1:2222");
+});
