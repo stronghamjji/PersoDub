@@ -80,12 +80,12 @@ async def lifespan(_app):
     for problem in config.CONFIG_ERRORS:
         log.error("Bad setting, using the default instead -- %s", problem)
     # Settings > Privacy was three switches and is one now: a kit.env that had
-    # only some of them off is settled here, once. A file that cannot be
-    # written is logged and passed over, for the reason above -- the app must
-    # still open.
+    # only some of them off is settled here, once. A file that cannot be read
+    # (one saved in another encoding) or written is logged and passed over,
+    # whatever the error, for the reason above -- the app must still open.
     try:
         settings_env.settle_share_usage()
-    except OSError as e:
+    except Exception as e:
         log.warning("Could not settle the Share usage data switch (%s)", type(e).__name__)
     state.job_store.restore(state.WORKSPACE)
     dub_api.rearm_queued_jobs()

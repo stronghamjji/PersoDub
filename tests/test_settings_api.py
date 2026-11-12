@@ -438,6 +438,22 @@ def test_the_app_still_starts_when_kit_env_cannot_be_written(tmp_path, monkeypat
         assert c.get("/health").json() == {"status": "ok"}
 
 
+def test_the_app_still_starts_when_kit_env_is_not_utf8(tmp_path, monkeypatch):
+    # A kit.env saved in the computer's own encoding (cp949, with a Korean
+    # folder name in it) does not read as UTF-8, and that is a
+    # UnicodeDecodeError, which is no OSError.
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    saved = "PERSODUB_KIT_DIR=C:\\사용자\\킷\nPERSODUB_NO_ANALYTICS=1\n".encode("cp949")
+    (kit / "kit.env").write_bytes(saved)
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    with pytest.raises(UnicodeDecodeError):
+        settings_env.settle_share_usage()
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/health").json() == {"status": "ok"}
+    assert (kit / "kit.env").read_bytes() == saved
+
+
 # --- POST /api/perso/spaces/preview (workspaces for a TYPED, unsaved key) ---
 # This is what removes the second restart: the picker can list workspaces for a
 # key the user has only pasted, so key + workspace are saved in one go.
