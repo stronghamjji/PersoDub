@@ -68,8 +68,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body.pop("workspace") == state.WORKSPACE
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
-                    "perso_space_seq": None, "analytics_off": False,
-                    "reports_off": False, "events_enabled": True, "ui_language": "auto"}
+                    "perso_space_seq": None, "share_usage": True, "ui_language": "auto"}
 
 
 def test_get_carries_the_utm_tagged_signup_link(tmp_path, monkeypatch):
@@ -277,76 +276,166 @@ def test_update_replaces_every_matching_line():
     assert out.count("GEMINI_API_KEY=new") == 2
 
 
-# --- the usage-counts switch -----------------------------------------------
+# --- the Share usage data switch --------------------------------------------
+# One switch on the screen, three lines in kit.env: the desktop shell reads
+# PERSODUB_NO_ANALYTICS, PERSODUB_NO_REPORTS and PERSODUB_EVENTS, each before
+# its own send, and it is not changing.
 
-def test_get_reports_counts_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
+ALL_ON = "PERSODUB_NO_ANALYTICS=0\nPERSODUB_NO_REPORTS=0\nPERSODUB_EVENTS=1\n"
+ALL_OFF = "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=0\n"
+
+
+def test_sharing_is_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, BASE)
-    assert client.get("/api/settings").json()["analytics_off"] is False
+    assert settings_env.read_share_usage() is True
+    assert client.get("/api/settings").json()["share_usage"] is True
 
 
-def test_get_reflects_a_switch_that_was_turned_off(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
-    assert client.get("/api/settings").json()["analytics_off"] is True
+@pytest.mark.parametrize("counts, reports, shared", [
+    ("0", "0", True),
+    ("1", "0", True),
+    ("0", "1", True),
+    ("1", "1", False),
+])
+def test_sharing_is_off_only_when_counts_and_reports_are_both_off(tmp_path, monkeypatch, counts, reports, shared):
+    _kit(tmp_path, monkeypatch, BASE + f"PERSODUB_NO_ANALYTICS={counts}\nPERSODUB_NO_REPORTS={reports}\n")
+    assert settings_env.read_share_usage() is shared
+    assert client.get("/api/settings").json()["share_usage"] is shared
 
 
-def test_the_switch_writes_the_line_the_desktop_shell_already_reads(tmp_path, monkeypatch):
-    # The Settings switch and PERSODUB_NO_ANALYTICS are not two switches. The
-    # shell reads this one line out of kit.env before every count, so writing
-    # it here is what turns reporting off -- there is no second place that
-    # could disagree with it.
+@pytest.mark.parametrize("events_line", ["", "PERSODUB_EVENTS=1\n", "PERSODUB_EVENTS=0\n"])
+def test_the_events_line_does_not_decide_the_switch(tmp_path, monkeypatch, events_line):
+    # The shell holds the button events back whenever the counts are off
+    # (desktop/src/events.js), so counts and reports off is everything off
+    # whatever the events line says -- and events off alone is not.
+    kit = _kit(tmp_path, monkeypatch,
+               BASE + "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n" + events_line)
+    assert settings_env.read_share_usage() is False
+    (kit / "kit.env").write_text(BASE + events_line, encoding="utf-8")
+    assert settings_env.read_share_usage() is True
+
+
+def test_the_settings_no_longer_carry_the_three_old_switches(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE)
+    body = client.get("/api/settings").json()
+    assert not {"analytics_off", "reports_off", "events_enabled"} & set(body)
+
+
+def test_turning_the_switch_off_writes_all_three_lines(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch, BASE)
-    r = client.post("/api/settings", json={"analytics_off": True})
+    assert client.post("/api/settings", json={"share_usage": False}).status_code == 200
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
+    assert client.get("/api/settings").json()["share_usage"] is False
+
+
+def test_turning_the_switch_on_writes_all_three_lines(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + ALL_OFF)
+    assert client.post("/api/settings", json={"share_usage": True}).status_code == 200
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_ON
+    assert client.get("/api/settings").json()["share_usage"] is True
+
+
+def test_the_three_old_fields_are_no_longer_saved(tmp_path, monkeypatch):
+    # A page from a three-switch version posting its own fields changes nothing.
+    kit = _kit(tmp_path, monkeypatch, BASE)
+    r = client.post("/api/settings", json={"analytics_off": True, "reports_off": True, "events_enabled": False})
     assert r.status_code == 200
-    assert "PERSODUB_NO_ANALYTICS=1" in (kit / "kit.env").read_text(encoding="utf-8")
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE
 
 
-def test_the_switch_can_be_turned_back_on(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
-    client.post("/api/settings", json={"analytics_off": False})
-    assert client.get("/api/settings").json()["analytics_off"] is False
+def test_a_save_without_the_switch_leaves_its_lines_alone(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + ALL_OFF)
+    client.post("/api/settings", json={"gemini_api_key": "gvalue"})
+    assert ALL_OFF in (kit / "kit.env").read_text(encoding="utf-8")
 
 
 def test_saving_only_the_switch_leaves_the_saved_keys_alone(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
-    client.post("/api/settings", json={"analytics_off": True})
+    client.post("/api/settings", json={"share_usage": False})
     assert "GEMINI_API_KEY=gvalue" in (kit / "kit.env").read_text(encoding="utf-8")
 
 
-# --- the failure-reports switch --------------------------------------------
+# --- settling a kit.env from the three-switch versions -----------------------
 
-def test_get_reports_failure_reports_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE)
-    assert client.get("/api/settings").json()["reports_off"] is False
-
-
-def test_get_reflects_failure_reports_turned_off(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
-    assert client.get("/api/settings").json()["reports_off"] is True
-
-
-def test_the_reports_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):
-    # Same arrangement as the counts: one line in kit.env, re-read by the
-    # desktop shell before every report, so there is no second place to disagree.
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    assert client.post("/api/settings", json={"reports_off": True}).status_code == 200
-    assert "PERSODUB_NO_REPORTS=1" in (kit / "kit.env").read_text(encoding="utf-8")
-
-
-def test_the_reports_switch_can_be_turned_back_on(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
-    client.post("/api/settings", json={"reports_off": False})
-    assert client.get("/api/settings").json()["reports_off"] is False
-
-
-def test_the_two_switches_are_independent(tmp_path, monkeypatch):
-    # Turning the counts off must not silence the crash reports, and the other
-    # way round: they are separate promises to the user.
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    client.post("/api/settings", json={"analytics_off": True})
+@pytest.mark.parametrize("lines", [
+    "PERSODUB_NO_ANALYTICS=1\n",
+    "PERSODUB_NO_REPORTS=1\n",
+    "PERSODUB_EVENTS=0\n",
+    "PERSODUB_NO_ANALYTICS=1\nPERSODUB_EVENTS=0\n",
+    "PERSODUB_NO_ANALYTICS=0\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=0\n",
+])
+def test_a_partly_off_computer_is_settled_as_all_on(tmp_path, monkeypatch, lines):
+    kit = _kit(tmp_path, monkeypatch, BASE + lines)
+    settings_env.settle_share_usage()
     text = (kit / "kit.env").read_text(encoding="utf-8")
-    assert "PERSODUB_NO_ANALYTICS=1" in text
-    assert "PERSODUB_NO_REPORTS=1" not in text
-    assert client.get("/api/settings").json()["reports_off"] is False
+    assert text.startswith(BASE)
+    assert sorted(text[len(BASE):].splitlines()) == sorted(ALL_ON.splitlines())
+    assert settings_env.read_share_usage() is True
+
+
+@pytest.mark.parametrize("lines", [
+    "",                                                     # a new install: no line at all
+    ALL_ON,
+    ALL_OFF,
+    "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n",     # everything off, no events line
+    "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=1\n",
+])
+def test_all_on_and_all_off_are_left_untouched(tmp_path, monkeypatch, lines):
+    kit = _kit(tmp_path, monkeypatch, BASE + lines)
+    shared = settings_env.read_share_usage()
+    settings_env.settle_share_usage()
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + lines
+    # Not rewritten with the same text either: a write leaves a backup behind.
+    assert not (kit / "kit.env.bak").exists()
+    assert settings_env.read_share_usage() is shared
+
+
+def test_settling_twice_changes_nothing_the_second_time(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
+    settings_env.settle_share_usage()
+    settled = (kit / "kit.env").read_text(encoding="utf-8")
+    (kit / "kit.env.bak").unlink()
+    settings_env.settle_share_usage()
+    assert (kit / "kit.env").read_text(encoding="utf-8") == settled
+    assert not (kit / "kit.env.bak").exists()
+
+
+def test_settling_without_a_kit_does_nothing(tmp_path, monkeypatch):
+    # A run from source has no kit at all...
+    monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
+    settings_env.settle_share_usage()
+    # ...and a kit folder whose kit.env is not there yet is no different.
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    settings_env.settle_share_usage()
+    assert list(kit.iterdir()) == []
+
+
+def test_startup_settles_a_partly_off_computer(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/api/settings").json()["share_usage"] is True
+    assert "PERSODUB_NO_ANALYTICS=0" in (kit / "kit.env").read_text(encoding="utf-8")
+
+
+def test_startup_leaves_a_computer_that_turned_everything_off_alone(tmp_path, monkeypatch):
+    text = BASE + "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n"
+    kit = _kit(tmp_path, monkeypatch, text)
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/api/settings").json()["share_usage"] is False
+    assert (kit / "kit.env").read_text(encoding="utf-8") == text
+
+
+def test_the_app_still_starts_when_kit_env_cannot_be_written(tmp_path, monkeypatch):
+    # A window that never opens is a worse failure than three lines not merged.
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+
+    def refuse(_values):
+        raise PermissionError("kit.env is read-only")
+    monkeypatch.setattr(settings_env, "_write_env", refuse)
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/health").json() == {"status": "ok"}
 
 
 # --- POST /api/perso/spaces/preview (workspaces for a TYPED, unsaved key) ---
@@ -530,22 +619,3 @@ def test_cleared_workspace_pin_does_not_fall_back_to_the_process_env(tmp_path, m
     monkeypatch.setenv("PERSO_SPACE_SEQ", "999")
     monkeypatch.setattr(perso_client, "_resolve_space_seq", lambda key, base: 42)
     assert perso_client.PersoClient().space_seq == 42
-
-
-# --- the button events switch ----------------------------------------------
-
-def test_events_are_on_until_the_switch_is_saved(tmp_path, monkeypatch):
-    # The shell decides the same way (desktop/src/events.js eventsOn): no line
-    # in kit.env means on.
-    _kit(tmp_path, monkeypatch, BASE)
-    assert client.get("/api/settings").json()["events_enabled"] is True
-
-
-def test_the_events_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    assert client.post("/api/settings", json={"events_enabled": False}).status_code == 200
-    assert "PERSODUB_EVENTS=0" in (kit / "kit.env").read_text(encoding="utf-8")
-    assert client.get("/api/settings").json()["events_enabled"] is False
-    client.post("/api/settings", json={"events_enabled": True})
-    assert "PERSODUB_EVENTS=1" in (kit / "kit.env").read_text(encoding="utf-8")
-    assert client.get("/api/settings").json()["events_enabled"] is True

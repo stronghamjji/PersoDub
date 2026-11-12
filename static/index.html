@@ -1264,35 +1264,12 @@
 
       <div class="set-panel" id="settingsPanel-privacy" role="tabpanel" aria-labelledby="settingsTab-privacy" hidden>
         <div class="set-row">
-          <label data-i18n for="analyticsToggle">Anonymous usage counts</label>
+          <label data-i18n for="shareToggle">Share usage data</label>
           <div class="set-ctl">
-            <input type="checkbox" class="switch" id="analyticsToggle" checked>
-            <!-- The shell re-reads the file before every count, so promising
-                 a restart would be wrong. One sentence: what goes and why. -->
-            <div class="settings-hint" id="analyticsHint"><span data-i18n>Helps improve {app} by sending only how often the app is used, anonymously.</span></div>
-          </div>
-        </div>
-        <div class="set-row">
-          <label data-i18n for="eventsToggle">Share App Analytics</label>
-          <div class="set-ctl">
-            <!-- Checked from GET /api/settings' events_enabled: with nothing
-                 saved, on (desktop/src/events.js). -->
-            <input type="checkbox" class="switch" id="eventsToggle">
-            <div class="settings-hint" id="eventsHint"><span data-i18n>Helps improve {app} by sending only which screens and buttons you used, never what you type.</span></div>
-          </div>
-        </div>
-        <div class="set-row">
-          <label data-i18n for="reportsToggle">Help improve {app}</label>
-          <div class="set-ctl">
-            <input type="checkbox" class="switch" id="reportsToggle" checked>
-            <!-- Separate from the counts: this one carries the logs of finished
-                 and failed jobs, so it is its own choice. Nothing personal
-                 leaves -- keys and folder names are taken out first
-                 (desktop/src/report.js). One sentence: what goes, what never
-                 goes and why; the rest is in docs/privacy.md (owner, 2026-10-27). -->
-            <div class="settings-hint" id="reportsHint">
-              <span data-i18n>Helps improve {app} by sending only job records, never titles, files or dialogue.</span>
-            </div>
+            <!-- One switch for everything the app sends about its own use.
+                 Checked from GET /api/settings' share_usage. -->
+            <input type="checkbox" class="switch" id="shareToggle" checked>
+            <div class="settings-hint" id="shareHint"><span data-i18n>It helps improve the {app} project.</span></div>
           </div>
         </div>
       </div>

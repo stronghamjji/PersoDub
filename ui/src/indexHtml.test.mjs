@@ -1037,7 +1037,7 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
     keys: ["persoKeyInput", "persoKeyHint", "persoSignupLink", "persoSpaceSelect", "persoSpaceWarning", "geminiKeyInput",
            "geminiKeyHint", "chatgptState", "chatgptSignInBtn", "chatgptHint", "showKeysToggle"],
     storage: ["revealOutputBtn", "storageHint"],
-    privacy: ["analyticsToggle", "analyticsHint", "reportsToggle", "reportsHint"],
+    privacy: ["shareToggle", "shareHint"],
     about: ["brandBtn", "aboutVersion", "ackToggle", "ackList"],
   };
   for (const [name, ids] of Object.entries(home)) {
@@ -1102,35 +1102,40 @@ test("the models dialog keeps its line break, and is wider than the other confir
   assert.ok(en >= 351 + 34 && ko >= 299 + 34, `${en} and ${ko} are too narrow`);
 });
 
-// Settings > Privacy: each switch says in one sentence what goes, what never
-// goes and why, in the words the owner chose (2026-10-27); the rest is in
-// docs/privacy.md. It used to say it in four sentences, a line each.
-test("each privacy switch says in one sentence what goes, what never goes and why", () => {
+// Settings > Privacy is one switch and one sentence, in the words the owner
+// chose (2026-11-12). It used to be three switches, each with a sentence of
+// its own; what each kind of record holds is in docs/privacy.md.
+test("Privacy is one switch, Share usage data, with one sentence under it", () => {
   const html = readPage();
-  const hintOf = (id) => [...html.match(new RegExp(`<div class="settings-hint" id="${id}">([\\s\\S]*?)<\\/div>`))[1]
-    .matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
-  const labels = [...html.matchAll(/<label data-i18n for="(analyticsToggle|eventsToggle|reportsToggle)">([^<]*)<\/label>/g)].map((m) => m[2]);
-  assert.deepEqual(labels, ["Anonymous usage counts", "Share App Analytics", "Help improve {app}"]);
-  const sentences = [...hintOf("analyticsHint"), ...hintOf("eventsHint"), ...hintOf("reportsHint")];
-  assert.deepEqual(sentences, [
+  const a = html.indexOf('id="settingsPanel-privacy"');
+  const panel = html.slice(a, html.indexOf('<div class="set-panel"', a));
+  assert.equal((panel.match(/class="set-row"/g) || []).length, 1, "one row");
+  assert.deepEqual([...panel.matchAll(/<input[^>]*>/g)].map((m) => m[0]),
+    ['<input type="checkbox" class="switch" id="shareToggle" checked>']);
+  const labels = [...panel.matchAll(/<label data-i18n for="shareToggle">([^<]*)<\/label>/g)].map((m) => m[1]);
+  const sentences = [...panel.matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ["Share usage data"]);
+  assert.deepEqual(sentences, ["It helps improve the {app} project."]);
+  assert.match(panel, /<div class="settings-hint" id="shareHint"><span data-i18n>It helps improve the \{app\} project\.<\/span><\/div>/);
+  assert.doesNotMatch(panel, /<a\b|<button\b/, "no link and no button");
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual([...labels, ...sentences].map((s) => ko[s]),
+    ["사용 기록 보내기", "{app} 프로젝트 개선에 큰 힘이 돼요."]);
+  // The three switches it replaces are gone: their ids from the page and its
+  // styles, their words from both tables.
+  for (const id of ["analyticsToggle", "analyticsHint", "eventsToggle", "eventsHint", "reportsToggle", "reportsHint"]) {
+    assert.equal(html.includes(id), false, `${id} is still in the page`);
+  }
+  const old = [
+    "Anonymous usage counts", "Share App Analytics", "Help improve {app}",
     "Helps improve {app} by sending only how often the app is used, anonymously.",
     "Helps improve {app} by sending only which screens and buttons you used, never what you type.",
     "Helps improve {app} by sending only job records, never titles, files or dialogue.",
-  ]);
-  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.deepEqual([...labels, ...sentences].map((s) => ko[s]), [
-    "익명 사용 통계", "앱 분석 공유", "앱 개선에 참여",
-    "앱을 쓴 횟수만 익명으로 보내 {app} 개선을 도와요.",
-    "입력한 내용 없이 어떤 화면과 버튼을 썼는지만 보내 {app} 개선을 도와요.",
-    "제목·파일·대사 없이 작업 기록만 보내 {app} 개선을 도와요.",
-  ]);
-  // The label stays by the switch, beside a hint of its own.
-  assert.match(html, /#reportsHint > span \{ display: block; \}/);
-  assert.match(html, /\.set-row:has\(> \.set-ctl > #reportsHint\) \{ align-items: start; \}/);
-  const old = "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.";
+    "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.",
+  ];
   for (const code of ["en", "ko"]) {
     const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
-    assert.equal(Object.hasOwn(table, old), false, `the old sentence is still in ui.${code}.json`);
+    for (const s of old) assert.equal(Object.hasOwn(table, s), false, `"${s}" is still in ui.${code}.json`);
   }
 });
 

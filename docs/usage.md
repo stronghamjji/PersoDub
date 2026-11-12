@@ -281,8 +281,8 @@ next dub, no restart needed.
 **Storage** opens the folder your finished videos are saved in (**Show in Finder**, or
 **Show in Explorer** on Windows).
 
-**Privacy** has three switches, all on to begin with: *Anonymous usage counts*,
-*Help improve PersoDub* and *Share App Analytics*.
+**Privacy** has one switch, *Share usage data*, on to begin with. It covers anonymous
+usage counts, which screens and buttons were used, and job records and failure reports.
 Keys and folder names are removed from a job's logs before they leave.
 
 **About** has the version (press it to see what is new) and, under

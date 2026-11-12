@@ -29,7 +29,6 @@
   "All at once": "All at once",
   "All lines": "All lines",
   "All {n} languages are deleted. This can’t be undone.": "All {n} languages are deleted. This can’t be undone.",
-  "Anonymous usage counts": "Anonymous usage counts",
   "Area": "Area",
   "Ask anything": "Ask anything",
   "Ask for a fix": "Ask for a fix",
@@ -836,10 +835,7 @@
   "Add an email so we can answer.": "Add an email so we can answer.",
   "Could not send it. Try again in a moment.": "Could not send it. Try again in a moment.",
   "{app}": "{app}",
-  "Share App Analytics": "Share App Analytics",
-  "Help improve {app}": "Help improve {app}",
-  "Helps improve {app} by sending only how often the app is used, anonymously.": "Helps improve {app} by sending only how often the app is used, anonymously.",
-  "Helps improve {app} by sending only which screens and buttons you used, never what you type.": "Helps improve {app} by sending only which screens and buttons you used, never what you type.",
-  "Helps improve {app} by sending only job records, never titles, files or dialogue.": "Helps improve {app} by sending only job records, never titles, files or dialogue.",
+  "Share usage data": "Share usage data",
+  "It helps improve the {app} project.": "It helps improve the {app} project.",
   "Titles, file names, links and dialogue are not sent.": "Titles, file names, links and dialogue are not sent."
 }

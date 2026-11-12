@@ -83,6 +83,14 @@ def no_codex_prefetch(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_kit_of_this_machine(monkeypatch):
+    """A test that enters the lifespan must not settle the privacy lines in the
+    kit.env of the computer it runs on (app/settings_env.py settle_share_usage).
+    A test about a kit points PERSODUB_KIT_DIR at one of its own."""
+    monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolate_workspace(tmp_path, monkeypatch):
     """Point the upload workspace at a per-test temp directory.
 

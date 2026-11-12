@@ -719,7 +719,7 @@ values are written bare.
 | `ERASER_PYTHON`, `ERASER_VSR_DIR` (present only while the pack is installed) | installer, pack removal | backend (absence means "not installed") |
 | `GEMINI_API_KEY`, `PERSO_API_KEY`, `PERSO_SPACE_SEQ` | Settings (`write_keys`) | backend at every use; the shell checks whether a Perso key is set |
 | `DUB_MODE`, `SEP_ENGINE`, `STT_ENGINE`, `TRANSLATE_ENGINE`, `VOICE_QUALITY`, `TTS_ENGINE` | Settings and the Dub Agent (`app/setup.py set_defaults`) | backend at every use |
-| `PERSODUB_NO_ANALYTICS`, `PERSODUB_NO_REPORTS` (`1` means off) | Settings | shell, re-read before every send |
+| `PERSODUB_NO_ANALYTICS`, `PERSODUB_NO_REPORTS` (`1` means off), `PERSODUB_EVENTS` (`0` means off) | Settings (one switch writes all three) | shell, re-read before every send |
 | `PERSODUB_LANG` (`auto`, `en`, `ko`; `auto` means `PERSODUB_LOCALE`) | Settings > About | backend (`app/i18n.py`, switched on save), page (through `GET /api/settings`), shell (`desktop/src/i18n.js`, at launch) |
 
 **runtime.json.** `{"version": 1, "tts_url", "ollama_url", "tts_pid", "ollama_pid",

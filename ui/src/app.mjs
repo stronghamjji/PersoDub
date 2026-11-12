@@ -191,7 +191,7 @@ window.addEventListener("resize", () => {
 // ---------------- Settings modal ----------------
 // The sheet itself is ui/src/settingsDialog.mjs -- it owns everything inside
 // #settingsOverlay: the API keys, the Perso workspace picker, Storage, the
-// usage-counts switch and the About lines. What stays on this page are the
+// Privacy switch and the About lines. What stays on this page are the
 // ways IN (the gear below, the Advanced-options keys link, the models dialog
 // and the out-of-credits popup all call settings.openSettings()) and the two
 // things the sheet reaches back for: re-checking which engines a saved key

@@ -4,7 +4,7 @@
 // way to tell whether it had saved). Cancel, the X, Escape and the backdrop
 // leave without saving; the next open reads the saved values again. It also owns the Perso workspace picker
 // (including the preview of a key that has only been pasted), the
-// Show-in-Finder button, the usage-counts switch, the language picker and the
+// Show-in-Finder button, the share-usage switch, the language picker and the
 // Acknowledgements fold. The sheet is five tabs (Models, API keys, Storage, Privacy, About),
 // one panel showing at a time; openSettings picks the one to open on.
 //
@@ -215,7 +215,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
 
   // What was saved when the modal opened, so Save only posts actual edits.
   let keysInitial = { gem: "", per: "" };
-  let togglesInitial = { analytics: true, reports: true, events: false };
+  let shareInitial = true;
   // The saved language setting ("auto", "en", "ko"); null until the saved
   // setup has been read, so a sheet that could not read it has no change to
   // count in a picker it never filled.
@@ -223,7 +223,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
 
   // Everything the sheet shows about the saved setup, in one pass:
   // GET /api/settings fills the key fields, the workspace picker, the
-  // version line and the usage-counts switch. Not "loadSettings": the page has
+  // version line and the share-usage switch. Not "loadSettings": the page has
   // one of those already (ui/src/app.mjs), and it reads the browser's own
   // persodub_settings blob -- the opposite source of truth to this one.
   async function loadSavedSetup() {
@@ -247,10 +247,8 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       if (realVersion(st.app_version)) {
         $("aboutVersion").textContent = `${t("{app}")} ${st.app_version}`;
       }
-      $("analyticsToggle").checked = !st.analytics_off;
-      $("reportsToggle").checked = !st.reports_off;
-      $("eventsToggle").checked = !!st.events_enabled;
-      togglesInitial = { analytics: !st.analytics_off, reports: !st.reports_off, events: !!st.events_enabled };
+      shareInitial = !!st.share_usage;
+      $("shareToggle").checked = shareInitial;
       languageInitial = st.ui_language || "auto";
       $("uiLanguageSelect").value = languageInitial;
     } catch {
@@ -388,9 +386,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       keyChanged,
       // A new key brings its own workspace: one change, not two.
       !keyChanged && !spaceSel.disabled && spaceSel.value !== persoSpaceInitial,
-      $("analyticsToggle").checked !== togglesInitial.analytics,
-      $("reportsToggle").checked !== togglesInitial.reports,
-      $("eventsToggle").checked !== togglesInitial.events,
+      $("shareToggle").checked !== shareInitial,
       languageInitial !== null && $("uiLanguageSelect").value !== languageInitial,
     ].filter(Boolean).length;
   }
@@ -401,23 +397,15 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     $("settingsSaveBtn").title = n ? "" : t("No changes to save");
   }
   for (const id of ["geminiKeyInput", "persoKeyInput"]) $(id).addEventListener("input", paintChanges);
-  for (const id of ["persoSpaceSelect", "analyticsToggle", "reportsToggle", "eventsToggle", "uiLanguageSelect"]) {
+  for (const id of ["persoSpaceSelect", "shareToggle", "uiLanguageSelect"]) {
     $(id).addEventListener("change", paintChanges);
   }
 
   async function saveSettings() {
     $("settingsSaveBtn").disabled = true;
     let ok = await saveSettingsEdits();
-    if ($("analyticsToggle").checked !== togglesInitial.analytics) {
-      if (await setUsageCounts($("analyticsToggle").checked)) togglesInitial.analytics = $("analyticsToggle").checked;
-      else ok = false;
-    }
-    if ($("reportsToggle").checked !== togglesInitial.reports) {
-      if (await setFailureReports($("reportsToggle").checked)) togglesInitial.reports = $("reportsToggle").checked;
-      else ok = false;
-    }
-    if ($("eventsToggle").checked !== togglesInitial.events) {
-      if (await setEvents($("eventsToggle").checked)) togglesInitial.events = $("eventsToggle").checked;
+    if ($("shareToggle").checked !== shareInitial) {
+      if (await setShareUsage($("shareToggle").checked)) shareInitial = $("shareToggle").checked;
       else ok = false;
     }
     const language = $("uiLanguageSelect").value;
@@ -543,38 +531,15 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     $("ackToggle").setAttribute("aria-expanded", String(open));
   });
 
-  // Usage counts. kit.env is where the desktop shell looks before every count,
-  // so this POST is the whole off switch -- there is no second copy to disagree
-  // with it, and the next event already obeys it.
-  async function setUsageCounts(on) {
+  // Sharing usage data. kit.env is where the desktop shell looks before it
+  // sends anything, so this POST is the whole switch -- there is no second copy
+  // to disagree with it. Then the page asks the shell again, so its own record
+  // of presses starts or stops at once (ui/src/events.mjs).
+  async function setShareUsage(on) {
     try {
       const r = await fetch("/api/settings", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analytics_off: !on }),
-      });
-      return r.ok;
-    } catch { return false; }
-  }
-
-  // The same shape for the same reason: one POST is the whole switch, and the
-  // shell re-reads the file before it sends anything.
-  async function setFailureReports(on) {
-    try {
-      const r = await fetch("/api/settings", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reports_off: !on }),
-      });
-      return r.ok;
-    } catch { return false; }
-  }
-
-  // Button and screen events: one POST, then the page asks the shell again,
-  // which reads the line straight back (ui/src/events.mjs).
-  async function setEvents(on) {
-    try {
-      const r = await fetch("/api/settings", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events_enabled: on }),
+        body: JSON.stringify({ share_usage: on }),
       });
       if (r.ok) await refreshEvents();
       return r.ok;

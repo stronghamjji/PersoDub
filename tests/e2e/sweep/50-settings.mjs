@@ -7,6 +7,7 @@
 // Codex), a model's Delete confirm, anything that opens an outside site.
 // Notes never carry a key, an account address or a home folder's name.
 import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf, Skip } from "../lib/cdp.mjs";
+import { needQuietKit } from "../lib/kit.mjs";
 
 export const area = "settings";
 
@@ -355,44 +356,53 @@ export const steps = [
         + `used space on this tab: ${gb || "none, the GB in use is on the Models header"}`;
     } },
 
-  { name: "Privacy: two switches, their words, usage counts round trip", looks: ["#reportsHint"],
+  { name: "Privacy: one switch and its words", looks: ["#shareHint"],
     async run(app) {
       await showTab(app, "privacy");
       const got = await app.inPage(() => {
-        const spans = [...document.querySelectorAll("#reportsHint > span")];
-        return { labels: ["analyticsToggle", "reportsToggle"].map((id) => document.querySelector(`label[for=${id}]`).textContent.trim()),
-                 on: ["#analyticsToggle", "#reportsToggle"].map((s) => document.querySelector(s).checked),
-                 lines: spans.map((s) => ({ text: s.textContent.trim(), top: s.getBoundingClientRect().top, bottom: s.getBoundingClientRect().bottom })) };
+        const panel = document.querySelector("#settingsPanel-privacy");
+        return { rows: panel.querySelectorAll(".set-row").length,
+                 switches: [...panel.querySelectorAll("input")].map((i) => i.id),
+                 label: document.querySelector("label[for=shareToggle]").textContent.trim(),
+                 on: document.querySelector("#shareToggle").checked,
+                 hint: document.querySelector("#shareHint").textContent.trim() };
       });
-      const lines = got.lines;
-      // One sentence since 0.9.1 (owner, 2026-10-27): what goes, what never goes and why.
-      if (lines.length !== 1) throw new Error(`the job-logs text has ${lines.length} sentences, not 1`);
-      const all = lines.map((l) => l.text).join(" ");
-      const need = app.page.lang === "ko" ? ["작업 기록만 보내", `${app.page.name} 개선을 도와요`] : ["job records", `Helps improve ${app.page.name}`];
-      const absent = need.filter((w) => !all.includes(w));
-      if (absent.length) throw new Error(`the job-logs text lacks ${absent.join(", ")}`);
-      const was = (await app.api("/api/settings")).analytics_off;
+      // One switch and one sentence (owner, 2026-11-12); it was three of each.
+      if (got.rows !== 1 || got.switches.join() !== "shareToggle") throw new Error(`Privacy has ${got.rows} rows and the switches ${got.switches.join(", ")}`);
+      const label = app.tr("Share usage data"), hint = app.tr("It helps improve the {app} project.");
+      if (got.label !== label) throw new Error(`the label reads "${got.label}", not "${label}"`);
+      if (got.hint !== hint) throw new Error(`the hint reads "${clean(got.hint)}", not "${hint}"`);
+      const saved = (await app.api("/api/settings")).share_usage;
+      if (got.on !== saved) throw new Error(`the switch is ${got.on ? "on" : "off"} and GET /api/settings share_usage is ${saved}`);
+      return `${got.label} ${got.on ? "on" : "off"}, as GET /api/settings says; "${clean(got.hint)}"`;
+    } },
+
+  // The switch is turned, so first: nothing a test turns on may be sent (lib/kit.mjs).
+  { name: "Privacy: share_usage round trip through Save", looks: ["#settingsPanel-privacy"],
+    async run(app) {
+      needQuietKit();
+      await showTab(app, "privacy");
+      const was = (await app.api("/api/settings")).share_usage;
       let flipped;
       try {
-        await app.click("#analyticsToggle");
+        await app.click("#shareToggle");
         await saveOne(app);
         await app.waitFor("Save to close the dialog", 10000, isClosed, "#settingsOverlay");
-        flipped = (await app.api("/api/settings")).analytics_off;
-        if (flipped !== !was) throw new Error(`after Save, GET /api/settings analytics_off is ${flipped}, not ${!was}`);
+        flipped = (await app.api("/api/settings")).share_usage;
+        if (flipped !== !was) throw new Error(`after Save, GET /api/settings share_usage is ${flipped}, not ${!was}`);
         await showTab(app, "privacy");
-        if ((await app.inPage(() => document.querySelector("#analyticsToggle").checked)) !== was) throw new Error("the reopened switch does not show the saved value");
-        await app.click("#analyticsToggle");
+        if ((await app.inPage(() => document.querySelector("#shareToggle").checked)) !== flipped) throw new Error("the reopened switch does not show the saved value");
+        await app.click("#shareToggle");
         await saveOne(app);
         await app.waitFor("Save to close the dialog", 10000, isClosed, "#settingsOverlay");
       } finally {
-        if ((await app.api("/api/settings")).analytics_off !== was) {
-          await app.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ analytics_off: was }) });
+        if ((await app.api("/api/settings")).share_usage !== was) {
+          await app.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ share_usage: was }) });
         }
       }
-      const now = (await app.api("/api/settings")).analytics_off;
-      if (now !== was) throw new Error(`analytics_off did not come back to ${was}`);
-      const sw = (i) => `${got.labels[i]} ${got.on[i] ? "on" : "off"}`;
-      return `${sw(0)}, ${sw(1)}; job-logs text one sentence; usage counts switch → Save → analytics_off ${was}→${flipped}→${now}`;
+      const now = (await app.api("/api/settings")).share_usage;
+      if (now !== was) throw new Error(`share_usage did not come back to ${was}`);
+      return `switch → Save → share_usage ${was}→${flipped}→${now}`;
     } },
 
   { name: "About: version, What's new, Escape", looks: ["#aboutVersion", "#wnTitle"],

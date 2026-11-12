@@ -15,22 +15,21 @@ from typing import Dict, Optional
 
 MANAGED_KEYS = ("GEMINI_API_KEY", "PERSO_API_KEY", "PERSO_SPACE_SEQ")
 
-# Not an API key, so not in MANAGED_KEYS: it is the same line the desktop shell
-# reads out of kit.env before every usage count (see desktop/src/analytics.js).
-# The Settings switch writes here so the switch and the environment variable
-# are one value rather than two that could disagree.
+# Settings > Privacy is one switch, Share usage data, kept as the three lines
+# the desktop shell already reads out of kit.env before every send. They are
+# not API keys, so not in MANAGED_KEYS, and the switch writes all three at once
+# so the screen and the shell cannot disagree.
+#
+# Usage counts (desktop/src/analytics.js): "1" means off.
 ANALYTICS_OFF_KEY = "PERSODUB_NO_ANALYTICS"
 
-# The other switch the desktop shell reads out of kit.env before every send:
-# whether an automatic failure report may leave (desktop/src/report.js). A
-# separate line from the counts, because they are separate promises -- someone
-# who does not want to be counted may still want their crash fixed, and
-# someone who does not want their logs sent still shows up in the count.
+# Job records and automatic failure reports (desktop/src/report.js): "1" means
+# off.
 REPORTS_OFF_KEY = "PERSODUB_NO_REPORTS"
 
-# Whether the buttons pressed and screens shown are recorded and sent
-# (desktop/src/events.js reads the same line before every batch). "1" or "0";
-# with no line they are recorded.
+# The buttons pressed and screens shown (desktop/src/events.js): "1" or "0";
+# with no line they are recorded. The shell also holds them back whenever the
+# counts are off, whatever this line says.
 EVENTS_KEY = "PERSODUB_EVENTS"
 
 # The app's language ("auto", "en" or "ko"), from Settings > About. One line
@@ -211,38 +210,36 @@ def write_keys(values: Dict[str, Optional[str]]) -> Dict[str, bool]:
     return read_key_status() or {}
 
 
-def read_analytics_off() -> bool:
-    """Whether the user turned usage counts off. Absent means on."""
-    return read_value(ANALYTICS_OFF_KEY) == "1"
+def read_share_usage() -> bool:
+    """Whether the Share usage data switch is on. Off only when the usage counts
+    and the failure reports are both off: the shell holds the button events back
+    whenever the counts are off, so those two lines together mean nothing
+    leaves, with or without an events line. Absent means on."""
+    return not (read_value(ANALYTICS_OFF_KEY) == "1" and read_value(REPORTS_OFF_KEY) == "1")
 
 
-def write_analytics_off(off: bool) -> None:
-    """Turn usage counts off, or back on. Takes effect on the next count --
-    the shell re-reads kit.env every time, so nothing waits for a restart."""
-    _write_env({ANALYTICS_OFF_KEY: "1" if off else "0"})
+def write_share_usage(on: bool) -> None:
+    """Turn the three lines on or off together, in one write. Takes effect on
+    the next send -- the shell re-reads kit.env every time, so nothing waits
+    for a restart."""
+    _write_env({ANALYTICS_OFF_KEY: "0" if on else "1",
+                REPORTS_OFF_KEY: "0" if on else "1",
+                EVENTS_KEY: "1" if on else "0"})
 
 
-def read_reports_off() -> bool:
-    """Whether the user turned automatic failure reports off. Absent means on."""
-    return read_value(REPORTS_OFF_KEY) == "1"
+def settle_share_usage() -> None:
+    """Bring a kit.env from the versions with three switches to one answer.
 
-
-def write_reports_off(off: bool) -> None:
-    """Turn automatic failure reports off, or back on. Like the counts' switch,
-    it takes effect on the next failure rather than the next restart."""
-    _write_env({REPORTS_OFF_KEY: "1" if off else "0"})
-
-
-def read_events_enabled() -> bool:
-    """Whether button and screen events are recorded: kit.env's line, or on
-    with none, as the desktop shell decides (events.js)."""
-    return read_value(EVENTS_KEY) != "0"
-
-
-def write_events_enabled(on: bool) -> None:
-    """Turn button and screen events on or off. The shell re-reads kit.env
-    with every batch, so the next one already obeys it."""
-    _write_env({EVENTS_KEY: "1" if on else "0"})
+    A computer that had only some of them off reads as on (read_share_usage),
+    so its three lines are all written as on; otherwise the screen would say
+    on while one line still held something back. Everything on and everything
+    off are left exactly as they are, file untouched, which is also what makes
+    a second call do nothing. Without a kit (a run from source) no line reads
+    as off, so nothing is written."""
+    any_off = (read_value(ANALYTICS_OFF_KEY) == "1" or read_value(REPORTS_OFF_KEY) == "1"
+               or read_value(EVENTS_KEY) == "0")
+    if any_off and read_share_usage():
+        write_share_usage(True)
 
 
 def write_language(value: str) -> None:

@@ -1,11 +1,14 @@
-// The sweep's button events: Settings > Privacy's "Share App Analytics"
-// switch turned on, two presses, and the shell's own count of what it kept
+// The sweep's button events: Settings > Privacy's "Share usage data" switch
+// turned on, two presses, and the shell's own count of what it kept
 // (persodubShell.sendEvents([]) only asks: {on, kept, sent, recent}); then
 // the switch off, two more presses, and nothing more kept. The switch is put
-// back as it was. On a computer with PERSODUB_NO_ANALYTICS=1 (the owner's
-// test kits) the shell keeps and counts them but sends nothing, so `sent` is
-// reported, not checked.
+// back as it was. It is the switch for the usage counts and the failure
+// reports too, so it is turned only on a kit whose kit.env has the three
+// preview lines (lib/kit.mjs): with them and the switch on, the shell keeps
+// and counts the presses and nothing leaves, so `sent` is reported, not
+// checked; with the switch off nothing is kept at all.
 import { isClosed, isOpen, onHome, sleep, Skip } from "../lib/cdp.mjs";
+import { needQuietKit } from "../lib/kit.mjs";
 
 export const area = "events";
 
@@ -18,14 +21,14 @@ async function setSwitch(app, on) {
   await app.waitFor("the Settings dialog", 10000, isOpen, "#settingsOverlay");
   await app.click("#settingsTab-privacy");
   await app.waitFor("the Privacy tab", 5000, () => !document.querySelector("#settingsPanel-privacy").hidden);
-  if ((await app.inPage(() => document.querySelector("#eventsToggle").checked)) !== on) {
-    await app.click("#eventsToggle");
+  if ((await app.inPage(() => document.querySelector("#shareToggle").checked)) !== on) {
+    await app.click("#shareToggle");
     await app.click("#settingsSaveBtn");
   } else {
     await app.click("#settingsCancelBtn");
   }
   await app.waitFor("the Settings dialog to close", 10000, isClosed, "#settingsOverlay");
-  if ((await app.api("/api/settings")).events_enabled !== on) throw new Error(`events_enabled did not become ${on}`);
+  if ((await app.api("/api/settings")).share_usage !== on) throw new Error(`share_usage did not become ${on}`);
   await sleep(500);
 }
 
@@ -42,8 +45,9 @@ export const steps = [
   { name: "switch on: two presses kept by the shell; switch off: none", looks: ["#settingsPanel-privacy"],
     async run(app) {
       if (!(await app.inPage(() => !!window.persodubShell?.sendEvents))) throw new Skip("not inside the desktop shell");
+      needQuietKit();
       if (!(await app.inPage(onHome))) throw new Error("not on Home");
-      const was = (await app.api("/api/settings")).events_enabled;
+      const was = (await app.api("/api/settings")).share_usage;
       try {
         await setSwitch(app, true);
         const before = await status(app);
@@ -65,8 +69,8 @@ export const steps = [
         return `on: kept +${after.kept - before.kept} (${after.recent.slice(-4).join(", ")}), sent so far ${after.sent}; `
           + `off: kept +0 after two presses`;
       } finally {
-        if ((await app.api("/api/settings")).events_enabled !== was) {
-          await app.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ events_enabled: was }) });
+        if ((await app.api("/api/settings")).share_usage !== was) {
+          await app.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ share_usage: was }) });
         }
       }
     } },

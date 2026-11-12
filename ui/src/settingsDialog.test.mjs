@@ -113,7 +113,7 @@ const SAVED = {
   perso_signup_link: "https://developers.perso.ai/api-keys?utm=x",
   perso_recharge_link: "https://perso.ai/en/workspace/space-settings?tab=Subscription&utm=x",
   app_version: "0.5.0",
-  analytics_off: true,
+  share_usage: false,
 };
 const SPACES = { spaces: [{ seq: 7, name: "Studio", tier: "Pro", credits: 120 }] };
 
@@ -128,8 +128,8 @@ test("loadSavedSetup fills the fields from GET /api/settings", async (t) => {
   assert.equal(h.$("persoSignupLink").href, SAVED.perso_signup_link);
   assert.equal(h.$("persoRechargeLink").href, SAVED.perso_recharge_link);
   assert.equal(h.$("aboutVersion").textContent, "PersoDub 0.5.0");
-  // analytics_off: true means the "send counts" switch is OFF.
-  assert.equal(h.$("analyticsToggle").checked, false);
+  // share_usage: false means the "Share usage data" switch is OFF.
+  assert.equal(h.$("shareToggle").checked, false);
   assert.ok(h.state.calls.includes("GET /api/settings"));
 });
 
@@ -293,9 +293,8 @@ test("a save the engine refuses keeps the sheet open and says so beside Save", a
 test("Cancel with nothing changed closes at once; closing from code leaves without saving", async (t) => {
   const h = harness();
   t.after(h.state.restore);
-  // As the sheet shows them before it has read anything: both switches on.
-  h.$("analyticsToggle").checked = true;
-  h.$("reportsToggle").checked = true;
+  // As the sheet shows it before it has read anything: the switch on.
+  h.$("shareToggle").checked = true;
 
   h.$("settingsOverlay").classList.add("open");
   await h.$("settingsCancelBtn").fire("click");
@@ -314,9 +313,8 @@ test("Cancel with nothing changed closes at once; closing from code leaves witho
 test("Cancel with something typed asks once: Keep editing stays, Discard leaves without saving", async (t) => {
   const h = harness();
   t.after(h.state.restore);
-  // As the sheet shows them before it has read anything: both switches on.
-  h.$("analyticsToggle").checked = true;
-  h.$("reportsToggle").checked = true;
+  // As the sheet shows it before it has read anything: the switch on.
+  h.$("shareToggle").checked = true;
 
   h.$("geminiKeyInput").value = "typed-then-cancelled";
   h.$("settingsOverlay").classList.add("open");
@@ -340,9 +338,8 @@ test("Cancel with something typed asks once: Keep editing stays, Discard leaves 
 test("Escape closes the sheet only while it is open", async (t) => {
   const h = harness();
   t.after(h.state.restore);
-  // As the sheet shows them before it has read anything: both switches on.
-  h.$("analyticsToggle").checked = true;
-  h.$("reportsToggle").checked = true;
+  // As the sheet shows it before it has read anything: the switch on.
+  h.$("shareToggle").checked = true;
   const onKey = h.state.docKeydown[0];
   assert.ok(onKey, "the sheet has to answer Escape");
 
@@ -435,35 +432,42 @@ test("a folder that will not open says so under the button", async (t) => {
     "Could not open the folder.");
 });
 
-test("the two switches are saved with Save, each as its own setting", async (t) => {
-  const h = harness({ responses: { "/api/settings": ok({ analytics_off: false, reports_off: false }) } });
+// One switch, read from share_usage and saved with Save as share_usage, from
+// on to off and from off to on.
+for (const saved of [true, false]) {
+  test(`the privacy switch shows share_usage ${saved} and Save sends share_usage ${!saved}`, async (t) => {
+    const h = harness({ responses: { "/api/settings": ok({ share_usage: saved }) } });
+    t.after(h.state.restore);
+    await h.api.openSettings();
+    assert.equal(h.$("shareToggle").checked, saved);
+
+    h.$("shareToggle").checked = !saved;
+    await h.$("shareToggle").fire("change");
+    assert.equal(h.$("settingsChanges").textContent, "1 change");
+    assert.deepEqual(h.state.bodies, [], "nothing is sent before Save");
+    await h.$("settingsSaveBtn").fire("click");
+
+    assert.deepEqual(h.state.bodies, [{ url: "/api/settings", body: { share_usage: !saved } }]);
+    assert.equal(h.$("settingsOverlay").classList.has("open"), false);
+  });
+}
+
+test("a share switch that could not be saved keeps the sheet open and is still a change to save", async (t) => {
+  let gets = 0;
+  const h = harness({ responses: {
+    "/api/settings": () => (gets++ ? { ok: false, status: 500, json: async () => ({}) } : ok({ share_usage: true })),
+  } });
   t.after(h.state.restore);
   await h.api.openSettings();
 
-  h.$("analyticsToggle").checked = false;
-  await h.$("analyticsToggle").fire("change");
-  h.$("reportsToggle").checked = false;
-  await h.$("reportsToggle").fire("change");
-  assert.equal(h.$("settingsChanges").textContent, "2 changes");
-
+  h.$("shareToggle").checked = false;
+  await h.$("shareToggle").fire("change");
   await h.$("settingsSaveBtn").fire("click");
 
-  assert.deepEqual(h.state.bodies.map((b) => b.body),
-    [{ analytics_off: true }, { reports_off: true }]);
-});
-
-test("the button events switch shows events_enabled and is saved as its own setting", async (t) => {
-  const h = harness({ responses: { "/api/settings": ok({ analytics_off: false, reports_off: false, events_enabled: true }) } });
-  t.after(h.state.restore);
-  await h.api.openSettings();
-  assert.equal(h.$("eventsToggle").checked, true);
-
-  h.$("eventsToggle").checked = false;
-  await h.$("eventsToggle").fire("change");
-  assert.equal(h.$("settingsChanges").textContent, "1 change");
-  await h.$("settingsSaveBtn").fire("click");
-
-  assert.deepEqual(h.state.bodies.map((b) => b.body), [{ events_enabled: false }]);
+  assert.deepEqual(h.state.bodies.map((b) => b.body), [{ share_usage: false }]);
+  assert.equal(h.$("settingsOverlay").classList.has("open"), true);
+  assert.equal(h.$("settingsChanges").textContent, "Could not save. Is PersoDub running?");
+  assert.equal(h.$("settingsSaveBtn").disabled, false, "Save can be pressed again");
 });
 
 test("Acknowledgements folds open and shut", async (t) => {
