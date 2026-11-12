@@ -135,10 +135,6 @@ test("asked for an address (no Reply-to), it says so in the page's language and 
   }
 });
 
-test("the title is Feedback", () => {
-  assert.equal(harness().$("feedbackTitle").textContent, "Feedback");
-});
-
 test("Close keeps the draft and sends nothing", () => {
   const h = harness();
   h.open();

@@ -4,7 +4,7 @@
 // the app's masked logs (desktop/src/reporting.js sendInquiry). No mail app:
 // a computer without a mail account left the person with nothing (owner,
 // 2026-10-27).
-// Its title is Feedback, like the button that opens it.
+// Its title is Feedback, like the button that opens it (the page's markup).
 //
 // Owns #feedbackOverlay, #feedbackType, #feedbackSubjectInput,
 // #feedbackDetails, #feedbackReplyTo, #feedbackLogsNote, #feedbackConsent,
@@ -29,7 +29,6 @@ export const PRIVACY_URL = {
 export function initFeedbackSheet({ $, send, language, openUrl, record = recordStep }) {
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
-  $("feedbackTitle").textContent = t("Feedback");
   // Left empty, there is no address to answer at: the shell sends nothing
   // and answers needReplyTo (desktop/src/reporting.js).
   const replyTo = $("feedbackReplyTo");

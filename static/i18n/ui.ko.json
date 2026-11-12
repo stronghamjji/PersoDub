@@ -817,7 +817,6 @@
   "{step} lines {lines}": "{step} ({lines}번 줄)",
   "{step} · {done} of {total}": "{step} · {done}/{total}",
   "{s}s": "{s}초",
-  "Service inquiry": "서비스 문의",
   "Feedback": "피드백",
   "Inquiry type": "문의 유형",
   "Problem or inconvenience": "불편사항",
