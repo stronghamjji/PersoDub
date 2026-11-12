@@ -16,7 +16,7 @@ const TAB_WORDS = ["API keys", "Models", "Storage", "Privacy", "About"];
 const GROUPS = ["Audio separation", "Speech-to-text", "Translation", "Text-to-speech", "Required programs"];
 // Names that stay English in the Korean page: products, engines, units, keys, the 12 looks.
 const ALLOW = ["PersoDub", "Perso API", "Perso", "ChatGPT", "Claude", "Codex", "Whisper", "Demucs", "Mel-Band RoFormer",
-  "Qwen3-TTS", "Hunyuan", "Gemma 3", "Gemini", "Ollama", "Python", "PyTorch", "GitHub", "API", "MP3", "WAV", "YouTube",
+  "Qwen3-TTS", "OmniVoice", "Hunyuan", "Gemma 3", "Gemini", "Ollama", "Python", "PyTorch", "GitHub", "API", "MP3", "WAV", "YouTube",
   "TikTok", "Reels", "Fast mode", "High quality", "Linnet", "Oriole", "Wren", "Finch", "Nightingale", "GB", "MB", "OK",
   "A-", "A+", "Esc", "Clean", "Bold Punch", "Sticker", "Neon Yellow", "Soft Card", "Rainbow", "Broadcast", "Streaming",
   "Lower Bar", "Neon", "Black Box", "White Box",
