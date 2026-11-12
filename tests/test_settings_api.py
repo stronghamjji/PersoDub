@@ -8,6 +8,10 @@ app/api/settings.py): this is a single-user desktop app bound to 127.0.0.1, and 
 a saved key behind a set/unset boolean only made it look like an empty field.
 """
 
+import os
+import stat
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -607,6 +611,46 @@ def test_a_kit_env_that_cannot_be_replaced_is_written_in_place(tmp_path, monkeyp
     settings_env.write_share_usage(False)
     assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
     assert (kit / "kit.env.bak").read_text(encoding="utf-8") == BASE
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no owner-only file mode")
+@pytest.mark.parametrize("leftover", [False, True],
+                         ids=["nothing there before", "one a crashed run left readable by all"])
+def test_the_file_beside_kit_env_is_owner_only_from_the_moment_it_exists(tmp_path, monkeypatch, leftover):
+    kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
+    tmp = kit / "kit.env.tmp"
+    if leftover:
+        tmp.write_text("GEMINI_API_KEY=an-older-key\n" * 20, encoding="utf-8")
+        tmp.chmod(0o666)
+    seen = []
+
+    def mode_of(path):
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    def watched(path, mode="r", **kw):
+        f = open(path, mode, **kw)
+        if "w" in mode:
+            # Just opened and still empty: the keys are not in it yet.
+            seen.append(("opened", path, os.path.getsize(path), mode_of(path)))
+        return f
+    real_replace = settings_env.os.replace
+
+    def replace(src, dst):
+        # The new text is whole in it now, keys and all.
+        seen.append(("moved", src, mode_of(src)))
+        real_replace(src, dst)
+    monkeypatch.setattr(settings_env, "open", watched, raising=False)
+    monkeypatch.setattr(settings_env.os, "replace", replace)
+    # With no umask a file made without a mode of its own is readable by all,
+    # so what is seen is the writer's doing and not this computer's umask.
+    umask = os.umask(0)
+    try:
+        settings_env.write_share_usage(False)
+    finally:
+        os.umask(umask)
+    assert seen == [("opened", str(tmp), 0, 0o600), ("moved", str(tmp), 0o600)]
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + "GEMINI_API_KEY=gvalue\n" + ALL_OFF
     assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
 
 

@@ -205,9 +205,14 @@ def _write_env(to_set: Dict[str, str]) -> None:
         # write that stops part way leaves the file as it was.
         tmp = path + ".tmp"
         try:
-            with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f:
+            # Owner-only from the moment it exists, not once the keys are in it.
+            # One left by a run that was killed goes first: opening a file that
+            # is already there would keep whatever mode it had.
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(tmp)
+            with open(tmp, "w", encoding="utf-8", errors="surrogateescape",
+                      opener=lambda name, flags: os.open(name, flags, 0o600)) as f:
                 f.write(new_text)
-            os.chmod(tmp, 0o600)
             try:
                 os.replace(tmp, path)
             except OSError:
