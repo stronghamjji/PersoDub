@@ -9,6 +9,7 @@ TrustedHost middleware only rejects foreign Host headers (DNS rebinding) on
 top of that. A saved key takes effect on the next dub, not the next app start:
 everything that needs one reads it back through current_value() below.
 """
+import contextlib
 import os
 import shutil
 from typing import Dict, Iterator, Optional, Tuple
@@ -206,10 +207,8 @@ def _write_env(to_set: Dict[str, str]) -> None:
                     f.write(new_text)
         finally:
             # No copy of the keys is left lying beside them, whatever happened.
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tmp)
-            except OSError:
-                pass
         # Keys live here now -- keep both files owner-only.
         os.chmod(path, 0o600)
         os.chmod(path + ".bak", 0o600)
