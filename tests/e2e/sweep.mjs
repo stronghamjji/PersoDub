@@ -9,6 +9,7 @@
 //       [--fixtures <folder>]
 //
 // --fixtures is where the import area finds (or makes) its odd inputs; --video's folder when left out.
+// PERSODUB_KIT_DIR=<the app's kit>: Settings > Privacy's switch is turned only on a kit whose kit.env has the three preview lines (lib/kit.mjs), skipped otherwise.
 // Writes NN-<area>-<step>.png, report.md and report.json into <folder>; exits 1 when a step fails.
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
@@ -85,7 +86,7 @@ const skipped = results.filter((r) => r.result === "skip").length;
 const md = [
   "# PersoDub functional sweep", "",
   `- Run: ${clock(startedAt)} to ${clock()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}), ${Math.round((Date.now() - startedAt) / 1000)} s`,
-  `- App: ${app.origin}, page in ${app.page.lang},${app.page.width}x${app.page.height}`,
+  `- App: ${app.origin}, page in ${app.page.lang}, ${app.page.width}x${app.page.height}`,
   `- Result: ${failed ? "FAIL" : "PASS"}, ${passed} of ${results.length} steps passed (${failed} failed, ${skipped} skipped)`, "",
   "| # | Area | Step | Result | Seconds | Note |", "|---|---|---|---|---:|---|",
   ...results.map((r, i) => `| ${i + 1} | ${r.area} | ${r.shot ? `[${r.step}](${r.shot})` : r.step} | ${r.result} | ${r.seconds} | ${r.note.replace(/\|/g, "/")} |`),
