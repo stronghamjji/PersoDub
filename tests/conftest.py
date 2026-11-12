@@ -86,8 +86,13 @@ def no_codex_prefetch(monkeypatch):
 def no_kit_of_this_machine(monkeypatch):
     """A test that enters the lifespan must not settle the privacy lines in the
     kit.env of the computer it runs on (app/settings_env.py settle_share_usage).
-    A test about a kit points PERSODUB_KIT_DIR at one of its own."""
+    A test about a kit points PERSODUB_KIT_DIR at one of its own.
+
+    Nor does a test take its dub mode from the shell it was started in: with no
+    kit the stage defaults are read from the environment (app/setup.py), and
+    DUB_MODE=perso there sent every dub that chose nothing to Perso."""
     monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
+    monkeypatch.delenv("DUB_MODE", raising=False)
 
 
 @pytest.fixture(autouse=True)
