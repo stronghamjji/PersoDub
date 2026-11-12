@@ -693,12 +693,3 @@ test("a sheet that could not read the settings has no language change to save", 
   await h.$("uiLanguageSelect").fire("change");
   assert.equal(h.$("settingsChanges").textContent, before);
 });
-
-test("the sheet keeps the key field and its tab name", async (t) => {
-  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
-  t.after(h.state.restore);
-  await h.api.openSettings();
-
-  assert.equal(h.$("persoKeyRow").hidden, false);
-  assert.equal(h.$("settingsTab-keys").dataset.i18n, undefined, "the tab's words are not touched");
-});

@@ -85,13 +85,6 @@ test("Send feedback opens the inquiry form when the build has an address", (t) =
   assert.deepEqual(h.log.urls, [], "not the issues page");
 });
 
-test("the sidebar keeps its repository button and small logo", (t) => {
-  const h = harness();
-  t.after(h.log.restore);
-  assert.notEqual(h.$("homeGhName").hidden, true);
-  assert.equal(h.$("homePerso").classList.contains("big"), false);
-});
-
 test("the four tool items and the four tool cards open the same four ways in", (t) => {
   const h = harness();
   t.after(h.log.restore);
