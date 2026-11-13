@@ -269,6 +269,18 @@ def test_a_proofread_perso_gave_up_on_says_so(pc, http):
         pc.proofread(77)
 
 
+def test_a_price_perso_refuses_is_refused_in_persos_words(pc, http):
+    """An audio project is priced with no frame (app/perso_edit.py). Whether
+    Perso prices that was never seen: if it does not, its own sentence is what
+    the client raises, as for any other refusal."""
+    http.answers["get"] = _answer(400, {"code": "VT4001", "message": "width must be positive"})
+    with pytest.raises(httpx.HTTPStatusError, match="Perso said width must be positive / VT4001"):
+        pc.proofread_price(77, 5500, 0, 0, tts_model="ORIOLE")
+    [(_verb, _url, kw)] = http.calls
+    assert kw["params"] == {"mediaType": "video", "durationMs": 5500, "width": 0, "height": 0,
+                            "projectSeq": 77, "ttsModelCounts": "ORIOLE:1"}
+
+
 def test_the_finished_video_downloads_on_its_own(pc, http, tmp_path, monkeypatch):
     base = "https://api.perso.ai/video-translator/api/v1/projects/77/spaces/9"
     http.answers[("get", base + "/download-info")] = _answer(
@@ -312,6 +324,8 @@ class FakePerso:
         self.retranslate = True
         self.price = {"credits": 40, "export_count": None}
         self.priced = []
+        self.result_asked = []
+        self.proofread_asked = []
         self.reword = {}
         self.fail = {}
         self.voice_answer = lambda n: {"generateAudioFilePath": "/perso-storage/new%d.mp3" % n}
@@ -376,6 +390,7 @@ class FakePerso:
         return dict(self.price)
 
     def proofread(self, project_seq, space_seq=None, on_asked=None, **kw):
+        self.proofread_asked.append(kw)
         self._maybe_fail("proofread")
         self.spent.append(("proofread",))
         self.credits -= 20
@@ -398,8 +413,9 @@ class FakePerso:
     def download_target(self, project_seq, target, out_path, space_seq=None):
         return self.download_media(target, out_path)
 
-    def download_dub(self, project_seq, out_path, space_seq=None):
-        return self.download_media("video", out_path)
+    def download_dub(self, project_seq, out_path, space_seq=None, **kw):
+        self.result_asked.append(kw)
+        return self.download_media("audio" if kw.get("audio") else "video", out_path)
 
 
 @pytest.fixture
@@ -413,11 +429,14 @@ def perso(monkeypatch):
     return fake
 
 
-def _job(tmp_path, dub_mode="perso", status="done", fetched=True):
+def _job(tmp_path, dub_mode="perso", status="done", fetched=True, audio=False):
+    """`audio` is a project made of sound with no picture: its record says so
+    and its result is dubbed.wav (app/dub_launch.py)."""
     work = tmp_path / "dubbed"
     work.mkdir(exist_ok=True)
     (work / "input.mp4").write_bytes(b"vid")
-    (work / "dubbed.mp4").write_bytes(b"old video")
+    result = work / ("dubbed.wav" if audio else "dubbed.mp4")
+    result.write_bytes(b"old audio" if audio else b"old video")
     if fetched:
         cues = [{"start": s, "end": e, "text": t} for s, e, t in DUB]
         (work / "translated.srt").write_text(build_srt(cues), encoding="utf-8")
@@ -443,7 +462,8 @@ def _job(tmp_path, dub_mode="perso", status="done", fetched=True):
     state.job_store._update(
         jid, status=status, work_dir=str(work), project="dubbed",
         language_code="en", language="English",
-        result={"out_path": str(work / "dubbed.mp4")},
+        result={"out_path": str(result)},
+        **({"media": "audio"} if audio else {}),
         **({"dub_mode": "perso", "perso_project_seq": 77, "perso_space_seq": 9}
            if dub_mode == "perso" else {}))
     return jid, work
@@ -558,6 +578,21 @@ def test_a_price_perso_would_not_give_is_none_and_the_rest_still_answers(perso, 
     monkeypatch.setattr(perso_edit.media, "video_size", lambda p: (0, 0))
     assert client.get(f"/api/dub/jobs/{jid}/perso/edit?price=1").json()["proofread_price"] is None
     assert perso.priced == []
+
+
+def test_an_audio_projects_price_is_asked_with_no_frame_and_persos_answer_is_taken(perso, probed, tmp_path):
+    """There is no frame to price by: what is sent is what a video sends, its
+    size 0 by 0 (a cover picture's is not a frame's), and Perso answers it."""
+    jid, _ = _job(tmp_path, audio=True)
+    assert client.get(f"/api/dub/jobs/{jid}/perso/edit?price=1").json()["proofread_price"] == 40
+    assert perso.priced == [(77, 5500, 0, 0, 9, "ORIOLE")]
+    # A refusal is Perso's to give, and is taken as any other: no price,
+    # nothing made up in its place, and the rest still answers.
+    perso.fail["price"] = httpx.HTTPStatusError(
+        "Client error '400 Bad Request': Perso said width must be positive / VT4001",
+        request=httpx.Request("GET", "https://api.perso.ai/x"), response=_answer(400))
+    live = client.get(f"/api/dub/jobs/{jid}/perso/edit?price=1").json()
+    assert live["proofread_price"] is None and live["available"] is True
 
 
 def test_an_edited_line_is_voiced_by_perso_and_the_video_rebuilt(perso, tmp_path):
@@ -888,6 +923,33 @@ def test_proofread_replaces_the_script_the_voices_and_the_video(perso, tmp_path)
     assert (work / "dubbed.mp4").read_text(encoding="utf-8") == "video"
     assert not (work / "dubbed.mp4.perso-new").exists()
     assert "Perso credits used: 20" in "\n".join(state.job_store.get(jid)["logs"])
+
+
+def test_after_a_proofread_an_audio_projects_result_is_fetched_as_audio(perso, tmp_path):
+    jid, work = _job(tmp_path, audio=True)
+    assert _proofread(jid).status_code == 200
+    _wait_idle(jid)
+    # The audio target, said to the client, and the result under its own name.
+    assert perso.result_asked == [{"audio": True}]
+    assert (work / "dubbed.wav").read_text(encoding="utf-8") == "audio"
+    assert not (work / "dubbed.wav.perso-new").exists() and not (work / "dubbed.mp4").exists()
+    # Lip-sync is a thing of pictures: the proofread does not name it.
+    assert perso.proofread_asked == [{}]
+    # A video's is asked for as it always was, with nothing added.
+    (tmp_path / "b").mkdir()
+    video, _ = _job(tmp_path / "b")
+    assert _proofread(video).status_code == 200
+    _wait_idle(video)
+    assert perso.result_asked == [{"audio": True}, {}]
+
+
+def test_an_audio_result_that_does_not_come_leaves_the_one_there(perso, tmp_path):
+    jid, work = _job(tmp_path, audio=True)
+    perso.fail["download"] = httpx.ConnectError("dropped")
+    assert _proofread(jid).status_code == 200
+    _wait_idle(jid)
+    assert (work / "dubbed.wav").read_bytes() == b"old audio"
+    assert not (work / "dubbed.wav.perso-new").exists()
 
 
 def test_proofread_is_refused_while_words_wait_for_their_voice(perso, tmp_path):

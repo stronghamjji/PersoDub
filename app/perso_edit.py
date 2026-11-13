@@ -220,12 +220,18 @@ def proofread_price(pc, job: dict, work_dir: str, model) -> Optional[float]:
     """Credits a proofread of this job would take, or None when that is not
     known. Never raises: the price is a courtesy beside the button, and the
     button works without it. Perso prices by the video's length and size,
-    read off the copy in the job's folder."""
+    read off the copy in the job's folder.
+
+    An audio project has no frame, and a cover picture's size is not one, so
+    its size goes as 0 by 0 in the same request a video sends. Whether Perso
+    prices that was not seen live: a refusal ends as any other does here,
+    with no price."""
     try:
         seq, space = project_of(job)
         video = os.path.join(work_dir, "input.mp4")
-        width, height = media.video_size(video)
-        if not (width and height):
+        audio = job.get("media") == "audio"
+        width, height = (0, 0) if audio else media.video_size(video)
+        if not (width and height) and not audio:
             return None
         got = pc.proofread_price(seq, int(media.video_duration(video) * 1000),
                                  width, height, space, tts_model=model)
@@ -471,7 +477,10 @@ def check_fit(pc, job: dict, work_dir: str, line: int, text: str) -> dict:
 def fetch_project(pc, job: dict, work_dir: str, out_path: str, log, to_wav=None) -> dict:
     """Bring Perso's whole version home: the script, every line's voice and
     the finished video. Free -- downloads only. What was written here since
-    is set aside, not mixed in: the words on screen become Perso's."""
+    is set aside, not mixed in: the words on screen become Perso's.
+
+    An audio project has no video on Perso: its result is asked for as
+    audio, and comes back as the WAV the job keeps (PersoClient.download_dub)."""
     seq, space = project_of(job)
     summary = perso_materialize.materialize(
         pc, seq, work_dir, job.get("language") or "English",
@@ -479,7 +488,8 @@ def fetch_project(pc, job: dict, work_dir: str, out_path: str, log, to_wav=None)
     log("Downloading the finished video…")
     new = out_path + ".perso-new"
     try:
-        pc.download_dub(seq, new, space)
+        # Only said when it is true, so a video's call is the one it always was.
+        pc.download_dub(seq, new, space, **({"audio": True} if job.get("media") == "audio" else {}))
         os.replace(new, out_path)
     finally:
         with contextlib.suppress(OSError):

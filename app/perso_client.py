@@ -8,6 +8,7 @@ constructor if missing). The workspace id resolves from the key itself when
 PERSO_SPACE_SEQ is unset -- see _resolve_space_seq. The key value must never
 be exposed in code or logs.
 """
+import contextlib
 import logging
 import os
 import re
@@ -18,7 +19,7 @@ from typing import List, Optional
 
 import httpx
 
-from app import netlog
+from app import media, netlog, perso_materialize
 
 logger = logging.getLogger("persodub.perso_client")
 
@@ -614,6 +615,20 @@ def note_credits(ws, pc, log, what: str) -> None:
         logger.debug("No credits line after %s (%s)", what, type(e).__name__)
 
 
+def _find_download_link(o) -> Optional[str]:
+    """The first *DownloadLink in a download answer. The link's key varies
+    per target, so the answer is scanned -- the official plugin's own
+    fallback (api_adapter.mjs findDownloadLink)."""
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if isinstance(v, str) and k.endswith("DownloadLink") and v:
+                return v
+            hit = _find_download_link(v)
+            if hit:
+                return hit
+    return None
+
+
 class PersoClient:
     def __init__(
         self,
@@ -698,6 +713,15 @@ class PersoClient:
                          self.space_seq, type(e).__name__)
         return {"seq": self.space_seq, "name": name, "credits": credits}
 
+    @staticmethod
+    def _is_audio(path: str) -> bool:
+        """Whether the file is sound with no picture (app/media.py media_kind).
+        Perso registers such a file at an address of its own and makes a
+        project of it that is not a video: the official plugin's upload/audio
+        and isVideoProject false (api_adapter.mjs), not yet seen live. Asked
+        of the file and not of its name, which for a job is always input.mp4."""
+        return media.media_kind(path) == "audio"
+
     def _upload_media(self, video_path: str, space: int) -> int:
         """Upload steps (1)-(3), shared by transcribe() and separate():
         issue a SAS token, PUT the file to Azure Blob, register it -> mediaSeq.
@@ -707,6 +731,13 @@ class PersoClient:
         if cached is not None:
             return cached
         file_name = os.path.basename(video_path)
+        audio = self._is_audio(video_path)
+        fmt = media.audio_format(video_path) if audio else None
+        if fmt:
+            # The plugin picks the audio address by the name's ending, so the
+            # name is what tells Perso the format: input.wav, not input.mp4.
+            # Sound in any other container keeps the name it came with.
+            file_name = "%s.%s" % (os.path.splitext(file_name)[0], fmt)
 
         # (1) Issue SAS token
         r = httpx.get(
@@ -742,7 +773,7 @@ class PersoClient:
         # (3) Register the uploaded file -> mediaSeq
         file_url = blob_sas_url.split("?")[0]
         r = httpx.put(
-            f"{self.base_url}/file/api/upload/video",
+            f"{self.base_url}/file/api/upload/{'audio' if audio else 'video'}",
             json={"spaceSeq": space, "fileUrl": file_url, "fileName": file_name},
             headers=self._headers, timeout=120,
         )
@@ -770,7 +801,8 @@ class PersoClient:
 
         r = httpx.post(
             f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/audio-separation",
-            json={"mediaSeq": media_seq, "isVideoProject": True, **({"title": title} if title else {})},
+            json={"mediaSeq": media_seq, "isVideoProject": not self._is_audio(video_path),
+                  **({"title": title} if title else {})},
             headers=self._headers, timeout=120,
         )
         _raise_for_status(r)
@@ -817,6 +849,11 @@ class PersoClient:
         Request contract mirrors the official plugin's api_adapter.mjs
         requestTranslation/download exactly (verified 2026-08-31).
 
+        A file that is sound with no picture (_is_audio) goes the plugin's
+        audio way, which was not verified: registered as audio, a project
+        that is not a video, and the dubbing brought back as a WAV
+        (_download_dubbed_audio). Lip-sync is never asked for here.
+
         `title` names the project on Perso's workspace, as the plugin's
         requestTranslation does; without one Perso names it after the
         uploaded file, which here is always input.mp4 (sheet feedback 4,
@@ -836,6 +873,7 @@ class PersoClient:
                         bytes=os.path.getsize(video_path) if os.path.isfile(video_path) else None):
             log("   Uploading the video to Perso…")
             media_seq = self._upload_media(video_path, space)
+        audio = self._is_audio(video_path)
         with timed_step(log, "2/3", "perso-dubbing", target=target_code, model=tts_model, speakers=num_speakers):
             log("   Perso is dubbing… this takes a few minutes.")
 
@@ -843,7 +881,7 @@ class PersoClient:
                 f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/translate",
                 json={
                     "mediaSeq": media_seq,
-                    "isVideoProject": True,
+                    "isVideoProject": not audio,
                     # "auto" is the server's own detect-the-source value.
                     "sourceLanguageCode": source_code or "auto",
                     # languageTag tells Perso's regional variants apart (en-GB,
@@ -868,11 +906,15 @@ class PersoClient:
             self._wait_completed(project_seq, space, what="Perso dubbing")
         with timed_step(log, "3/3", "download", project=project_seq):
             log("   Downloading the finished video…")
-            return self.download_dub(project_seq, out_path, space)
+            return self.download_dub(project_seq, out_path, space, audio=audio)
 
     def download_dub(self, project_seq: int, out_path: str,
-                     space_seq: Optional[int] = None) -> str:
-        """Save a finished project's dubbed video to out_path. Free: a download."""
+                     space_seq: Optional[int] = None, audio: bool = False) -> str:
+        """Save a finished project's dubbed video to out_path. Free: a download.
+
+        `audio` is for a project made of sound with no picture: there is no
+        video of it, so its dubbing is fetched as sound and saved as a WAV
+        (_download_dubbed_audio)."""
         space = int(space_seq) if space_seq is not None else self.space_seq
         # The gate the plugin checks before asking for a link: a completed
         # project whose video is not served yet must fail loudly, not save
@@ -880,6 +922,8 @@ class PersoClient:
         project = f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}"
         r = self._read("perso download info", f"{project}/download-info", timeout=60)
         info = (r.json() or {}).get("result") or {}
+        if audio:
+            return self._download_dubbed_audio(project, info, out_path)
         if info.get("hasTranslatedVideo") is False:
             raise RuntimeError("Perso dubbing finished but the video is not ready to download")
 
@@ -890,6 +934,41 @@ class PersoClient:
         # A storage link, fetched like every other one: identity only, no API
         # key, and asked for again when the connection drops.
         return self.download_media(link, out_path, what="perso dubbing")
+
+    def _download_dubbed_audio(self, project: str, info: dict, out_path: str) -> str:
+        """An audio project's dubbing, the new voices over the background,
+        saved to out_path as a WAV. The target, the two flags and the link's
+        key are the official plugin's (api_adapter.mjs download, kind audio);
+        none of them had been seen live when this was written.
+
+        What Perso serves is made a WAV here unless it is one already. The
+        result that is there stays whole until the new one is: after edits
+        this fetches over a dubbing the user already has."""
+        # Not ready only when both flags say so, as the plugin reads them.
+        if info.get("hasTranslatedVoice") is False and info.get("hasTranslateAudio") is False:
+            raise RuntimeError("Perso dubbing finished but the audio is not ready to download")
+        r = self._read("perso download link", f"{project}/download",
+                       params={"target": "voiceWithBackgroundAudio"}, timeout=120)
+        result = (r.json() or {}).get("result") or {}
+        link = ((result.get("audioFile") or {}).get("voiceWithBackgroundAudioDownloadLink")
+                or _find_download_link(result))
+        if not link:
+            raise RuntimeError("Perso served no download link for the dubbed audio")
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        # The second name ends in .wav because ffmpeg goes by the ending.
+        src, new = out_path + ".perso-src", out_path + ".perso-new.wav"
+        try:
+            self.download_media(link, src, what="perso dubbing")
+            if media.audio_format(src) == "wav":
+                os.replace(src, out_path)
+            else:
+                perso_materialize._ffmpeg_to_wav(src, new)
+                os.replace(new, out_path)
+        finally:
+            for leftover in (src, new):
+                with contextlib.suppress(OSError):
+                    os.remove(leftover)
+        return out_path
 
     def get_project_script(self, project_seq: int, space_seq: Optional[int] = None) -> dict:
         """A dubbing project's script: {"sentences": [...], "speakers": [...]}.
@@ -1162,7 +1241,7 @@ class PersoClient:
         """Download one of a project's named artifacts (e.g. backgroundAudio).
 
         The link's key varies per target, so the response is scanned for any
-        *DownloadLink value -- the official plugin's own fallback.
+        *DownloadLink value (_find_download_link).
         """
         space = int(space_seq) if space_seq is not None else self.space_seq
         r = httpx.get(
@@ -1170,19 +1249,7 @@ class PersoClient:
             params={"target": target}, headers=self._headers, timeout=120,
         )
         _raise_for_status(r)
-        body = (r.json() or {}).get("result") or {}
-
-        def find_link(o):
-            if isinstance(o, dict):
-                for k, v in o.items():
-                    if isinstance(v, str) and k.endswith("DownloadLink") and v:
-                        return v
-                    hit = find_link(v)
-                    if hit:
-                        return hit
-            return None
-
-        link = find_link(body)
+        link = _find_download_link((r.json() or {}).get("result") or {})
         if not link:
             raise RuntimeError(f"Perso served no download link for {target}")
         return self.download_media(link, out_path, what=f"perso {target}")
@@ -1202,7 +1269,8 @@ class PersoClient:
         # (4) Create the STT project -> projectSeq
         r = httpx.post(
             f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/stt",
-            json={"mediaSeq": media_seq, "isVideoProject": True, **({"title": title} if title else {})},
+            json={"mediaSeq": media_seq, "isVideoProject": not self._is_audio(video_path),
+                  **({"title": title} if title else {})},
             headers=self._headers, timeout=120,
         )
         _raise_for_status(r)
