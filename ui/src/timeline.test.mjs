@@ -1518,7 +1518,10 @@ const written = {};
 function pinned(name, h) {
   const tools = Object.fromEntries(["tlUndo", "tlRedo", "tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]
     .map((id) => [id, [h.$(id).disabled, h.$(id).dataset.tip ?? null]]));
-  const seen = { box: h.box.innerHTML, track: h.$("timelineTrack").innerHTML,
+  // The shortcut key's name is the computer's (Cmd or Ctrl): pinned as "Mod",
+  // so the file reads the same wherever the tests run.
+  const anyKey = (html) => html.replaceAll(`${modKey()}+`, "Mod+");
+  const seen = { box: anyKey(h.box.innerHTML), track: anyKey(h.$("timelineTrack").innerHTML),
                  head: h.$("timelinePlayhead").style.left ?? null, clock: h.$("timelineClock").textContent, tools };
   if (process.env.WRITE_PINS) { written[name] = seen; return; }
   assert.deepEqual(seen, PINS[name], name);
