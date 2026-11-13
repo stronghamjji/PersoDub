@@ -56,6 +56,19 @@ def describe_start_failure(what: str, exc: BaseException, timeout=None) -> str:
 # to check a video that was never the problem.
 _OOM_EXIT_CODES = (-9, 137, -1073741801)
 
+# SIGTERM (-15) is what macOS sends every process when the computer shuts
+# down or the user logs out, a few seconds before the app's own quit runs: the
+# helper died first, the job was saved as a failure "said nothing", and the
+# next launch reported it as a crash (issue #237). Nothing in the backend
+# sends a helper SIGTERM, so it means the app or the computer was closing.
+_QUIT_EXIT_CODES = (-15,)
+_QUIT_WORDS = "was stopped because the app or the computer was closing"
+
+
+def stopped_by_quit(detail: str) -> bool:
+    """Whether a failure's own words say a helper was stopped by a quit."""
+    return _QUIT_WORDS in str(detail or "")
+
 
 def describe_exit_failure(what: str, result) -> str:
     """The process ran and failed. Its own last words, wherever it left them.
@@ -66,6 +79,8 @@ def describe_exit_failure(what: str, result) -> str:
     """
     if result.returncode in _OOM_EXIT_CODES:
         return "%s was killed by the operating system, out of memory" % what
+    if result.returncode in _QUIT_EXIT_CODES:
+        return "%s %s (exit code %s)" % (what, _QUIT_WORDS, result.returncode)
     tail = (result.stderr or "").strip()[-400:]
     if not tail:
         tail = (result.stdout or "").strip()[-400:]
