@@ -166,6 +166,7 @@
   "The translation runtime is not running. Quit and reopen {app}.": "The translation runtime is not running. Quit and reopen {app}.",
   "The translation runtime is still starting. Try again in a minute.": "The translation runtime is still starting. Try again in a minute.",
   "The trim must start at 0 seconds or later and keep at least half a second of video.": "The trim must start at 0 seconds or later and keep at least half a second of video.",
+  "The video is still in use. Try again in a moment.": "The video is still in use. Try again in a moment.",
   "The voice engine is busy. Wait for the running dubbing to finish, then try this line again.": "The voice engine is busy. Wait for the running dubbing to finish, then try this line again.",
   "The voice engine is not running. Quit and reopen {app}.": "The voice engine is not running. Quit and reopen {app}.",
   "The voice engine is still starting. Try again in a minute.": "The voice engine is still starting. Try again in a minute.",

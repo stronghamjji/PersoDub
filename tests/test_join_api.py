@@ -33,6 +33,7 @@ AUDIO_ONLY = "Only for audio projects."
 NO_VIDEO = "Bring in a video first."
 BAD_RANGES = "The kept parts must be pairs of seconds, in order, each at least 0.1s and at least 0.5s in all."
 BAD_TEMPO = "The audio speed must be 0.5, 1, 1.5, 2 or 3."
+IN_USE = "The video is still in use. Try again in a moment."
 
 
 @pytest.fixture
@@ -154,19 +155,28 @@ def test_a_refused_file_leaves_the_video_already_in_as_it_was(lengths, monkeypat
     assert _files(work) == ["dubbed.wav", "join.json", "join.mp4"]
 
 
-def test_a_video_that_cannot_take_the_old_ones_place_changes_nothing(lengths, builds, monkeypatch):
-    # Windows refuses to replace a file the page is still playing.
+def test_a_video_held_for_a_moment_is_replaced_once_it_is_let_go(lengths, hold):
+    # Windows refuses to replace a file that is still open; the page lets go
+    # of the picture a moment after it is asked to.
+    jid, work = _job()
+    _bring(jid)
+    refused = hold("join.mp4", times=3)
+    r = _bring(jid, "other.mp4", b"OTHER")
+    assert r.status_code == 200 and r.json()["video"]["name"] == "other.mp4"
+    assert refused == ["replace"] * 3
+    assert open(os.path.join(work, "join.mp4"), "rb").read() == b"OTHER"
+    assert _files(work) == ["dubbed.wav", "join.json", "join.mp4"]
+
+
+def test_a_video_that_cannot_take_the_old_ones_place_changes_nothing(lengths, builds, hold):
     jid, work = _job()
     _bring(jid)
     before = _put(jid, video=[[0, 4]], tempo=2).json()
     _joined(jid)
-
-    def in_use(src, dst):
-        raise PermissionError("the file is in use")
-
-    with monkeypatch.context() as during, pytest.raises(PermissionError):
-        during.setattr(os, "replace", in_use)
-        _bring(jid, "other.mp4", b"OTHER")
+    refused = hold("join.mp4")
+    r = _bring(jid, "other.mp4", b"OTHER")
+    assert r.status_code == 409 and r.json()["detail"] == IN_USE
+    assert len(refused) == media.HOLD_TRIES + 1
     assert _state(jid) == before and _joined(jid).content == b"JOINED 1"
     assert open(os.path.join(work, "join.mp4"), "rb").read() == b"MOV-bytes"
     assert _files(work) == ["dubbed.wav", "join.json", "join.mp4", "joined.json", "joined.mp4"]
@@ -417,6 +427,28 @@ def test_a_build_that_fails_says_why_and_is_tried_again_next_time(lengths, build
     assert _joined(jid).content == b"JOINED 2" and builds[-1]["tempo"] == 2.0
 
 
+def test_a_built_file_still_being_saved_is_kept_and_the_build_is_tried_again_next_time(lengths, builds, monkeypatch):
+    # Windows refuses to replace joined.mp4 while a download still reads it
+    # (media.join_video waits, then gives up: tests/test_media.py).
+    jid, work = _job()
+    _bring(jid)
+    _joined(jid)
+    _put(jid, tempo=2)
+    fake = media.join_video
+
+    def held(*args, **kw):
+        raise PermissionError(13, "The process cannot access the file", os.path.join(work, "joined.mp4"))
+
+    monkeypatch.setattr(media, "join_video", held)
+    r = _joined(jid)
+    assert r.status_code == 409 and r.json()["detail"] == IN_USE
+    # The file built before is whole, and is not passed off as this one.
+    assert open(os.path.join(work, "joined.mp4"), "rb").read() == b"JOINED 1"
+    assert _files(work) == ["dubbed.wav", "join.json", "join.mp4", "joined.mp4"]
+    monkeypatch.setattr(media, "join_video", fake)
+    assert _joined(jid).content == b"JOINED 2" and builds[-1]["tempo"] == 2.0
+
+
 def test_a_full_disk_refuses_the_build_and_an_already_built_file_is_still_served(lengths, builds, monkeypatch):
     jid, _ = _job()
     _bring(jid)
@@ -441,6 +473,15 @@ def test_the_failure_is_said_in_korean_on_a_korean_computer(lengths, builds, mon
     assert _bring(jid).json()["detail"] == "오디오 프로젝트에서만 쓸 수 있어요."
 
 
+def test_a_video_still_in_use_is_said_in_korean_on_a_korean_computer(lengths, hold, monkeypatch):
+    from app import i18n
+    jid, _ = _job()
+    _bring(jid)
+    monkeypatch.setattr(i18n, "_language", "ko")
+    hold("join.mp4")
+    assert _bring(jid).json()["detail"] == "영상을 아직 쓰고 있어요. 잠시 뒤에 다시 해 봐요."
+
+
 # --- taking the video out -----------------------------------------------------
 
 def test_taking_the_video_out_removes_its_files_and_nothing_else(lengths, builds):
@@ -460,6 +501,36 @@ def test_taking_the_video_out_removes_its_files_and_nothing_else(lengths, builds
     assert client.delete(f"/api/dub/jobs/{jid}/join/video").json() == {"video": None}
     # And a video can come in again, whole.
     assert _bring(jid).json()["ranges"] == {"video": [[0.0, 12.0]], "audio": [[0.0, 10.0]]}
+
+
+def test_a_video_that_cannot_be_taken_out_yet_stays_in_with_everything_it_had(lengths, builds, hold):
+    # Windows refuses to delete a file the page is still playing. Its
+    # join.json must not go without it: the page would say no video is in
+    # while the file is there.
+    jid, work = _job()
+    _bring(jid)
+    before = _put(jid, video=[[0, 4]], tempo=2).json()
+    _joined(jid)
+    for name in ("join.mp4.filmstrip.jpg", "join.mp4.waveform.json"):
+        open(os.path.join(work, name), "wb").close()
+    files = _files(work)
+    refused = hold("join.mp4")
+    r = client.delete(f"/api/dub/jobs/{jid}/join/video")
+    assert r.status_code == 409 and r.json()["detail"] == IN_USE
+    assert refused == ["remove"] * (media.HOLD_TRIES + 1)
+    assert _files(work) == files and _state(jid) == before
+    assert _joined(jid).content == b"JOINED 1" and len(builds) == 1
+
+
+def test_a_video_held_for_a_moment_is_taken_out_once_it_is_let_go(lengths, builds, hold):
+    jid, work = _job()
+    _bring(jid)
+    _joined(jid)
+    refused = hold("join.mp4", times=3)
+    r = client.delete(f"/api/dub/jobs/{jid}/join/video")
+    assert r.status_code == 200 and r.json() == {"video": None}
+    assert refused == ["remove"] * 3
+    assert _files(work) == ["dubbed.wav"] and _state(jid) == {"video": None}
 
 
 # --- the real thing -----------------------------------------------------------
