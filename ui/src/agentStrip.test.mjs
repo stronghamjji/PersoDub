@@ -688,6 +688,41 @@ test("one call on its own is not counted at the user", async () => {
   } finally { h.log.restore(); }
 });
 
+// Between the message and the first thing back there is only the mascot with
+// its thought bubble. The word is in the page for a screen reader from the
+// start; it is drawn only once the turn has run long enough to need saying.
+test("while it thinks the mascot holds the dots in a bubble, and a slow turn says so", async () => {
+  const chat = heldStream();
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    await say(h, "Shorten line 3");
+    const drawn = h.$("assistantLog").children;
+    assert.deepEqual(drawn.map((c) => c.className), ["bubble me", "thinking"]);
+    const dots = drawn[1];
+    // Decoration, so no alt text: the span is what says it.
+    assert.match(dots.innerHTML, /^<img src="\/mascot\.png" alt="">/);
+    assert.match(dots.innerHTML, /<div class="think-bubble"><i><\/i><i><\/i><i><\/i><\/div>$/);
+    const [label] = dots.children;
+    assert.equal(label.tag, "span");
+    assert.equal(label.textContent, "Thinking…");
+    assert.equal(dots.classList.contains("thinking-slow"), false);
+
+    // The 12s timer, run by hand. The fake finds a node by selector in its own
+    // table, so the span is entered there the way a chip's mark is.
+    dots.qs1.span = label;
+    await h.log.timers.pop()();
+    assert.equal(label.textContent, "Still working…");
+    assert.equal(dots.classList.contains("thinking-slow"), true);
+
+    // The turn ends and the row is taken off the page, as it always was.
+    chat.end();
+    await flush(40);
+    assert.equal(dots.removed, true);
+    assert.ok(!h.$("assistantLog").children.includes(dots));
+  } finally { h.log.restore(); }
+});
+
 test("the numbers come out sorted, and a line rewritten twice is named once", async () => {
   // 12 after 2 and 3, not between them: they are numbers, not words.
   const chat = stream([EDIT(3), LANDED, EDIT(12), LANDED, EDIT(3), LANDED,

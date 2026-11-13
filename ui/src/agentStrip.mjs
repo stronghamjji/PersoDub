@@ -941,7 +941,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   function thinking(label) {
     const d = document.createElement("div");
     d.className = "thinking";
-    d.innerHTML = "<i></i><i></i><i></i>";
+    // The mascot is decoration, so its alt is empty: the span below is what a
+    // screen reader is given, and it is not drawn until the turn runs slow.
+    d.innerHTML = '<img src="/mascot.png" alt="">'
+      + '<div class="think-bubble"><i></i><i></i><i></i></div>';
     const s = document.createElement("span");
     s.textContent = label;
     d.appendChild(s);
@@ -1042,7 +1045,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     const clearDots = () => { if (dots) { dots.remove(); dots = null; } };
     // A slow turn should say so rather than look stuck.
     const slow = setTimeout(() => {
-      if (dots) dots.querySelector("span").textContent = t("Still working…");
+      if (!dots) return;
+      dots.querySelector("span").textContent = t("Still working…");
+      // From here the words are drawn beside the bubble, not only read out.
+      dots.classList.add("thinking-slow");
     }, 12000);
 
     turnAbort = new AbortController();
