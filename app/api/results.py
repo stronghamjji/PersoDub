@@ -31,7 +31,7 @@ from pydantic import BaseModel
 
 from app import engines_status, media, perso_client, state
 from app import ratio as ratio_lib
-from app.api._shared import free_path, ratio_errors_as_http, work_dir_of
+from app.api._shared import free_path, ratio_errors_as_http, require_video, work_dir_of
 from app.i18n import t
 from app.jobs import JobKind, JobStatus, kind_of
 from app.perso_client import (
@@ -251,12 +251,14 @@ def subtitles_burn(body: SubtitleBurnRequest):
     The srt defaults to the video's own name next to it -- exactly where
     /api/subtitles/extract leaves one. Rendering text onto frames forces a
     re-encode (same x264 settings as the clip route); the audio is untouched
-    and copied through.
+    and copied through. An audio file (a dubbing takes those) has no picture
+    to lay them on and is refused with 422.
     """
     preset = _norm_preset(body.preset)
     path = os.path.expanduser(body.video_path)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail=t("No such video: {path}", path=body.video_path))
+    require_video(path)
     base, ext = os.path.splitext(path)
     srt = os.path.expanduser(body.srt_path) if body.srt_path else base + ".srt"
     if not os.path.isfile(srt):

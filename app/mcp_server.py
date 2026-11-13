@@ -702,7 +702,11 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
               translator: str = "", confirm: bool = False,
               stt: str = "", separation: str = "", voice: str = "",
               perso_model: str = "") -> dict:
-    """Put ONE video into PersoDub's dubbing queue.
+    """Put ONE video or audio file into PersoDub's dubbing queue.
+
+    video_path is the file: a video, or audio in WAV, FLAC, MP3 or M4A. An
+    audio file is dubbed the same way in both modes and comes back as dubbed
+    audio, with no video; anything else is refused with a sentence.
 
     target_language (and optional source_language, else auto-detected) are
     codes: en ko zh fr de it ja pt ru es. A local dub spoken by the omnivoice
@@ -1039,26 +1043,32 @@ def download_model(model_id: str) -> dict:
 
 @mcp.tool()
 def list_videos(folder: str) -> dict:
-    """List the video files in ONE folder on this computer, newest first.
+    """List the video and audio files in ONE folder on this computer, newest
+    first.
 
     folder is a path the user names (e.g. "~/Downloads"). Only video files
-    are listed (.mp4 .mov .mkv .webm .avi), nothing is opened or changed, and
-    subfolders are not entered. Each entry carries name, path (hand this to
-    the other tools), size_mb and modified. This plus the user's word is how
-    "the second one" or "the newest one" becomes a real file path.
+    (.mp4 .mov .mkv .webm .avi) and the audio files a dubbing takes (WAV,
+    FLAC, MP3, M4A) are listed, nothing is opened or changed, and subfolders
+    are not entered. Each entry carries name, path (hand this to the other
+    tools), size_mb and modified. This plus the user's word is how "the
+    second one" or "the newest one" becomes a real file path. An audio file
+    can be dubbed (queue_dub); the tools that work on a picture (cut_clip,
+    erase_subtitles, burn_subtitles) refuse it.
 
-    The videos PersoDub is holding are listed first, marked held=true: a link
+    The files PersoDub is holding are listed first, marked held=true: a link
     the user fetched on the New project screen is a real file on this computer,
     sitting where they would never think to look for it.
     """
     root = os.path.expanduser(folder)
     if not os.path.isdir(root):
         raise Refusal("No such folder: %s" % folder)
-    exts = (".mp4", ".mov", ".mkv", ".webm", ".avi")
+    # The audio a dubbing takes is the backend's own list, so a format added
+    # there is listed here too.
+    exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", *("." + fmt for fmt in media.AUDIO_CODECS))
     videos = []
     for entry in os.scandir(root):
         # "._x" is macOS metadata litter, "." anything is hidden -- neither is
-        # a video the user means.
+        # a file the user means.
         if not entry.is_file() or entry.name.startswith("."):
             continue
         if not entry.name.lower().endswith(exts):

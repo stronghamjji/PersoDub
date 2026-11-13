@@ -111,8 +111,9 @@ def same_media(job: dict) -> dict:
 
 def require_video(path: str) -> None:
     """Refuse a file that has no picture. For the tools that work on one:
-    Erase subtitles, Captions and cutting a clip, which a dubbing's audio
-    files must not reach. The caller clears whatever it copied first."""
+    Erase subtitles, Captions, laying subtitles on a file and cutting a clip,
+    which a dubbing's audio files must not reach. The caller clears whatever
+    it copied first."""
     if media.media_kind(path) != "video":
         raise HTTPException(422, t("This tool takes video files only."))
 

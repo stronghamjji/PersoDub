@@ -243,7 +243,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
 
   // What the top bar's Export hands back before a dub: the kept parts as one
   // video, in the canvas of `ratio` when the Ratio button is on one, or their
-  // sound alone ({audio: "mp3" | "wav"}). Export is lit once there is a video
+  // sound alone ({audio: "mp3" | "wav" | "flac" | "m4a"}). Export is lit once there is a video
   // on the timeline. Resolves to the file written.
   const canExport = () => { const d = getDraft(); return !!d && !!d.downloadId; };
   async function saveDraft({ audio = "", ratio = null } = {}) {

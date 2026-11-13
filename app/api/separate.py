@@ -11,7 +11,8 @@ stamped on the record.
 
 The two files are handed out by the routes a dubbing's stems already use
 (app/api/results.py: /api/dub/result/{jid}/stems and /stem/{which}), so
-playing them and exporting them as mp3 or wav is one code path for both.
+playing them and exporting them as MP3, WAV, FLAC or M4A is one code path
+for both.
 
 On this computer the separation needs the engine pack; a start without it
 answers 409 with the same payload a dubbing's start does, and the screen

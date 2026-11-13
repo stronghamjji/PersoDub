@@ -403,8 +403,8 @@ export async function saveDownloadClip(id, trim, { baseUrl = "", ratio = null } 
  * POST /api/downloads/{id}/save -- what the Export dialog saves of a draft:
  * the timeline's kept parts (`ranges`, [[start, end], ...], or null for the
  * whole video) joined into one video, in the canvas of `ratio` when one is
- * picked, or their sound alone when `audio` is "mp3" or "wav". Returns
- * {path, seconds}.
+ * picked, or their sound alone when `audio` is "mp3", "wav", "flac" or "m4a".
+ * Returns {path, seconds}.
  */
 export async function saveDownloadParts(id, { ranges = null, audio = "", ratio = null } = {}, { baseUrl = "" } = {}) {
   const body = {};
@@ -485,7 +485,7 @@ export function eraseVideoUrl(jid, which = "erased", { baseUrl = "" } = {}) {
 
 /** POST /api/erase/{jid}/save -- write the cleaned video into Downloads
     (inside the canvas of `ratio` when one is picked), or its sound alone when
-    `audio` is "mp3" or "wav". */
+    `audio` is "mp3", "wav", "flac" or "m4a". */
 export async function saveErased(jid, { baseUrl = "", audio = "", ratio = null } = {}) {
   const body = {};
   if (audio) body.audio = audio;

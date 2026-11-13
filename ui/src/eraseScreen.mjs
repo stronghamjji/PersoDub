@@ -964,7 +964,7 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
   /**
    * What the Export dialog saves while this screen is up: the erased video,
    * in the canvas of `ratio` when one is picked, or its sound alone
-   * ({audio: "mp3" | "wav"}), into the user's Downloads
+   * ({audio: "mp3" | "wav" | "flac" | "m4a"}), into the user's Downloads
    * folder. Says where on this screen's own line too, and resolves to the
    * file written.
    */
