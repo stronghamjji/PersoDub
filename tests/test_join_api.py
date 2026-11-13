@@ -272,10 +272,11 @@ def test_a_save_that_changes_nothing_writes_nothing(lengths):
     _bring(jid)
     saved = _put(jid, video=[[0, 4]], tempo=2).json()
     path = os.path.join(work, "join.json")
-    os.utime(path, ns=(1, 1))
+    # A whole second: Windows keeps a file's time in steps of 100 ns.
+    os.utime(path, ns=(10**9, 10**9))
     assert _put(jid, video=[[0, 4]], tempo=2).json() == saved
     assert _put(jid).json() == saved
-    assert os.stat(path).st_mtime_ns == 1
+    assert os.stat(path).st_mtime_ns == 10**9
 
 
 @pytest.mark.parametrize("ranges", [
