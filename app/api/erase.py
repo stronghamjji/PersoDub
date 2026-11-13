@@ -346,7 +346,7 @@ def erase_save(jid: str, body: SaveRequest):
     if not os.path.exists(out):
         raise HTTPException(404, t("This video is not erased yet."))
     if body.audio is not None and body.audio not in media.AUDIO_CODECS:
-        raise HTTPException(422, t("Audio is saved as mp3 or wav."))
+        raise HTTPException(422, t("Audio is saved as MP3, WAV, FLAC or M4A."))
     if body.audio and not media.has_audio(out):
         raise HTTPException(422, t("This video has no sound."))
     if not body.audio:

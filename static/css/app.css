@@ -2849,7 +2849,7 @@
      export-ratio 1): the Captions tab's segment, lit in the primary colour. */
   .export-seg { margin-left: auto; display: inline-flex; background: var(--secondary);
     border-radius: var(--radius-sm); padding: 2px; }
-  .export-seg [data-fmt] { border-radius: 5px; padding: 3px 8px; font-size: var(--font-label);
+  .export-seg [data-fmt] { border-radius: 5px; padding: 3px 6px; font-size: var(--font-label);
     color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
   .export-seg [data-fmt].on { background: var(--primary); color: var(--primary-foreground); }
   .export-list a .export-seg + .export-state { margin-left: 0; }

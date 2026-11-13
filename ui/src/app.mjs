@@ -2117,9 +2117,10 @@ async function exportContext() {
   // Any other erase screen hands back only the draft it shows: an empty one
   // saved whatever draft was still held (Windows test E9).
   if (document.body.dataset.screen === "erase" && !eraseScreen.exportsDraft()) return null;
-  // A draft with a video on the timeline, before any dub.
+  // A draft with a video on the timeline, before any dub. An audio draft
+  // says so (`media`), and the dialog offers its sound alone.
   if (!state.jobId && draftSetup.canExport()) {
-    return { kind: "draft", ratio, where: t("Saved in Downloads"), save: (what) => draftSetup.saveDraft(what) };
+    return { kind: "draft", media: getDraft().media, ratio, where: t("Saved in Downloads"), save: (what) => draftSetup.saveDraft(what) };
   }
   const job = state.job;
   if (!job) return null;
@@ -2153,6 +2154,8 @@ async function exportContext() {
   const { preset: subPreset, query: posQ } = subtitles.exportParams();
   return {
     kind: "dub", jobId: job.id, target, mark, hasSrt, hasScript, stems, project: job.project, fromLink: !!job.from_link, ratio,
+    // "audio" for an audio project, whose rows are its sounds and no video.
+    media: job.media,
     // The script's file name: the project as the screens show it, and both languages.
     title: shownName(job), source: job.source_lang,
     // The same URL the player is on, remake mark and all: without it a download

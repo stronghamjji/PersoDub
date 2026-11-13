@@ -221,7 +221,7 @@ def downloads_save(did: str, body: DownloadSaveRequest):
     if d.media == "audio" and not body.audio:
         raise HTTPException(status_code=409, detail=t("Only for projects with a video."))
     if body.audio is not None and body.audio not in media.AUDIO_CODECS:
-        raise HTTPException(status_code=422, detail=t("Audio is saved as mp3 or wav."))
+        raise HTTPException(status_code=422, detail=t("Audio is saved as MP3, WAV, FLAC or M4A."))
     one = body.start is not None or body.end is not None
     if one and body.ranges is not None:
         raise HTTPException(status_code=422, detail=t("Send a stretch or kept parts, not both."))

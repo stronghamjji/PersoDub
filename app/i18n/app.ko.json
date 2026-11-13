@@ -5,7 +5,7 @@
   "Add your Perso API key in Settings first.": "먼저 설정에서 Perso API 키를 넣어 주세요.",
   "Ask Google if it keeps happening.": "계속 이러면 Google에 문의해 주세요.",
   "Ask Perso if it keeps happening.": "계속 이러면 Perso에 문의해 주세요.",
-  "Audio is saved as mp3 or wav.": "오디오는 mp3나 wav로만 저장할 수 있어요.",
+  "Audio is saved as MP3, WAV, FLAC or M4A.": "오디오는 MP3, WAV, FLAC, M4A로 저장돼요.",
   "Audio separation, speech-to-text, voices": "오디오 분리·받아쓰기·목소리 만들기",
   "Cannot resume with translator: {translator}": "이 번역기로는 이어 할 수 없어요: {translator}",
   "Cannot translate with: {translator}": "이 번역기로는 번역할 수 없어요: {translator}",
