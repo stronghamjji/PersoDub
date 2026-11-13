@@ -701,3 +701,14 @@ test("a Perso dubbing's foot offers Recharge credits; dubbing on this computer d
     assert.equal($("draftRechargeLink").hidden, true);
   } finally { clearDraft(); }
 });
+
+// An audio project hands back no video (ui/src/mediaKind.mjs).
+test("Before dubbing says an audio file comes out as dubbed audio, subtitles and script files", () => {
+  clearDraft();
+  const { $ } = harness();
+  setDraft({ downloadId: "d1", name: "talk.wav", duration: 30, videoUrl: "/v", media: "audio" });
+  assert.equal($("draftResultWhat").textContent, "Dubbed audio, subtitles and script files");
+  setDraft({ downloadId: "d2", name: "a.mp4", duration: 30, videoUrl: "/v" });
+  assert.equal($("draftResultWhat").textContent, "Dubbed video, subtitles and audio files");
+  clearDraft();
+});

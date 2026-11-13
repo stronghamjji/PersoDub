@@ -180,14 +180,15 @@
               <span data-i18n class="home-banner-title">Create project</span>
               <span data-i18n class="home-banner-title home-banner-title-drop">Drop to start a new project</span>
             </div>
-            <div data-i18n class="home-banner-sub">Upload a video to dub it, erase or burn in subtitles, or save it from a link. Drop it here or click to choose</div>
+            <div data-i18n class="home-banner-sub">Drop a video or an audio file here, or click to choose</div>
+            <div data-i18n class="home-banner-formats">Video MP4 · MOV | Audio WAV · FLAC · MP3 · M4A</div>
             <!-- The link field: it is a selling point, not a second step, so it
                  sits in the banner itself now (user, 2026-09-30) rather than in
                  its own card below. stopPropagation on click/mousedown keeps it
                  from also opening the file picker the banner's own click does. -->
             <label class="link-field home-banner-linkin" id="homeBannerLink"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
               <input id="linkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" data-i18n-placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
-            <input type="file" id="videoInput" accept="video/*" multiple hidden>
+            <input type="file" id="videoInput" accept=".mp4,.mov,.wav,.flac,.mp3,.m4a" multiple hidden>
           </div>
 
           <!-- The row under the banner (the mockup's first screen): the Dub
@@ -207,7 +208,7 @@
             <button class="home-card home-card-btn" id="homeDubCard" type="button">
               <span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20"/><path d="M19.8 17.8a7.5 7.5 0 0 0 .003-10.603"/><path d="M17 15a3.5 3.5 0 0 0-.025-4.975"/></svg></span>
               <div data-i18n class="home-card-title">Dubbing</div>
-              <div data-i18n class="home-card-desc">Voice a video in another language</div>
+              <div data-i18n class="home-card-desc">Voice a video or an audio file in another language</div>
             </button>
             <button class="home-card home-card-btn" id="homeEraseCard" type="button">
               <span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></span>
@@ -668,7 +669,13 @@
                 <div class="video-wrap" id="videoWrap">
                   <!-- === ratio: the black canvas of the picked shape === -->
                   <div class="ratio-canvas" id="ratioCanvas" hidden></div>
+                  <!-- An audio project has no picture: in the middle of
+                       the box, the sound sign and the word, which the
+                       stylesheet shows while the body is "audio-project"
+                       (ui/src/app.mjs paintMediaKind). The running panel's
+                       box has the same. -->
                   <video id="doneVideo" playsinline></video>
+                  <div class="video-audio"><svg class="lu" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg><span data-i18n>Audio</span></div>
                   <!-- The subtitles, live on the player: what the burned file
                        will say and how big, always at the foot of the picture
                        (owner, 2026-10-23). Kept in the job's own
@@ -729,6 +736,7 @@
               <div class="video-body">
                 <div class="running-video" id="runStage">
                   <video id="runningVideo" playsinline></video>
+                  <div class="video-audio"><svg class="lu" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg><span data-i18n>Audio</span></div>
                 </div>
                 <!-- Which part of the video is being dubbed, when the job was
                      started with a trim. Empty, and invisible, otherwise. -->
@@ -1461,7 +1469,7 @@
      #videoInput on the home screen is a separate input, for the same reason
      two <input type=file> never share a value: picking the same file twice
      in a row must still fire "change". -->
-<input type="file" id="draftFileInput" accept="video/*" hidden>
+<input type="file" id="draftFileInput" accept=".mp4,.mov,.wav,.flac,.mp3,.m4a" hidden>
 
 <!-- The top bar's New project window (ui/src/newProjectWindow.mjs): the Home
      banner's three ways in, over the screen that is open. -->
@@ -1482,7 +1490,7 @@
     </div>
   </div>
 </div>
-<input type="file" id="newProjFileInput" accept="video/*" multiple hidden>
+<input type="file" id="newProjFileInput" accept=".mp4,.mov,.wav,.flac,.mp3,.m4a" multiple hidden>
 
 <!-- A dub now keeps its per-line voices so single lines can be redone, which
      means a job needs room. Refusing up front with a dialog beats failing three

@@ -1596,16 +1596,23 @@ test("Dubbing, Erase, Burn in subtitles and Save video with no video draw one em
   const html = readPage();
   const { emptyTabHtml, EMPTY_TABS } = await import("./importBlock.mjs");
   assert.deepEqual(EMPTY_TABS, {
-    dubbing: ["Dubbing", "Voice a video in another language."],
+    dubbing: ["Dubbing", "Voice a video or an audio file in another language."],
     erase: ["Erase subtitles", "Takes burned-in subtitles out."],
     // Burn in subtitles starting a project (owner, 2026-10-22, 2026-10-23).
     captions: ["Burn in subtitles", "Burns subtitles into a video."],
     // Save video saves a video from a link (owner, 2026-10-24).
     save: ["Save video", "Saves a video from a link."],
   });
+  // Dubbing takes audio too and its block says so; the tools that work on
+  // the picture ask for videos alone.
+  const DROP = /(<div class="import-sub">)([^<]*)</;
+  const drop = (tab) => DROP.exec(emptyTabHtml(tab, "z", "l"))[2];
+  assert.equal(drop("dubbing"), "Drop videos or audio here, or click to choose");
+  assert.equal(drop("erase"), "Drop videos here, or click to choose");
+  assert.equal(drop("captions"), "Drop videos here, or click to choose");
   // The same three pieces in the same order, whatever the tab.
   const shape = (tab) => emptyTabHtml(tab, "z", "l")
-    .replace(EMPTY_TABS[tab][0], "H").replace(EMPTY_TABS[tab][1], "S");
+    .replace(EMPTY_TABS[tab][0], "H").replace(EMPTY_TABS[tab][1], "S").replace(DROP, "$1D<");
   assert.equal(shape("erase"), shape("dubbing"));
   assert.equal(shape("captions"), shape("dubbing"));
   assert.match(shape("dubbing"), /^<div class="tab-empty-title">H<\/div><div class="tab-empty-sub">S<\/div><div class="import-block" id="z"/);
@@ -1715,11 +1722,14 @@ test("Home's cards and sidebar are Dubbing, Erase subtitles, Burn in subtitles a
   assert.match(cards, /id="homeCaptionsCard" type="button">\s*<span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"\/>[^]*?<div data-i18n class="home-card-title">Burn in subtitles<\/div>\s*<div data-i18n class="home-card-desc">Put a subtitle file on a video in the style you choose<\/div>/);
   assert.match(cards, /<div data-i18n class="home-card-desc">Saves a video from a link<\/div>/);
   assert.match(html, /<span data-i18n class="home-banner-title">Create project<\/span>/);
-  assert.match(html, /<div data-i18n class="home-banner-sub">Upload a video to dub it, erase or burn in subtitles, or save it from a link\. Drop it here or click to choose<\/div>/);
+  // The banner starts a dubbing, which takes audio too: it says so, and which files (2026-11-13).
+  assert.match(html, /<div data-i18n class="home-banner-sub">Drop a video or an audio file here, or click to choose<\/div>\s*<div data-i18n class="home-banner-formats">Video MP4 · MOV \| Audio WAV · FLAC · MP3 · M4A<\/div>/);
+  assert.match(cards, /<div data-i18n class="home-card-title">Dubbing<\/div>\s*<div data-i18n class="home-card-desc">Voice a video or an audio file in another language<\/div>/);
   assert.match(html, /onCaptions: \(\) => draftSetup\.openDraft\(null, \{ tab: "captions" \}\),/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.equal(ko["Upload a video to dub it, erase or burn in subtitles, or save it from a link. Drop it here or click to choose"],
-    "영상을 올리면 더빙 · 자막 지우기 · 자막 입히기 · 링크 저장을 할 수 있어요. 끌어 놓거나 눌러서 골라 주세요");
+  assert.equal(ko["Drop a video or an audio file here, or click to choose"], "영상이나 오디오를 끌어 놓거나 눌러서 골라요");
+  assert.equal(ko["Video MP4 · MOV | Audio WAV · FLAC · MP3 · M4A"], "영상 MP4 · MOV | 오디오 WAV · FLAC · MP3 · M4A");
+  assert.equal(ko["Voice a video or an audio file in another language"], "영상이나 오디오를 다른 언어로 더빙");
   assert.equal(ko["Burn in subtitles"], "자막 입히기");
   assert.equal(ko["Put a subtitle file on a video in the style you choose"], "영상과 자막 파일을 넣으면 원하는 스타일로 자막을 입혀요");
   assert.equal(ko["Saves a video from a link"], "링크로 올린 영상을 저장해요");
@@ -1917,4 +1927,87 @@ test("a project card's menu is drawn over the update banner", () => {
   const html = readPage();
   const z = (sel) => Number(new RegExp(sel.replace(".", "\\.") + " \\{[^}]*z-index: (\\d+)").exec(html)[1]);
   assert.ok(z(".proj-menu") > z(".update-banner"));
+});
+
+// ---- Audio projects ---------------------------------------------------------
+// A project made from a sound file has no picture (ui/src/mediaKind.mjs). The
+// layout stays as it is; what needs a picture is dimmed or left out.
+
+test("the ways into dubbing take the six kinds of file; Erase and Burn in subtitles take video alone", async () => {
+  const html = readPage();
+  const { fileKind } = await import("./mediaKind.mjs");
+  const accept = (id) => new RegExp(`<input type="file" id="${id}" accept="([^"]*)"`).exec(html)[1];
+  for (const id of ["videoInput", "draftFileInput", "newProjFileInput"]) {
+    assert.equal(accept(id), ".mp4,.mov,.wav,.flac,.mp3,.m4a", id);
+  }
+  // What the picker lists is what the page's own check takes.
+  assert.deepEqual(accept("videoInput").split(",").map((ext) => fileKind(`a${ext}`)),
+    ["video", "video", "audio", "audio", "audio", "audio"]);
+  for (const id of ["capVideoInput", "eraseInput"]) assert.equal(accept(id), "video/*", id);
+  // Each way in is checked by its own rule, under the one size limit.
+  assert.match(html, /function dubFileProblem\(file\) \{ return dubFormatProblem\(file\) \|\| tooBig\(file\); \}/);
+  assert.match(html, /function videoProblem\(file\) \{ return videoFormatProblem\(file\) \|\| tooBig\(file\); \}/);
+  assert.match(html, /const bad = dubFileProblem\(f\);/, "Home's banner");
+  assert.match(html, /checkFile: \(file\) => dubFileProblem\(file\),/, "the Dubbing tab's block, Replace and the timeline");
+  assert.match(html, /initNewProjectWindow\(\{\n  \$, checkFile: dubFileProblem,/);
+  assert.match(html, /initEraseScreenUi\(\{\n  \$, showScreen, setTopbar, checkFile: videoProblem,/);
+  // Burn in subtitles brings its video in as the draft, whose own check takes
+  // audio: it is turned away first, on that tab's line.
+  assert.match(html, /const bad = source\.file \? videoProblem\(source\.file\) : null;\n\s*if \(bad\) \{ draftImport\.say\(bad, true\); return Promise\.resolve\(\); \}\n\s*return draftImport\.importSource\(source\);/);
+});
+
+test("an audio project's video box is the sound sign and the word Audio, with no play sign over it", () => {
+  const html = readPage();
+  const badge = `<div class="video-audio">${lucide("volume-2", 22)}<span data-i18n>Audio</span></div>`;
+  // In the finished screen's box, right after the video and under the subtitles...
+  assert.ok(html.includes(`<video id="doneVideo" playsinline></video>\n                  ${badge}`));
+  assert.ok(html.indexOf('<video id="doneVideo"') < html.indexOf('id="subOverlay"'));
+  // ...and in the one a running or stopped dubbing shows.
+  assert.ok(html.includes(`<video id="runningVideo" playsinline></video>\n                  ${badge}`));
+  assert.equal(html.split('class="video-audio"').length - 1, 2, "the erase screen's video is always a video");
+  // Shown by the body's mark alone; a press goes through it to the player.
+  assert.match(html, /\.video-audio \{ display: none; position: absolute; left: 50%; top: 50%; transform: translate\(-50%, -50%\);[^}]*pointer-events: none;[^}]*\}/);
+  assert.match(html, /body\.audio-project \.video-audio \{ display: flex; \}/);
+  // The <video> has no picture to size it: it takes the box, which is where the subtitles are drawn.
+  assert.match(html, /body\.audio-project :is\(\.video-wrap, \.running-video\) video \{ width: 100%; height: 100%; \}/);
+  assert.match(html, /body\.audio-project \.video-bigplay \{ display: none; \}/);
+});
+
+test("an audio project locks Erase, Burn in subtitles and Save video, and dims full screen", () => {
+  const html = readPage();
+  const at = html.indexOf("function paintMediaKind() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  // What is open: the job, never the one before it still in hand, or the draft before a job.
+  assert.match(html, /function openProject\(\) \{\n  return state\.jobId \? \(state\.job && state\.job\.id === state\.jobId \? state\.job : null\) : getDraft\(\);\n\}/);
+  assert.match(body, /const audio = isAudio\(openProject\(\)\);/);
+  assert.match(body, /document\.body\.classList\.toggle\("audio-project", audio\);/);
+  // An empty erase screen opened from Home, an audio draft still held behind it, keeps its own tab.
+  assert.match(body, /const locked = document\.body\.dataset\.screen === "erase" \? \["captions", "save"\] : \["erase", "captions", "save"\];/);
+  assert.match(body, /leftTabs\.lock\(audio \? locked : \[\], t\("Only for projects with a video\."\)\);/);
+  assert.match(body, /for \(const id of \["fullscreenBtn", "runFs"\]\) \$\(id\)\.disabled = audio;/);
+  // Painted when the draft, the open job or the screen changes.
+  assert.match(html, /onDraftChange\(paintMediaKind\);/);
+  assert.match(html, /new MutationObserver\(paintMediaKind\)\.observe\(document\.body, \{ attributes: true, attributeFilter: \["data-screen"\] \}\);/);
+  assert.match(html, /if \(newlyOpen\) \{ draftSetup\.paint\(\); paintMediaKind\(\); \}/);
+  assert.match(html, /state\.job = null;\n  paintMediaKind\(\);/);
+  // The dim is the tabs' and the foot's own.
+  assert.match(html, /\.left-tab:disabled, \.left-tab\[aria-disabled="true"\], \.vtab:disabled \{ opacity: 0\.4; cursor: default; \}/);
+  assert.match(html, /\.video-fs:disabled \{ opacity: 0\.4; cursor: default; background: none; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Only for projects with a video."], "영상이 있는 프로젝트에서만 쓸 수 있어요");
+  assert.equal(ko["This tool takes video files only."], "이 도구는 영상 파일만 받아요.");
+  assert.equal(ko["Only MP4 or MOV video and WAV, FLAC, MP3 or M4A audio can be used."], "MP4, MOV 영상과 WAV, FLAC, MP3, M4A 오디오만 받아요.");
+  assert.equal(ko["Dubbed audio, subtitles and script files"], "더빙 오디오, 자막, 대본 파일로 나와요");
+  assert.equal(ko["Drop videos or audio here, or click to choose"], "영상이나 오디오를 여기에 끌어 놓거나 눌러서 골라요");
+});
+
+test("the open project's kind goes with it to the Ratio buttons, the timeline and the draft made from it", () => {
+  const html = readPage();
+  assert.match(html, /if \(state\.jobId\) return \{ kind: "job", id: state\.jobId, media: \(openProject\(\) \|\| \{\}\)\.media \};/);
+  assert.match(html, /return d \? \{ kind: "draft", id: d\.downloadId, ratio: d\.ratio, media: d\.media \} : null;/);
+  assert.match(html, /getMedia: \(\) => \(state\.job \? \{ kind: "job", id: state\.job\.id, name: jobLabel\(state\.job\), media: state\.job\.media \} : null\),/);
+  // A draft opened again from Home, and one made from the open job (Add language).
+  assert.match(html, /videoUrl: downloadVideoUrl\(downloadId\), ratio: kept\.ratio, media: kept\.media \}\);/);
+  assert.match(html, /const media = state\.job && state\.job\.id === from \? state\.job\.media : undefined;/);
+  assert.match(html, /return draftSetup\.openDraft\(source && \{ \.\.\.source, media \}, opts\)\.then\(/);
 });

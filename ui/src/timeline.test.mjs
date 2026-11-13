@@ -477,6 +477,42 @@ test("the video lane shows the file's name, then its film strip and waveform onc
   assert.equal(h.log.fetched.length, 2);
 });
 
+// An audio project (ui/src/mediaKind.mjs) has sound and no frames.
+test("an audio project's first lane is named Audio and shows the waveform alone, with no film strip asked for", async (t) => {
+  const h = harness({ media: { kind: "job", id: "j1", name: "talk.wav", media: "audio" } });
+  t.after(h.log.restore);
+  h.api.renderTimeline(LINES, 10);
+  const names = h.box.innerHTML;
+  assert.ok(names.includes('<div class="tl-name tl-name-video">'), "the same lane, in the same place");
+  assert.ok(names.includes("<span>Audio</span>") && !names.includes("<span>Video</span>"));
+  // The lanes under it are a dubbing's as ever.
+  assert.ok(names.includes("<span>Original</span>") && names.includes("<span>Translated</span>") && names.includes("<span>Captions</span>"));
+  assert.deepEqual(h.log.fetched, ["/api/media/job/j1/waveform"]);
+  await settle();
+  const track = h.$("timelineTrack").innerHTML;
+  assert.ok(track.includes('<div class="tl-vcap">talk.wav<b>00:10</b></div>'));
+  assert.ok(!track.includes("tl-film") && !track.includes("filmstrip"));
+  assert.ok(track.includes('<div class="tl-wave"><svg viewBox="0 0 250 100" preserveAspectRatio="none"'));
+  assert.ok(track.includes('class="tl-lane tl-lane-caps"'), "the subtitle lane stays");
+  assert.deepEqual(h.log.fetched, ["/api/media/job/j1/waveform"]);
+});
+
+test("an audio draft's lane is named Audio too, and its clips are waveform alone", async (t) => {
+  clearDraft();
+  const h = harness({ room: 850 });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.$("timeline").offsetWidth = 1200;   // on show
+  setDraft({ ...DRAFT, name: "talk.wav", media: "audio" });
+  h.api.showDraft();
+  assert.ok(h.box.innerHTML.includes("<span>Audio</span>") && !h.box.innerHTML.includes("<span>Video</span>"));
+  await settle();
+  assert.deepEqual(h.log.fetched, [`/api/media/download/${DRAFT.downloadId}/waveform`]);
+  const track = h.$("timelineTrack").innerHTML;
+  assert.ok(track.includes('class="tl-vclip tl-cut') && !track.includes("tl-film"));
+  assert.ok(track.includes('<div class="tl-wave"><svg'));
+});
+
 // -- the toolbar's own controls ---------------------------------------------
 
 test("zoom steps around the playhead, fits the whole video, and stops at the ends", (t) => {

@@ -20,6 +20,7 @@ import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, firstSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
 import { savedSettings, t } from "./i18n.mjs";
+import { isAudio } from "./mediaKind.mjs";
 import { gb } from "./modelsUi.mjs";
 
 function stripExt(name) {
@@ -154,8 +155,9 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
       ...(cloud ? persoCost(sent) : first ? [t("{size} GB the first time", { size: gb(first) })] : []),
       ...(cloud && freePlan ? [cut ? t("A free-plan workspace dubs the first minute only. When it is done, see it in your Perso workspace.")
         : t("A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.")] : [])].join(" · ");
-    $("draftResultWhat").textContent = cut
-      ? t("The first minute, dubbed, in your Perso workspace") : t("Dubbed video, subtitles and audio files");
+    // An audio file has no video to come out as.
+    $("draftResultWhat").textContent = cut ? t("The first minute, dubbed, in your Perso workspace")
+      : isAudio(d) ? t("Dubbed audio, subtitles and script files") : t("Dubbed video, subtitles and audio files");
     // The way to top up, whenever a Perso dubbing is what is priced.
     const recharge = $("draftRechargeLink");
     recharge.hidden = !cloud;

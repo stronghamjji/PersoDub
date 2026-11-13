@@ -53,6 +53,7 @@ import { lineVerdict } from "./scriptTable.mjs";
 import { numberSpeakers } from "./speakers.mjs";
 import { getDraft, setRanges, normalizeRanges, onDraftChange } from "./draft.mjs";
 import { t } from "./i18n.mjs";
+import { isAudio } from "./mediaKind.mjs";
 import {
   totalOf, keptToSource, sourceToKept, playableFrom,
   split, removeClip, removeLeft, removeRight, sameRanges, createHistory,
@@ -97,9 +98,11 @@ const SPEAKER_COLOURS = 6;
  * @param {() => any} deps.getVideo  the player, read late: the strip asks it
  *        where it is, seeks it, and plays a line in it
  * @param {() => string} deps.getClock  the clock as the player last painted it
- * @param {() => ({kind: string, id: string, name: string}|null)} [deps.getMedia]
+ * @param {() => ({kind: string, id: string, name: string, media?: string}|null)} [deps.getMedia]
  *        the finished job's own video, for the video lane's name, film strip
- *        and waveform (GET /api/media/{kind}/{id}/...)
+ *        and waveform (GET /api/media/{kind}/{id}/...). `media` is the job's
+ *        own mark: an audio project's lane is named Audio and has no film
+ *        strip (ui/src/mediaKind.mjs)
  * @param {() => object} deps.getSubStyle  the job's subtitle_style.json as the
  *        page holds it -- read late, because the page replaces the whole object
  *        when a job is opened
@@ -201,7 +204,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     if (mode === "draft") {
       if (jobClip()) return jobClip().media;
       const d = getDraft();
-      return d ? { kind: "download", id: d.downloadId, name: d.name } : null;
+      return d ? { kind: "download", id: d.downloadId, name: d.name, media: d.media } : null;
     }
     return getMedia();
   }
@@ -217,6 +220,8 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // they come. (Widening the boxes to fit a cap of 400 stretched every frame
   // sideways on a long video -- owner, 2026-10-14.)
   function filmHtml(media, a, b, w, h, x) {
+    // Sound alone has no frames: no strip is drawn, and none is asked for.
+    if (isAudio(media)) return "";
     const url = `/api/media/${media.kind}/${encodeURIComponent(media.id)}/filmstrip`;
     const strip = picture(url, (u) => loadImage(u).then((img) => ({ n: Math.max(1, Math.round(img.width / FRAME_W)) })));
     if (!strip || !(b > a)) return '<div class="tl-film"></div>';
@@ -319,15 +324,18 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     // The lane's word is put in the language here, where it is drawn: one
     // call below is pinned by its source (indexHtml.test.mjs).
     const name = (cls, icon, size, text, lead = "") => `<div class="tl-name ${cls}">${lead || lucide(icon, size)}<span>${t(text)}</span></div>`;
+    // The first lane is the file itself: a video, or an audio project's sound.
+    const file = isAudio(mediaNow()) ? name("tl-name-video", "volume-2", 11, "Audio")
+      : name("tl-name-video", "square-play", 12.3, "Video");
     if (mode === "draft") {
       if (!clips) return "";
-      return name("tl-name-video", "square-play", 12.3, "Video")
+      return file
         + (erase && erase.lane ? name("tl-name-erase", "eraser", 12, "Erase") : "");
     }
     const on = getSubStyle().enabled;
     const eye = `<button class="tl-eye${on ? " on" : ""}" id="tlSubEye" type="button"
             title="${t("Captions on or off")}" aria-label="${t("Captions on or off")}">${lucide(on ? "eye" : "eye-off", 12)}</button>`;
-    return name("tl-name-video", "square-play", 12.3, "Video")
+    return file
       + (ownSubtitles() ? "" : name("tl-name-org", "volume-2", 11, "Original")
         + name("tl-name-dub", "volume-2", 11, "Translated"))
       + name(`tl-name-caps${on ? "" : " off"}`, "", 0, "Captions", eye);

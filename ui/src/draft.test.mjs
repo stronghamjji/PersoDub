@@ -77,3 +77,16 @@ test("the kept parts cut to their first minute keep their order and stop at sixt
   assert.deepEqual(firstSeconds([[0, 40], [50, 100], [120, 150]], 60), [[0, 40], [50, 70]]);
   assert.deepEqual(firstSeconds([[10, 30]], 60), [[10, 30]]);
 });
+
+// The app says which it is when it takes the file in (ui/src/mediaKind.mjs).
+test("a draft made from an audio file carries the mark; one from a video carries none", () => {
+  clearDraft();
+  assert.equal(setDraft({ ...video, name: "a.wav", media: "audio" }).media, "audio");
+  assert.equal("media" in setDraft(video), false);
+  assert.equal("media" in setDraft({ ...video, media: "video" }), false);
+  // A cut keeps it.
+  setDraft({ ...video, media: "audio" });
+  setRanges([[0, 4]]);
+  assert.equal(getDraft().media, "audio");
+  clearDraft();
+});

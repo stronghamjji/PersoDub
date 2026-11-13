@@ -7,6 +7,9 @@
 // Save video saves the project's video. With no video yet onSave shows Save
 // video's own body, #tabSave, a link field (ui/src/app.mjs).
 //
+// A tab can be locked (an audio project has no picture to erase, caption or
+// save): dimmed, its reason on its tip, and a press does nothing.
+//
 // A new tool is a new tab: a button with data-tab="<name>" in #leftTabs and a
 // body with id "tab" + <Name>. Nothing here needs to change for it.
 //
@@ -21,7 +24,8 @@ const bodyId = (name) => "tab" + name[0].toUpperCase() + name.slice(1);
  * @param {(id: string) => any} deps.$   the page's getElementById helper
  * @param {() => void} deps.onErase      what the Erase tab does
  * @param {() => void} [deps.onSave]     what the Save video tab does
- * @returns {{ show: (name: string) => void, current: () => string }}
+ * @returns {{ show: (name: string) => void, current: () => string,
+ *             lock: (names: string[], why?: string) => void }}
  */
 export function initLeftTabs({ $, onErase, onSave = () => {} }) {
   const row = $("leftTabs");
@@ -39,14 +43,27 @@ export function initLeftTabs({ $, onErase, onSave = () => {} }) {
     }
   }
 
+  // The tabs named are locked and every other one opens again. aria-disabled
+  // rather than disabled: a disabled button shows no tip, and the tip is where
+  // `why` is said. One of them on show gives way to Dubbing.
+  function lock(names, why = "") {
+    for (const b of buttons) {
+      const off = names.includes(b.dataset.tab);
+      if (off) b.setAttribute("aria-disabled", "true");
+      else b.removeAttribute("aria-disabled");
+      b.title = off ? why : "";
+    }
+    if (names.includes(current)) show("dubbing");
+  }
+
   row.addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]");
-    if (!b) return;
+    if (!b || b.getAttribute("aria-disabled") === "true") return;
     if (b.dataset.tab === "erase") onErase();
     else if (b.dataset.tab === "save") onSave();
     else show(b.dataset.tab);
   });
 
   show(current);
-  return { show, current: () => current };
+  return { show, current: () => current, lock };
 }

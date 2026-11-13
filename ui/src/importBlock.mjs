@@ -1,6 +1,6 @@
 // The one Import block (import-unify mockup): the Home banner's composition at
-// a panel's size -- a square plus and "Import", "Drop videos here, or click to
-// choose", and a link field with its icon and words centred, where a paste or
+// a panel's size -- a square plus and "Import", "Drop videos or audio here, or
+// click to choose", and a link field with its icon and words centred, where a paste or
 // Enter adds the link. The Dubbing, Audio and Erase tabs with no video and the New
 // project window all draw this and wire it here, so they cannot drift apart
 // again. A click anywhere on it opens the file picker, a drop hands the
@@ -15,12 +15,15 @@ export const IMPORT_VARIANT = "dark";
 
 /** The block's markup: #<id> around the words and the link field
     #<linkId>Row > #<linkId>Input. `linkOnly`: the link field alone in the
-    same dashed block, with no words and nothing to click or drop. */
-export function importBlockHtml(id, linkId, variant = IMPORT_VARIANT, linkOnly = false) {
+    same dashed block, with no words and nothing to click or drop.
+    `videoOnly`: the block of a tool that works on the picture (Erase
+    subtitles, Burn in subtitles); any other starts a dubbing, which takes
+    audio files too, and says so. */
+export function importBlockHtml(id, linkId, variant = IMPORT_VARIANT, linkOnly = false, videoOnly = false) {
   if (linkOnly) return `<div class="import-block link-only" id="${id}">` + linkFieldHtml(linkId) + `</div>`;
   return `<div class="import-block${variant === "blue" ? " import-blue" : ""}" id="${id}" tabindex="0">`
     + `<div class="import-head"><span class="import-plus">${lucide("plus", 12)}</span>${t("Import")}</div>`
-    + `<div class="import-sub">${t("Drop videos here, or click to choose")}</div>`
+    + `<div class="import-sub">${videoOnly ? t("Drop videos here, or click to choose") : t("Drop videos or audio here, or click to choose")}</div>`
     + linkFieldHtml(linkId)
     + `</div>`;
 }
@@ -37,7 +40,7 @@ function linkFieldHtml(linkId) {
 // (owner, 2026-10-24).
 // Getters, so each read is in the page's language at that moment.
 export const EMPTY_TABS = {
-  get dubbing() { return [t("Dubbing"), t("Voice a video in another language.")]; },
+  get dubbing() { return [t("Dubbing"), t("Voice a video or an audio file in another language.")]; },
   get erase() { return [t("Erase subtitles"), t("Takes burned-in subtitles out.")]; },
   get captions() { return [t("Burn in subtitles"), t("Burns subtitles into a video.")]; },
   get save() { return [t("Save video"), t("Saves a video from a link.")]; },
@@ -48,7 +51,7 @@ export function emptyTabHtml(tab, id, linkId) {
   const [heading, sentence] = EMPTY_TABS[tab];
   return `<div class="tab-empty-title">${heading}</div>`
     + `<div class="tab-empty-sub">${sentence}</div>`
-    + importBlockHtml(id, linkId, IMPORT_VARIANT, tab === "save");
+    + importBlockHtml(id, linkId, IMPORT_VARIANT, tab === "save", tab !== "dubbing");
 }
 
 /**

@@ -54,7 +54,7 @@ test("New project opens the window over the screen, with the link field inside t
   t.after(h.restore);
   const block = h.$("newProjImportSlot").outerHTML;
   assert.match(block, /^<div class="import-block" id="newProjDrop" tabindex="0">/);
-  assert.match(block, />Import<\/div><div class="import-sub">Drop videos here, or click to choose<\/div><label class="import-link" id="newProjLinkRow">/);
+  assert.match(block, />Import<\/div><div class="import-sub">Drop videos or audio here, or click to choose<\/div><label class="import-link" id="newProjLinkRow">/);
   assert.match(block, /id="newProjLinkInput"/);
   assert.ok(!/import-or|>Add</.test(block), "no or line and no Add button");
   h.$("newProjError").textContent = "old";

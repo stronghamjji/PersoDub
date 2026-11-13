@@ -17,6 +17,7 @@
 import { pictureRect } from "./subtitleLayout.mjs";
 import { lucide } from "./icons.mjs";
 import { t } from "./i18n.mjs";
+import { isAudio } from "./mediaKind.mjs";
 
 // The words are getters, read in the language of the moment they are drawn.
 export const RATIOS = [
@@ -281,8 +282,9 @@ function menuHtml(items, picked, notes = {}) {
  * @param {any} deps.preview      the layer the platform's interface is drawn in
  * @param {any} deps.ratioBtn     and its menu, deps.ratioMenu
  * @param {any} deps.previewBtn   and its menu, deps.previewMenu
- * @param {() => ({kind: "job", id: string} | {kind: "draft", id: string, ratio?: string} | null)} deps.getProject
- *        what the player is showing: the choice is kept per project
+ * @param {() => ({kind: "job", id: string, media?: string} | {kind: "draft", id: string, ratio?: string, media?: string} | null)} deps.getProject
+ *        what the player is showing: the choice is kept per project. `media`
+ *        is the project's own mark (ui/src/mediaKind.mjs)
  * @param {(ratio: string) => void} deps.saveDraftRatio   keep it in the draft
  * @param {() => void} [deps.onLayout]  the picture moved: redraw what hangs off it
  * @param {typeof fetch} [deps.fetch]
@@ -323,7 +325,8 @@ export function initRatioUi({ video, wrap, canvas, preview, ratioBtn, ratioMenu,
   function paint() {
     const project = getProject();
     ratioBtn.textContent = ratioLabel(state);
-    ratioBtn.disabled = previewBtn.disabled = !project;
+    // Sound alone has no picture to put in a canvas: off, as with no project.
+    ratioBtn.disabled = previewBtn.disabled = !project || isAudio(project);
     ratioBtn.classList.toggle("on", state.ratio !== "original");
     previewBtn.classList.toggle("on", state.preview !== "none");
     ratioMenu.innerHTML = menuHtml(RATIOS, state.ratio,

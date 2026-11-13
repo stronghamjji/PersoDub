@@ -521,7 +521,7 @@
   body[data-screen="running"]:not(.timeline-off) #runTimeline { display: flex; }
   /* A tab with nothing behind it yet, and Export before there is anything
      to hand back. */
-  .left-tab:disabled, .vtab:disabled { opacity: 0.4; cursor: default; }
+  .left-tab:disabled, .left-tab[aria-disabled="true"], .vtab:disabled { opacity: 0.4; cursor: default; }
   #exportBtn:disabled { background: var(--secondary); color: var(--muted-foreground);
     opacity: 1; cursor: default; box-shadow: none; }
   /* The panels' own buttons, the mockup's 24px. */
@@ -998,6 +998,8 @@
   .home-banner.drag-over .home-banner-title:not(.home-banner-title-drop) { display: none; }
   .home-banner.drag-over .home-banner-title-drop { display: inline; }
   .home-banner-sub { font-size: 12px; margin-top: -6px; color: rgba(255, 255, 255, 0.8); }
+  /* Which files, close under the line that asks for one. */
+  .home-banner-formats { font-size: 11px; margin-top: -9px; color: rgba(255, 255, 255, 0.65); }
   /* The link field, inside the banner (user, 2026-09-30): it is the selling
      point, not an afterthought below it. stopPropagation on click keeps it
      from also opening the file picker the banner itself opens on click. */
@@ -1093,6 +1095,8 @@
   .proj-thumb { position: relative; width: 124px; height: 124px; border-radius: var(--radius-sm);
     overflow: hidden; background: var(--thumb-bg); }
   .proj-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* An audio draft's tile: bars of sound in the timeline's waveform colour. */
+  .proj-wave { display: grid; place-items: center; color: var(--waveform); }
   .proj-chip { position: absolute; left: 5px; top: 4px; font-size: 10px; padding: 0 4px;
     border-radius: 3px; background: rgba(0,0,0,0.65); color: #fff; }
   .proj-chip-run { background: var(--primary); }
@@ -1865,6 +1869,17 @@
   .video-bigplay[hidden] { display: none; }
   /* No video in the panel: no play sign over nothing, and the foot's play is off. */
   .video-wrap:has(> video:not([src])) .video-bigplay { display: none; }
+  /* An audio project (the body's "audio-project", ui/src/app.mjs): the box
+     has no picture, only the sound sign and the word in its middle. The
+     <video> still plays the sound and is still what the subtitles are placed
+     on, so with no picture to size it, it takes the whole box. Nothing is
+     "stopped on a frame", so there is no play sign over it either. */
+  .video-audio { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
+    font-size: 12px; color: var(--muted-foreground); }
+  body.audio-project .video-audio { display: flex; }
+  body.audio-project :is(.video-wrap, .running-video) video { width: 100%; height: 100%; }
+  body.audio-project .video-bigplay { display: none; }
   /* The row under the picture: the small play button and the clock. The big
      button in the middle of the picture stays -- it is the "this is stopped"
      sign. This one is the control you reach for without covering the video. */
@@ -1877,6 +1892,7 @@
     padding: 0; background: none; cursor: pointer; color: var(--icon);
     display: grid; place-items: center; }
   .video-fs:hover { background: var(--secondary); }
+  .video-fs:disabled { opacity: 0.4; cursor: default; background: none; }
   .video-wrap:fullscreen { background: #000; }
   .video-play { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 6px;
     border: 0; background: none; color: var(--icon); cursor: pointer; padding: 0;

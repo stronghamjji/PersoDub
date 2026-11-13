@@ -21,6 +21,16 @@ test("a kept draft is its video, its name, its length, its cuts, its shape and i
   assert.deepEqual(readKept(s), kept);
 });
 
+// Home draws an audio draft's card without a video frame, so the mark is kept.
+test("an audio draft is kept as audio, and a video draft is kept with no mark", () => {
+  const s = storage();
+  const kept = keepDraft(s, { ...DRAFT, name: "talk.wav", media: "audio", tab: "dubbing" });
+  assert.equal(kept[0].media, "audio");
+  assert.equal(readKept(s)[0].media, "audio");
+  assert.equal("media" in keepDraft(storage(), { ...DRAFT, media: "video" })[0], false);
+  assert.equal(draftMark({ ...DRAFT, media: "audio" }), draftMark(DRAFT), "the kind is not a change to the cuts");
+});
+
 // The tab says what the draft was being made into (2026-10-21). One kept
 // before there was a tab, or with any other, was on Dubbing -- one left on
 // Separate audio too, now that it is no tool of its own (owner, 2026-10-23).

@@ -491,6 +491,23 @@ test("until the video knows its size there is no canvas, and then there is", () 
   assert.deepEqual([px(h.video.style.width), px(h.video.style.height)], [253.13, 450]);
 });
 
+// Sound has no picture to put in a canvas or under a phone's buttons.
+test("an audio project's Ratio and Preview stay in their place, off, as they are with no project", () => {
+  for (const project of [{ kind: "job", id: "j1", media: "audio" }, { kind: "draft", id: "d1", media: "audio" }]) {
+    const h = harness({ project, size: [0, 0] });
+    assert.equal(h.ratioBtn.disabled, true, project.kind);
+    assert.equal(h.previewBtn.disabled, true, project.kind);
+    assert.equal(h.ratioBtn.textContent, "Ratio");
+    assert.equal(h.canvas.hidden, true);
+  }
+  // A video is as it was, and so is no project at all.
+  const video = harness();
+  assert.equal(video.ratioBtn.disabled, false);
+  assert.equal(video.previewBtn.disabled, false);
+  const none = harness({ project: null });
+  assert.equal(none.ratioBtn.disabled, true);
+});
+
 test("the draft carries its ratio without redrawing everything that watches it", () => {
   setDraft({ downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" });
   assert.equal(getDraft().ratio, "original");

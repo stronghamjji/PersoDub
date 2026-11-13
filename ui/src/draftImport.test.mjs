@@ -93,7 +93,7 @@ const settle = () => new Promise((r) => setImmediate(r));
 test("with no video the Dubbing tab shows the shared Import block, and hides it once there is one", () => {
   const { $, api, log } = harness();
   assert.match($("dubbingImportSlot").outerHTML, /class="import-block" id="dubbingZone"/);
-  assert.match($("dubbingImportSlot").outerHTML, />Import<\/div><div class="import-sub">Drop videos here, or click to choose<\/div><label class="import-link" id="dubbingLinkRow"><svg/);
+  assert.match($("dubbingImportSlot").outerHTML, />Import<\/div><div class="import-sub">Drop videos or audio here, or click to choose<\/div><label class="import-link" id="dubbingLinkRow"><svg/);
   api.render();
   assert.equal($("dubbingImport").hidden, false);
   setDraft({ downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" });
@@ -159,6 +159,48 @@ test("picking a file uploads it and starts the draft", async () => {
   assert.equal(d.name, "street-food.mp4");
   assert.equal(d.duration, 10);
   assert.ok(log.calls.includes("POST /api/downloads/upload"));
+  log.restore();
+});
+
+// The app looks inside the file as it takes it in, and says which it is.
+test("an audio file the app took in is an audio draft, and a video carries no mark", async () => {
+  const upload = async (name, answer) => {
+    const { api, log } = harness({ responses: { "/api/downloads/upload": ok(answer) } });
+    const video = { preload: "", src: "", duration: 10, listeners: {},
+      addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); } };
+    globalThis.document.createElement = (tag) => (tag === "video" ? video : makeEl(tag));
+    const p = api.importSource({ file: { name, size: 100 } });
+    await video.listeners.loadedmetadata[0]();
+    await p;
+    const d = getDraft();
+    log.restore();
+    return d;
+  };
+  assert.equal((await upload("talk.wav", { id: "d1", media: "audio" })).media, "audio");
+  assert.equal("media" in (await upload("street-food.mp4", { id: "d2" })), false);
+});
+
+test("a file the app refuses once it has looked inside is answered with the app's own sentence", async () => {
+  const sentence = "Only MP4 or MOV video and WAV, FLAC, MP3 or M4A audio can be used.";
+  const { $, api, log } = harness({ responses: {
+    "/api/downloads/upload": { ok: false, status: 422, json: async () => ({ detail: sentence }) } } });
+  const video = { preload: "", src: "", duration: 0, listeners: {},
+    addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); } };
+  globalThis.document.createElement = (tag) => (tag === "video" ? video : makeEl(tag));
+  const p = api.importSource({ file: { name: "renamed.mp4", size: 100 } });
+  await video.listeners.error[0]();
+  await p;
+  assert.equal($("dubbingImportStatus").textContent, sentence);
+  assert.equal($("dubbingImportStatus").classList.contains("error"), true);
+  assert.equal(getDraft(), null);
+  log.restore();
+});
+
+// Add language on an audio project, and an audio draft opened again from Home.
+test("a held audio brought in is an audio draft", async () => {
+  const { api, log } = harness();
+  await api.importSource({ downloadId: "heldA", name: "talk", duration: 5, media: "audio" });
+  assert.equal(getDraft().media, "audio");
   log.restore();
 });
 

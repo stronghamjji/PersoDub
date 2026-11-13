@@ -60,6 +60,7 @@ import { createDubTracker, startedFromForm, startedFromJob } from "./dubTrack.mj
 import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines, restartFailure, restartRanOutOfMemory } from "./format.mjs";
 import { currentLanguage, languageName, pageLanguage, savedSettings, t } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
+import { isAudio, dubFormatProblem, videoFormatProblem } from "./mediaKind.mjs";
 
 // The language before anything is drawn, so the first paint is already in it
 // (ui/src/i18n.mjs; capped, so a slow answer only means starting in English).
@@ -684,9 +685,10 @@ const newProject = initNewProjectUi({
 // The Erase tab and the video its box is drawn on (#tabErase, #erasePane)
 // belong to
 // ui/src/eraseScreen.mjs. What the page hands it is what is the page's: the
-// one way screens are swapped, the one top bar, and the one rule about which
-// files this app takes -- videoProblem, shared with the home drop zone, so a
-// file refused on one screen is refused on the other in the same words.
+// one way screens are swapped, the one top bar, and the rule about which
+// files a tool that works on the picture takes -- videoProblem: a video,
+// under the size limit every way in shares. (Dubbing's ways in take audio
+// too: dubFileProblem.)
 const eraseScreen = initEraseScreenUi({
   $, showScreen, setTopbar, checkFile: videoProblem,
   getScreen: () => document.body.dataset.screen,
@@ -795,6 +797,30 @@ initPlayerFoot({ video: $("runningVideo"), time: $("runTime"), play: $("runPlay"
 initPlayerFoot({ video: $("eraseVideo"), time: $("eraseTime"), play: $("erasePlay"),
                  fullscreen: $("eraseFs"), stage: $("eraseStage") });
 
+// ---------------- An audio project ----------------
+// What is open -- the job, or the draft before it -- is sound with no picture
+// (ui/src/mediaKind.mjs). The layout stays as it is: the video box says
+// "Audio" (the stylesheet, off the body's "audio-project"), the tabs that
+// work on a picture are locked, and full screen, which would be of nothing,
+// is off. The Ratio buttons, the timeline and the Before dubbing card ask the
+// same question for themselves.
+// What is open: the job, once its record is the one in hand, or the draft.
+function openProject() {
+  return state.jobId ? (state.job && state.job.id === state.jobId ? state.job : null) : getDraft();
+}
+function paintMediaKind() {
+  const audio = isAudio(openProject());
+  document.body.classList.toggle("audio-project", audio);
+  // The erase screen opened from Home asks for a video of its own, whatever
+  // draft is held behind it: its tab is not locked while it is up. The other
+  // two would still start from that draft.
+  const locked = document.body.dataset.screen === "erase" ? ["captions", "save"] : ["erase", "captions", "save"];
+  leftTabs.lock(audio ? locked : [], t("Only for projects with a video."));
+  for (const id of ["fullscreenBtn", "runFs"]) $(id).disabled = audio;
+}
+onDraftChange(paintMediaKind);
+new MutationObserver(paintMediaKind).observe(document.body, { attributes: true, attributeFilter: ["data-screen"] });
+
 // ---------------- The draft state of the work screen ----------------------
 // A video imported for a new project that is not dubbed yet: how it comes in
 // (ui/src/draftImport.mjs) and the Dubbing tab's "Before dubbing" card and
@@ -804,7 +830,7 @@ initPlayerFoot({ video: $("eraseVideo"), time: $("eraseTime"), play: $("erasePla
 const draftImport = initDraftImport({
   $, state,
   getScreen: () => document.body.dataset.screen,
-  checkFile: (file) => videoProblem(file),
+  checkFile: (file) => dubFileProblem(file),
   // A video replaced on the draft is let go the way one an erase was started
   // on is: its Draft card leaves Home, so drafts do not pile up (owner, 2026-10-22).
   onReplaced: (downloadId) => forgetDraft(downloadId),
@@ -859,7 +885,7 @@ async function openSeparatedJob(job) {
 // (resetForNewJob: its id, script and timeline lanes); a job still running
 // carries on, and a dub started meanwhile waits its turn.
 initNewProjectWindow({
-  $, checkFile: videoProblem,
+  $, checkFile: dubFileProblem,
   leaveJob: () => resetForNewJob(),
   openDraft: (source) => draftSetup.openDraft(source),
   openNewProject: (source) => newProject.openNewProject(source),
@@ -887,6 +913,9 @@ function openDraftHere(source, opts, project = null) {
   // resetForNewJob passes through Home, which forgets the dub to go back
   // to: note it first and put it back after.
   const from = state.jobId || null;
+  // The draft is the open job's own file held again (+ Add language), so it
+  // is what that job is: a video, or sound alone.
+  const media = state.job && state.job.id === from ? state.job.media : undefined;
   // From an erased video the way back is to that erase, not to a dubbing;
   // the same from a video with the user's own subtitles.
   const fromErase = document.body.dataset.screen === "erase"
@@ -900,7 +929,7 @@ function openDraftHere(source, opts, project = null) {
   // was already a card before this opened it is never forgotten that way.
   const had = !!source && keptDrafts.some((k) => k.downloadId === source.downloadId);
   state.draftOpened = null;
-  return draftSetup.openDraft(source, opts).then(() => {
+  return draftSetup.openDraft(source && { ...source, media }, opts).then(() => {
     const d = getDraft();
     if (d && !had) state.draftOpened = { downloadId: d.downloadId, mark: draftMark(d), touched: false };
   });
@@ -957,16 +986,18 @@ const MAX_VIDEO_LABEL = MAX_VIDEO_MB >= 1024 ? `${MAX_VIDEO_MB / 1024} GB` : `${
 
 // The zone itself never reports "video ready" any more: a good file opens the
 // New project dialog straight away, and that dialog is the confirmation.
-function videoProblem(file) {
-  if (!/\.(mp4|mov)$/i.test(file.name)) {
-    return t("Please choose an MP4 or MOV video file.");
-  }
+// Why a file is not taken, or null. Dubbing takes video and audio; the tools
+// that work on the picture (Erase subtitles, Burn in subtitles) take video
+// alone (ui/src/mediaKind.mjs). The size limit is the same for all of them.
+function tooBig(file) {
   if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
     return t("This video is {size}. The limit is {limit}. Please use a shorter or smaller file.",
       { size: formatBytes(file.size), limit: MAX_VIDEO_LABEL });
   }
   return null;
 }
+function dubFileProblem(file) { return dubFormatProblem(file) || tooBig(file); }
+function videoProblem(file) { return videoFormatProblem(file) || tooBig(file); }
 
 function setVideoFiles(fileList) {
   $("formError").textContent = "";
@@ -975,7 +1006,7 @@ function setVideoFiles(fileList) {
   // One bad file stops the whole drop: silently dubbing the rest would leave
   // the user thinking every video they dropped is in line.
   for (const f of files) {
-    const bad = videoProblem(f);
+    const bad = dubFileProblem(f);
     if (bad) {
       $("formError").textContent = files.length > 1 ? `${f.name}: ${bad}` : bad;
       return;
@@ -1251,6 +1282,7 @@ function resetForNewJob() {
   rememberLastJob();
   state.jobId = null;
   state.job = null;
+  paintMediaKind();
   delete document.body.dataset.jobId;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
   $("formError").textContent = "";
@@ -1428,7 +1460,7 @@ async function reopenDraft(downloadId) {
   const live = getDraft();
   if (!live || live.downloadId !== downloadId) {
     setDraft({ downloadId, name: kept.name, duration: kept.duration,
-               videoUrl: downloadVideoUrl(downloadId), ratio: kept.ratio });
+               videoUrl: downloadVideoUrl(downloadId), ratio: kept.ratio, media: kept.media });
     setRanges(kept.ranges);
     // And on the remembered choices, as a new draft starts: after a restart
     // nothing else had put them back, and the card opened on the page's own
@@ -1792,7 +1824,7 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // screen, not on every report of the same one.
   const newlyOpen = !state.job || state.job.id !== job.id;
   state.job = job;
-  if (newlyOpen) draftSetup.paint();
+  if (newlyOpen) { draftSetup.paint(); paintMediaKind(); }
   // The script assistant runs in its own module and cannot see `state`. Parking
   // the id here lets it answer "this job" without asking the user for a number
   // they have no way of knowing.
@@ -2239,7 +2271,13 @@ const subtitles = initSubtitleOverlay({
   // and the video with its subtitle file is opened as a finished project,
   // the way Projects opens a dub, on this tab.
   alone: {
-    importSource: (source) => draftImport.importSource(source),
+    // Burning subtitles in needs a picture. The video comes in as the draft,
+    // whose own check takes audio, so an audio file is turned away here first.
+    importSource: (source) => {
+      const bad = source.file ? videoProblem(source.file) : null;
+      if (bad) { draftImport.say(bad, true); return Promise.resolve(); }
+      return draftImport.importSource(source);
+    },
     say: (text, isError) => draftImport.say(text, isError),
     // A project's own video, held again the way + Add language holds it; an
     // erased video, held the way its Dubbing button holds it.
@@ -2280,9 +2318,9 @@ const ratioUi = initRatioUi({
   ratioBtn: $("ratioBtn"), ratioMenu: $("ratioMenu"),
   previewBtn: $("previewBtn"), previewMenu: $("previewMenu"),
   getProject: () => {
-    if (state.jobId) return { kind: "job", id: state.jobId };
+    if (state.jobId) return { kind: "job", id: state.jobId, media: (openProject() || {}).media };
     const d = getDraft();
-    return d ? { kind: "draft", id: d.downloadId, ratio: d.ratio } : null;
+    return d ? { kind: "draft", id: d.downloadId, ratio: d.ratio, media: d.media } : null;
   },
   saveDraftRatio: setDraftRatio,
   onLayout: subtitles.syncVideoChrome,
@@ -2334,7 +2372,7 @@ const timeline = initTimelineUi({
   getPlayerClock: () => $(onEraseTab() ? "eraseTime" : "videoTime"),
   videos: () => [doneVideo, $("eraseVideo")],
   // The video lane's name, film strip and waveform: the open job's original.
-  getMedia: () => (state.job ? { kind: "job", id: state.job.id, name: jobLabel(state.job) } : null),
+  getMedia: () => (state.job ? { kind: "job", id: state.job.id, name: jobLabel(state.job), media: state.job.media } : null),
   getSubStyle: subtitles.getSubStyle,
   subCueOf: subtitles.subCueOf,
   saveSubStyle: subtitles.saveSubStyle,
