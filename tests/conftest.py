@@ -120,6 +120,18 @@ def chatgpt_signed_in(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def every_file_is_a_video(monkeypatch):
+    """Every file a test brings is a video unless the test says otherwise.
+
+    A file is asked what it is when it comes in (app/media.py media_kind), and
+    the answer comes from ffprobe. The tests bring a few made-up bytes named
+    v.mp4, which ffprobe would refuse, and CI has no ffprobe at all.
+    tests/test_media_kind.py keeps the real probe."""
+    from app import media
+    monkeypatch.setattr(media, "media_kind", lambda path: "video")
+
+
+@pytest.fixture(autouse=True)
 def plenty_of_memory(monkeypatch):
     """Every test runs on a 24 GB computer unless it says otherwise.
 

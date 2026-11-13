@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import media, state
-from app.api._shared import free_path, parse_ranges, ratio_errors_as_http
+from app.api._shared import dub_media, free_path, parse_ranges, ratio_errors_as_http
 from app.api.clips import _clip_stamp
 from app.downloads import DownloadStore, file_stem, save_folder
 from app.i18n import t
@@ -46,7 +46,7 @@ class DownloadSaveRequest(BaseModel):
     # The timeline's kept parts, [[start, end], ...], joined the way a dub
     # joins them. These or a start and an end, not both.
     ranges: Optional[List[List[float]]] = None
-    audio: Optional[str] = None     # "mp3" or "wav": the sound only
+    audio: Optional[str] = None     # one of media.AUDIO_CODECS: the sound only
     # A canvas to save the video in (app/ratio.py); default: as it is. The
     # sound alone has no picture, so it is not read with `audio`.
     ratio: Optional[str] = None
@@ -79,7 +79,12 @@ def downloads_start(body: DownloadStartRequest):
 
 @router.post("/api/downloads/upload")
 def downloads_upload(video: UploadFile = File(...), duration_sec: Optional[float] = Form(None)):
-    """A dropped file, held like a fetched link so Save clip works on it too."""
+    """A dropped file, held like a fetched link so Save clip works on it too.
+
+    Only a video or an audio file a dubbing takes (app/api/_shared.py
+    dub_media). Anything else is refused with 422 by what ffprobe finds in it
+    once it is here, and then it is not kept. An audio file's record says
+    `media: "audio"`."""
     if not video.filename:
         raise HTTPException(status_code=422, detail=t("No file."))
     title = os.path.splitext(os.path.basename(video.filename))[0]
@@ -89,6 +94,11 @@ def downloads_upload(video: UploadFile = File(...), duration_sec: Optional[float
             shutil.copyfileobj(video.file, f)
 
     d = download_store.add_file(state.WORKSPACE, title, duration_sec or 0, write)
+    try:
+        d.media = dub_media(d.path)
+    except HTTPException:
+        download_store.drop(d.id)
+        raise
     return d.as_dict()
 
 
@@ -128,6 +138,14 @@ def seconds_of(path: str) -> float:
         return 0
 
 
+def held_media(path: str) -> Optional[str]:
+    """What a file is when no record says: "audio" or None (a video). For a
+    file held again after a restart, whose record lived in memory only, and
+    for one sent straight to a separation (app/api/separate.py). It refuses
+    nothing: a dubbing's own door does that (app/api/_shared.py dub_media)."""
+    return "audio" if media.media_kind(path) == "audio" else None
+
+
 def reopen_original(job: dict, title: str):
     """Hold the video a job was cut from again, for a new draft on it: the
     answer Add language (app/api/dub.py dub_job_again) and a separation's
@@ -140,12 +158,14 @@ def reopen_original(job: dict, title: str):
     if held is None and _HELD_ID.match(did):
         path = os.path.join(state.WORKSPACE, "downloads", did, "source.mp4")
         if os.path.exists(path):
-            held = download_store.hold_again(did, path, title, seconds_of(path))
+            held = download_store.hold_again(did, path, title, seconds_of(path), held_media(path))
     if held is None or held.status != "ready" or not os.path.exists(held.path):
         return None
     return {"download_id": held.id, "title": held.title or title,
             "duration_sec": held.duration_sec or seconds_of(held.path),
-            "ranges": parts_of(job)}
+            "ranges": parts_of(job),
+            # Said only of an audio file, as on a job's record.
+            **({"media": held.media} if held.media else {})}
 
 
 @router.post("/api/downloads/{did}/hold")
@@ -158,7 +178,7 @@ def downloads_hold(did: str, body: DownloadHoldRequest):
     if d is None and _HELD_ID.match(did):
         path = os.path.join(state.WORKSPACE, "downloads", did, "source.mp4")
         if os.path.exists(path):
-            d = download_store.hold_again(did, path, body.title, body.duration_sec)
+            d = download_store.hold_again(did, path, body.title, body.duration_sec, held_media(path))
     if d is None or d.status != "ready" or not os.path.exists(d.path):
         raise HTTPException(status_code=404, detail=t("This video is no longer on this computer."))
     return d.as_dict()
@@ -166,10 +186,14 @@ def downloads_hold(did: str, body: DownloadHoldRequest):
 
 @router.get("/api/downloads/{did}/video")
 def downloads_video(did: str):
-    """The fetched file, for the New project screen's player."""
+    """The fetched file, for the New project screen's player. An audio file
+    is served as the sound it is: it is held under the name source.mp4, but a
+    browser that is told video/mp4 and finds a WAV may refuse to play it."""
     d = download_store.get(did)
     if d is None or d.status != "ready" or not os.path.exists(d.path):
         raise HTTPException(status_code=404, detail=t("Not downloaded yet"))
+    if d.media == "audio":
+        return FileResponse(d.path, media_type=media.AUDIO_MIME.get(media.audio_format(d.path)))
     return FileResponse(d.path, media_type="video/mp4")
 
 
@@ -192,6 +216,10 @@ def downloads_save(did: str, body: DownloadSaveRequest):
     d = download_store.get(did)
     if d is None or d.status != "ready" or not os.path.exists(d.path):
         raise HTTPException(status_code=404, detail=t("Not downloaded yet"))
+    # An audio file has no picture to save as a video; its sound is saved
+    # below like any other.
+    if d.media == "audio" and not body.audio:
+        raise HTTPException(status_code=409, detail=t("Only for projects with a video."))
     if body.audio is not None and body.audio not in media.AUDIO_CODECS:
         raise HTTPException(status_code=422, detail=t("Audio is saved as mp3 or wav."))
     one = body.start is not None or body.end is not None

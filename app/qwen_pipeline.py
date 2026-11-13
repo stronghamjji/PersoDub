@@ -1435,8 +1435,12 @@ def rebuild_dub(work_dir, data, video_path, out_path):
     _write_clipped_lines(work_dir, clipped)
 
     out_path = out_path or os.path.join(work_dir, "dubbed.mp4")
-    r = media.mux(video_path, out_wav, out_path, media.video_duration(video_path))
+    # An audio project's result (dubbed.wav) is the mix itself, made the
+    # source's length in the one step: there is no picture to mux it onto,
+    # and so no video length to check afterwards.
+    r = media.build_result(video_path, out_wav, out_path)
     if r.returncode != 0:
         raise RuntimeError("mux failed: %s" % r.stderr[-200:])
-    media.ensure_video_length(video_path, out_path, lambda m: None)
+    if not out_path.endswith(".wav"):
+        media.ensure_video_length(video_path, out_path, lambda m: None)
     return out_path

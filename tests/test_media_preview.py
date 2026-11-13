@@ -135,6 +135,29 @@ def test_a_file_ffmpeg_cannot_read_says_so(tmp_path):
     assert os.listdir(tmp_path / "v") == ["input.mp4"]
 
 
+def test_an_audio_file_has_no_film_strip_even_when_it_carries_a_cover(monkeypatch, tmp_path):
+    """ffmpeg would tile an album cover into a strip; an audio project's
+    timeline shows its sound only, so it is refused before ffmpeg is asked."""
+    (tmp_path / "v").mkdir()
+    song = str(tmp_path / "v" / "input.mp4")
+    open(song, "wb").write(b"ID3")
+    monkeypatch.setattr(media_preview.media, "media_kind", lambda path: "audio")
+    monkeypatch.setattr(media_preview.subprocess, "run", lambda *a, **kw: pytest.fail("must not run ffmpeg"))
+    with pytest.raises(RuntimeError, match="Could not read frames"):
+        media_preview.filmstrip(song)
+    assert os.listdir(tmp_path / "v") == ["input.mp4"]
+
+
+@needs_ffmpeg
+def test_an_audio_file_has_a_waveform(tmp_path):
+    song = str(tmp_path / "input.mp4")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+                    "-f", "wav", song], check=True, capture_output=True)
+    wave = media_preview.waveform(song)
+    assert wave["duration"] == pytest.approx(2.0, abs=0.05)
+    assert len(wave["peaks"]) == pytest.approx(50, abs=2) and max(wave["peaks"]) == 1.0
+
+
 # --- the routes ---------------------------------------------------------------
 
 def _job_with_video(tmp_path, make=True):

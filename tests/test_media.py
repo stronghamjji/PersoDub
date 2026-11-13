@@ -208,6 +208,104 @@ def test_cut_video_removes_a_half_written_temp_file_when_ffmpeg_fails(monkeypatc
     assert not (tmp_path / "input.mp4.cut.mp4").exists()
 
 
+# --- the same cuts on a file that is sound only ------------------------------
+
+def _joined(argv):
+    return " ".join(argv)
+
+
+def test_a_trim_of_an_audio_file_encodes_no_picture(monkeypatch, tmp_path):
+    """An audio project's input.mp4 holds a song: there is no picture for
+    libx264, and an album cover must not become one."""
+    monkeypatch.setattr(media, "media_kind", lambda path: "audio")
+    src = tmp_path / "input.mp4"
+    src.write_bytes(b"original")
+    calls = _record(monkeypatch, _Done(), on_run=lambda argv: open(argv[-1], "wb").write(b"cut"))
+    seen = []
+
+    media.cut_video(str(src), 1.5, 4.25, on_cut=lambda: seen.append(src.read_bytes()))
+
+    assert len(calls) == 1
+    argv = calls[0][0]
+    assert argv[0] == "ffmpeg" and argv[argv.index("-i") + 1] == str(src)
+    assert "libx264" not in argv and "[0:v]" not in _joined(argv)
+    graph = argv[argv.index("-filter_complex") + 1]
+    assert graph == "[0:a]atrim=start=1.500:end=4.250,asetpts=PTS-STARTPTS[a0];[a0]concat=n=1:v=0:a=1[a]"
+    # Only the sound is kept, and written so that nothing of it is lost,
+    # whatever the file was: FLAC, told by the scratch file's name.
+    assert argv[argv.index("-map") + 1] == "[a]" and argv.count("-map") == 1
+    assert argv[argv.index("-c:a") + 1] == "flac" and argv[-1] == str(src) + ".cut.flac"
+    # The cut took the original's place under its own name, and on_cut ran after.
+    assert src.read_bytes() == b"cut" and seen == [b"cut"]
+    assert not (tmp_path / "input.mp4.cut.flac").exists()
+
+
+def test_kept_parts_of_an_audio_file_are_joined_without_a_picture(monkeypatch, tmp_path):
+    monkeypatch.setattr(media, "media_kind", lambda path: "audio")
+    src = tmp_path / "input.mp4"
+    src.write_bytes(b"original")
+    calls = _record(monkeypatch, _Done(), on_run=lambda argv: open(argv[-1], "wb").write(b"joined"))
+    seen = []
+
+    media.cut_ranges(str(src), [[0, 1.5], [3, 4.25]], on_cut=lambda: seen.append(True))
+
+    assert len(calls) == 1     # the sound track is not asked about: it is all there is
+    argv = calls[0][0]
+    assert "libx264" not in argv and "[0:v]" not in _joined(argv)
+    assert argv[argv.index("-filter_complex") + 1].endswith("[a0][a1]concat=n=2:v=0:a=1[a]")
+    assert argv[argv.index("-c:a") + 1] == "flac" and argv[-1] == str(src) + ".cut.flac"
+    assert src.read_bytes() == b"joined" and seen == [True]
+
+
+def test_an_audio_cut_that_fails_leaves_the_file_and_no_scratch(monkeypatch, tmp_path):
+    monkeypatch.setattr(media, "media_kind", lambda path: "audio")
+    src = tmp_path / "input.mp4"
+    src.write_bytes(b"original")
+    _record(monkeypatch, _Done(returncode=1, stderr=str(src) + ": Invalid data found when processing input\n"),
+            on_run=lambda argv: open(argv[-1], "wb").write(b"half"))
+    with pytest.raises(RuntimeError) as caught:
+        media.cut_video(str(src), 0.0, 1.0)
+    assert str(caught.value) == "Could not trim the audio: input.mp4: Invalid data found when processing input"
+    assert src.read_bytes() == b"original"
+    assert not (tmp_path / "input.mp4.cut.flac").exists()
+
+
+@pytest.mark.parametrize("fmt,codec,mime", [
+    ("mp3", ["-c:a", "libmp3lame", "-b:a", "192k"], "audio/mpeg"),
+    ("wav", ["-c:a", "pcm_s16le"], "audio/wav"),
+    ("flac", ["-c:a", "flac"], "audio/flac"),
+    ("m4a", ["-c:a", "aac", "-b:a", "256k"], "audio/mp4"),
+])
+def test_sound_is_saved_in_four_formats_each_with_its_type(fmt, codec, mime):
+    assert sorted(media.AUDIO_CODECS) == sorted(media.AUDIO_MIME) == ["flac", "m4a", "mp3", "wav"]
+    argv = media.audio_command("/v/in.mp4", "/v/out." + fmt, fmt)
+    assert argv[-1 - len(codec):-1] == codec and "-vn" in argv
+    assert media.AUDIO_MIME[fmt] == mime
+
+
+# --- build_result -------------------------------------------------------------
+
+def test_an_audio_result_is_the_mix_padded_to_the_sources_length_with_no_mux(monkeypatch):
+    monkeypatch.setattr(media, "video_duration", lambda path: 12.5)
+    monkeypatch.setattr(media, "mux", lambda *a: pytest.fail("there is no picture to put it on"))
+    calls = _record(monkeypatch, _Done())
+    r = media.build_result("/v/input.mp4", "/v/mix.wav", "/v/dubbed.wav")
+    assert r.returncode == 0 and len(calls) == 1
+    argv = calls[0][0]
+    # The mix is the only input: the source gives its length and nothing else.
+    assert argv[0] == "ffmpeg" and argv.count("-i") == 1 and argv[argv.index("-i") + 1] == "/v/mix.wav"
+    assert argv[argv.index("-af") + 1] == "apad" and argv[argv.index("-t") + 1] == "12.500"
+    assert argv[-1] == "/v/dubbed.wav"
+
+
+def test_a_video_result_is_muxed_as_before(monkeypatch):
+    monkeypatch.setattr(media, "video_duration", lambda path: 12.5)
+    muxed = []
+    monkeypatch.setattr(media, "mux", lambda *a: muxed.append(a) or _Done())
+    assert media.build_result("/v/input.mp4", "/v/mix.wav", "/v/dubbed.mp4").returncode == 0
+    assert muxed == [("/v/input.mp4", "/v/mix.wav", "/v/dubbed.mp4", 12.5)]
+
+
 def test_a_windows_path_in_ffmpegs_last_line_loses_its_folders():
     msg = media._failure("Could not trim the video",
                          "C:\\Users\\name\\Videos\\a.mp4: Invalid data found when processing input\n")

@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app import media
-from app.api._shared import free_path
+from app.api._shared import free_path, require_video
 from app.i18n import t
 
 router = APIRouter()
@@ -78,6 +78,9 @@ def clips_cut(body: ClipCutRequest):
                             detail=t('Times must be seconds ("85") or timecodes ("1:25").'))
     if start < 0 or end <= start:
         raise HTTPException(status_code=422, detail=t("The clip must start before it ends."))
+    # Asked outright: an audio file has a length too (media.video_duration),
+    # so the length below no longer tells it from a video.
+    require_video(path)
     try:
         duration = media.video_duration(path)
     except Exception:

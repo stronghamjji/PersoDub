@@ -457,6 +457,39 @@ def test_restore_finds_old_folders_that_have_no_job_json(tmp_path):
     # Restoring twice must not double the list.
     store.restore(str(tmp_path))
     assert len(store.all()) == 1
+    # A folder that holds a video's result is not an audio project.
+    assert jobs[0]["media"] is None
+
+
+def test_an_audio_folder_with_a_damaged_job_json_is_rebuilt_as_audio(tmp_path):
+    # An audio project's result is dubbed.wav. Looked for by dubbed.mp4 alone,
+    # the folder was skipped and the finished dub had no way back into Projects.
+    work = tmp_path / "2026-11-13" / "my talk_ko"
+    work.mkdir(parents=True)
+    (work / "dubbed.wav").write_bytes(b"x")
+    (work / "job.json").write_text('{"id": "abc", "status": "do', encoding="utf-8")
+    store = JobStore(log_dir=str(tmp_path))
+    store.restore(str(tmp_path))
+    jobs = store.all()
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "done" and jobs[0]["project"] == "my talk"
+    # Said on the record: the name of its result is the only place it is left.
+    assert jobs[0]["media"] == "audio"
+    assert store.get(jobs[0]["id"])["result"] == {"out_path": str(work / "dubbed.wav")}
+
+
+def test_that_a_project_is_audio_survives_a_restart_and_shows_in_the_list(tmp_path):
+    # The screen draws an audio project differently and locks the tabs that
+    # need a picture, and "Try again" names its result by this.
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done", project="a", media="audio",
+                  result={"out_path": str(tmp_path / "x" / "dubbed.wav")})
+    store.persist(jid, str(tmp_path / "x"))
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["media"] == "audio"
+    assert store2.all()[0]["media"] == "audio"
 
 
 def test_all_lists_the_newest_job_first(tmp_path):
