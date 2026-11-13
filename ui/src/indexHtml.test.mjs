@@ -1643,7 +1643,8 @@ test("Dubbing, Erase, Burn in subtitles and Save video with no video draw one em
 
 test("with no video there is no play sign over the panel and the foot's play is off", async () => {
   const html = readPage();
-  assert.match(html, /\.video-wrap:has\(> video:not\(\[src\]\)\) \.video-bigplay \{ display: none; \}/);
+  // The player, by name: the element beside it is a brought-in video's picture, empty on most projects.
+  assert.match(html, /\.video-wrap:has\(> #doneVideo:not\(\[src\]\)\) \.video-bigplay \{ display: none; \}/);
   assert.match(readFileSync(PLAYER, "utf8"), /btn\.disabled = !doneVideo\.getAttribute\("src"\);/);
   const { initPlayerFoot } = await import("./playerFoot.mjs");
   const on = {};
@@ -1993,8 +1994,9 @@ test("an audio project locks Erase, Burn in subtitles and Save video, and dims f
   assert.match(body, /document\.body\.classList\.toggle\("audio-project", audio\);/);
   // An empty erase screen opened from Home, an audio draft still held behind it, keeps its own tab.
   assert.match(body, /const locked = document\.body\.dataset\.screen === "erase" \? \["captions", "save"\] : \["erase", "captions", "save"\];/);
-  assert.match(body, /leftTabs\.lock\(audio \? locked : \[\], t\("Only for projects with a video\."\)\);/);
-  assert.match(body, /for \(const id of \["fullscreenBtn", "runFs"\]\) \$\(id\)\.disabled = audio;/);
+  assert.match(body, /leftTabs\.lock\(audio \? locked : \[\], joined \? t\("Not for a video brought into an audio project\."\)\n {4}: t\("Only for projects with a video\."\)\);/);
+  // Full screen of a box with no picture is of nothing; a brought-in video is one.
+  assert.match(body, /\$\("fullscreenBtn"\)\.disabled = audio && !joined;\n {2}\$\("runFs"\)\.disabled = audio;/);
   // Painted when the draft, the open job or the screen changes.
   assert.match(html, /onDraftChange\(paintMediaKind\);/);
   assert.match(html, /new MutationObserver\(paintMediaKind\)\.observe\(document\.body, \{ attributes: true, attributeFilter: \["data-screen"\] \}\);/);
@@ -2020,4 +2022,67 @@ test("the open project's kind goes with it to the Ratio buttons, the timeline an
   assert.match(html, /videoUrl: downloadVideoUrl\(downloadId\), ratio: kept\.ratio, media: kept\.media \}\);/);
   assert.match(html, /const media = state\.job && state\.job\.id === from \? state\.job\.media : undefined;/);
   assert.match(html, /return draftSetup\.openDraft\(source && \{ \.\.\.source, media \}, opts\)\.then\(/);
+});
+
+// ---- A video brought into a finished audio project ----
+
+test("a finished audio project's box has the way to bring a video in, under the word Audio", () => {
+  const html = readPage();
+  // After the badge and before the subtitles, so it is over the player and under the words.
+  const at = html.indexOf('<video id="joinVideo" muted playsinline></video>');
+  assert.ok(at > html.indexOf('<video id="doneVideo" playsinline></video>'));
+  assert.ok(at < html.indexOf('id="subOverlay"'));
+  assert.ok(html.includes(`<div class="video-bring" id="joinBring" hidden>
+                    <div class="video-bring-row"><button data-i18n class="btn btn-outline" id="joinBringBtn" type="button">Bring in a video</button><span>MP4 · MOV</span></div>
+                    <div class="video-bring-note" id="joinBringNote" role="status"></div>
+                    <input type="file" id="joinFile" accept=".mp4,.mov" hidden>
+                  </div>`));
+  // Only the finished screen's box: a running dubbing has nothing to join yet.
+  assert.equal(html.split('class="video-bring"').length - 1, 1);
+  // Under the badge, the two centred together; hidden means hidden.
+  assert.match(html, /\.video-bring \{ position: absolute; left: 50%; top: 50%; transform: translate\(-50%, 14px\);[^}]*\}/);
+  assert.match(html, /\.video-bring\[hidden\] \{ display: none; \}/);
+  assert.match(html, /\.video-wrap:has\(> \.video-bring:not\(\[hidden\]\)\) \.video-audio \{ transform: translate\(-50%, calc\(-50% - 19px\)\); \}/);
+  assert.match(html, /\.video-bring-note:empty \{ display: none; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Bring in a video"], "영상 가져오기");
+  assert.equal(ko["Bringing the video in…"], "영상을 가져오는 중이에요…");
+  assert.equal(ko["Could not bring the video in."], "영상을 가져오지 못했어요.");
+});
+
+test("with a video brought in the box shows its picture: no badge, no bring-in row, the sound's element out of the way", () => {
+  const html = readPage();
+  // The picture's element is there only while a video is in.
+  assert.match(html, /#joinVideo \{ display: none; \}/);
+  assert.match(html, /body\.joined-video #joinVideo \{ display: block; width: auto; height: auto; \}/);
+  // The sound goes on playing from #doneVideo, which takes no room.
+  assert.match(html, /body\.joined-video #doneVideo \{ position: absolute; width: 0; height: 0; \}/);
+  assert.match(html, /body\.joined-video :is\(\.video-audio, \.video-bring\) \{ display: none; \}/);
+  assert.ok(html.indexOf("body.joined-video :is(.video-audio, .video-bring)") > html.indexOf("body.audio-project .video-audio { display: flex; }"),
+            "after the rule it overrides");
+  // A picture standing still has its play sign back.
+  assert.match(html, /body\.joined-video \.video-bigplay:not\(\[hidden\]\) \{ display: inline-flex; \}/);
+  // "No video in the panel" asks the player, not the picture's element, which is empty on every other project.
+  assert.match(html, /\.video-wrap:has\(> #doneVideo:not\(\[src\]\)\) \.video-bigplay \{ display: none; \}/);
+  assert.ok(!html.includes(".video-wrap:has(> video:not([src]))"));
+});
+
+test("a finished audio project asks once whether a video was brought in, and the page is painted from the answer", () => {
+  const html = readPage();
+  const at = html.indexOf("function paintMediaKind() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  // Only a finished audio project; a draft, a running or stopped dubbing, or no project lets the picture go.
+  assert.match(body, /const finished = audio && !!state\.jobId && state\.job\.status === "done";\n {2}joinPlayer\.open\(finished \? state\.jobId : null\);/);
+  assert.match(body, /const joined = !!joinPlayer\.getJoin\(\);\n {2}document\.body\.classList\.toggle\("joined-video", joined\);/);
+  // The join player takes videos by the picture tools' rule, and tells the page what changed.
+  assert.match(html, /const joinPlayer = initJoinPlayer\(\{\n {2}\$, sound: \$\("doneVideo"\), picture: \$\("joinVideo"\), checkFile: videoProblem,/);
+  assert.ok(html.indexOf("const joinPlayer = initJoinPlayer({") < at, "wired before the first paint");
+  assert.match(html, /onChange: \(\) => \{\n {4}paintMediaKind\(\);/);
+  assert.match(html, /onTick: \(\) => donePlayer\.paintJoined\(\),/);
+  // The player and the subtitles are handed it.
+  assert.match(html, /join: joinPlayer, picture: \$\("joinVideo"\),/);
+  assert.match(html, /getPicture: \(\) => \(joinPlayer\.getJoin\(\) \? \$\("joinVideo"\) : doneVideo\),/);
+  assert.match(html, /new ResizeObserver\(subtitles\.syncVideoChrome\)\.observe\(\$\("joinVideo"\)\);/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Not for a video brought into an audio project."], "오디오 프로젝트에 가져온 영상에는 쓸 수 없어요");
 });

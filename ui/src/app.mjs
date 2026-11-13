@@ -42,6 +42,7 @@ import { scriptChecker } from "./scriptWatch.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "./timeline.mjs";
 import { playRange, cancelRange } from "./playRange.mjs";
 import { initDonePlayer } from "./donePlayer.mjs";
+import { initJoinPlayer } from "./joinPlayer.mjs";
 import { initLeftTabs } from "./leftTabs.mjs";
 import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
@@ -808,15 +809,42 @@ initPlayerFoot({ video: $("eraseVideo"), time: $("eraseTime"), play: $("erasePla
 function openProject() {
   return state.jobId ? (state.job && state.job.id === state.jobId ? state.job : null) : getDraft();
 }
+// A finished audio project takes a video (ui/src/joinPlayer.mjs): the way to
+// bring one in sits in the box that says "Audio", and once it is in the box
+// shows its picture, playing with the dubbed sound. The player, the subtitles
+// and the timeline are wired further down, so they are reached when called.
+// joinPlayer.getJoin() is what the timeline's lanes and the Download dialog
+// read; joinPlayer.saved() sends a change still waiting.
+const joinPlayer = initJoinPlayer({
+  $, sound: $("doneVideo"), picture: $("joinVideo"), checkFile: videoProblem,
+  // A video came in or was let go: the box, the pane's shape, the clock and
+  // where the subtitles sit all follow it.
+  onChange: () => {
+    paintMediaKind();
+    donePlayer.sizeVideoPane();
+    donePlayer.paintPlayhead();
+    subtitles.syncVideoChrome();
+  },
+  onTick: () => donePlayer.paintJoined(),
+});
 function paintMediaKind() {
   const audio = isAudio(openProject());
   document.body.classList.toggle("audio-project", audio);
+  // Whether a video was brought in is asked of the app once per finished
+  // audio project, and its answer paints this again (onChange above).
+  const finished = audio && !!state.jobId && state.job.status === "done";
+  joinPlayer.open(finished ? state.jobId : null);
+  const joined = !!joinPlayer.getJoin();
+  document.body.classList.toggle("joined-video", joined);
   // The erase screen opened from Home asks for a video of its own, whatever
   // draft is held behind it: its tab is not locked while it is up. The other
   // two would still start from that draft.
   const locked = document.body.dataset.screen === "erase" ? ["captions", "save"] : ["erase", "captions", "save"];
-  leftTabs.lock(audio ? locked : [], t("Only for projects with a video."));
-  for (const id of ["fullscreenBtn", "runFs"]) $(id).disabled = audio;
+  leftTabs.lock(audio ? locked : [], joined ? t("Not for a video brought into an audio project.")
+    : t("Only for projects with a video."));
+  // Full screen of the brought-in picture is of something.
+  $("fullscreenBtn").disabled = audio && !joined;
+  $("runFs").disabled = audio;
 }
 onDraftChange(paintMediaKind);
 new MutationObserver(paintMediaKind).observe(document.body, { attributes: true, attributeFilter: ["data-screen"] });
@@ -2095,6 +2123,7 @@ $("doneResume").addEventListener("click", () => { if (state.job) resumeStopped(s
 // the Original / Dubbing tabs, the pane's size -- is ui/src/donePlayer.mjs.
 const donePlayer = initDonePlayer({
   $, state, doneVideo,
+  join: joinPlayer, picture: $("joinVideo"),
   // Reached for when called: the timeline is wired further down this file.
   timeline: { paintTimeline: (t, total, clock) => timeline.paintTimeline(t, total, clock) },
 });
@@ -2270,6 +2299,8 @@ const subtitles = initSubtitleOverlay({
   },
   getDoneSource: donePlayer.getDoneSource,
   showVideoSource: donePlayer.showVideoSource,
+  // A brought-in video's picture is on an element of its own.
+  getPicture: () => (joinPlayer.getJoin() ? $("joinVideo") : doneVideo),
   // The Captions tab with no project open: the video comes in as the draft,
   // and the video with its subtitle file is opened as a finished project,
   // the way Projects opens a dub, on this tab.
@@ -2341,6 +2372,8 @@ onDraftChange(() => ratioUi.refresh());
 // (user, 2026-09-09).
 new ResizeObserver(subtitles.syncVideoChrome).observe(doneVideo);
 new ResizeObserver(subtitles.syncVideoChrome).observe(doneVideo.parentElement);
+// A brought-in video's picture takes its size when its file opens.
+new ResizeObserver(subtitles.syncVideoChrome).observe($("joinVideo"));
 
 // ---------------- Done: the timeline ----------------
 // The strip under the script table -- the ruler, the three lanes over it, the

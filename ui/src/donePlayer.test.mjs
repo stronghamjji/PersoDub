@@ -118,3 +118,123 @@ test("a video with its own subtitles shows only the Original tab and keeps the s
     if (saved) Object.defineProperty(globalThis, "document", saved); else delete globalThis.document;
   }
 });
+
+// ---- A video brought into an audio project (ui/src/joinPlayer.mjs) ----
+
+// Elements that keep their listeners, so a press can be sent to them.
+function listeningEl(extra = {}) {
+  const el = Object.assign(makeEl(), { listeners: {}, classes: {} }, extra);
+  el.addEventListener = (type, fn) => { (el.listeners[type] ||= []).push(fn); };
+  el.fire = (type) => { for (const fn of el.listeners[type] || []) fn({ type, target: el }); };
+  el.classList = { toggle: (c, on) => { el.classes[c] = on; }, add() {}, remove() {}, contains: () => false };
+  return el;
+}
+
+function joinHarness() {
+  const els = new Map();
+  const $ = (id) => { if (!els.has(id)) els.set(id, listeningEl()); return els.get(id); };
+  const saved = ["document", "ResizeObserver"].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]);
+  globalThis.document = { body: { dataset: { screen: "done" } }, querySelectorAll: () => [] };
+  globalThis.ResizeObserver = class { observe() {} };
+  const sound = listeningEl({ paused: true, ended: false, currentTime: 0, duration: 30, videoWidth: 0, videoHeight: 0,
+                              pauses: 0, plays: 0, pause() { sound.pauses += 1; }, load() {},
+                              play: async () => { sound.plays += 1; } });
+  const picture = listeningEl({ videoWidth: 1080, videoHeight: 1920 });
+  // What the join player answers: no video in until `on`.
+  const join = { on: false, isPlaying: false, at: 0, length: 40, calls: [],
+                 getJoin: () => (join.on ? {} : null), playing: () => join.isPlaying,
+                 play() { join.calls.push("play"); join.isPlaying = true; },
+                 pause() { join.calls.push("pause"); join.isPlaying = false; },
+                 time: () => join.at, end: () => join.length };
+  const painted = [];
+  $("doneMain").clientWidth = 1200;
+  const player = initDonePlayer({ $, state: { job: { id: "a", media: "audio" }, jobId: "a" }, doneVideo: sound,
+                                  timeline: { paintTimeline: (t, total, clock) => painted.push({ t, total, clock }) },
+                                  join, picture });
+  const restore = () => {
+    for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
+  };
+  return { player, $, sound, picture, join, painted, restore };
+}
+
+test("with no video brought in, the player is the sound element's as before", () => {
+  const { player, $, sound, picture, join, restore } = joinHarness();
+  try {
+    player.toggleDonePlay();
+    assert.equal(sound.plays, 1);
+    assert.deepEqual(join.calls, []);
+    sound.currentTime = 12;
+    player.paintPlayhead();
+    assert.equal($("videoTime").textContent, "00:00:12.0 / 00:00:30.0");
+    // A stopped sound shows the big play sign.
+    $("bigPlay").hidden = true;
+    sound.fire("pause");
+    assert.equal($("bigPlay").hidden, false);
+    // The pane's shape is the sound element's: none.
+    player.sizeVideoPane();
+    assert.equal($("videoPane").classes.portrait, false);
+    assert.equal(picture.listeners.click.length, 1, "the picture is there to be pressed all the same");
+  } finally { restore(); }
+});
+
+test("with a video brought in, play and pause are the joined video's, from every button and from the picture", () => {
+  const { player, $, sound, picture, join, restore } = joinHarness();
+  try {
+    join.on = true;
+    player.toggleDonePlay();
+    assert.deepEqual(join.calls, ["play"]);
+    assert.equal(sound.plays, 0, "the join player plays the sound itself, or the picture alone in its tail");
+    $("playToggle").fire("click");
+    assert.deepEqual(join.calls, ["play", "pause"]);
+    $("bigPlay").fire("click");
+    picture.fire("click");
+    assert.deepEqual(join.calls, ["play", "pause", "play", "pause"]);
+  } finally { restore(); }
+});
+
+test("with a video brought in, the clock is joined time over the joined length, and the script keeps the sound's time", () => {
+  const { player, $, sound, join, painted, restore } = joinHarness();
+  try {
+    join.on = true;
+    // In the tail: the sound stands at its end, the picture is 35 s in.
+    sound.currentTime = 30;
+    join.at = 35;
+    player.paintPlayhead();
+    assert.equal($("videoTime").textContent, "00:00:35.0 / 00:00:40.0");
+    assert.equal(player.getDoneClock(), "00:00:35.0 / 00:00:40.0");
+    assert.deepEqual(painted.at(-1), { t: 30, total: 30, clock: "00:00:35.0 / 00:00:40.0" });
+  } finally { restore(); }
+});
+
+test("in the tail the buttons go on saying it plays, and say stopped when the join player says so", () => {
+  const { player, $, sound, join, restore } = joinHarness();
+  try {
+    join.on = true;
+    join.isPlaying = true;
+    $("bigPlay").hidden = true;
+    // The sound ran out; the picture runs on.
+    sound.paused = true;
+    sound.fire("pause");
+    assert.equal($("bigPlay").hidden, true, "no play sign over a picture that is playing");
+    assert.equal($("playToggle").classes.playing, true);
+    // The end of the joined video: the join player tells the page.
+    join.isPlaying = false;
+    join.at = 40;
+    player.paintJoined();
+    assert.equal($("bigPlay").hidden, false);
+    assert.equal($("playToggle").classes.playing, false);
+    assert.equal($("videoTime").textContent, "00:00:40.0 / 00:00:40.0");
+  } finally { restore(); }
+});
+
+test("with a video brought in, the pane takes the picture's shape", () => {
+  const { player, $, picture, join, restore } = joinHarness();
+  try {
+    join.on = true;
+    picture.fire("loadedmetadata");
+    assert.equal($("videoPane").classes.portrait, true);
+    picture.videoWidth = 1920; picture.videoHeight = 1080;
+    player.sizeVideoPane();
+    assert.equal($("videoPane").classes.portrait, false);
+  } finally { restore(); }
+});

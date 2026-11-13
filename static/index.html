@@ -676,6 +676,18 @@
                        box has the same. -->
                   <video id="doneVideo" playsinline></video>
                   <div class="video-audio"><svg class="lu" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg><span data-i18n>Audio</span></div>
+                  <!-- A video brought into a finished audio project
+                       (ui/src/joinPlayer.mjs): its picture, muted, plays
+                       here with the dubbed sound, which stays on #doneVideo.
+                       Until one is in, the way to bring it sits under the
+                       word Audio. The stylesheet shows the picture while the
+                       body is "joined-video" (ui/src/app.mjs paintMediaKind). -->
+                  <video id="joinVideo" muted playsinline></video>
+                  <div class="video-bring" id="joinBring" hidden>
+                    <div class="video-bring-row"><button data-i18n class="btn btn-outline" id="joinBringBtn" type="button">Bring in a video</button><span>MP4 · MOV</span></div>
+                    <div class="video-bring-note" id="joinBringNote" role="status"></div>
+                    <input type="file" id="joinFile" accept=".mp4,.mov" hidden>
+                  </div>
                   <!-- The subtitles, live on the player: what the burned file
                        will say and how big, always at the foot of the picture
                        (owner, 2026-10-23). Kept in the job's own

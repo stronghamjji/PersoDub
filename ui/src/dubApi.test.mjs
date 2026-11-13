@@ -20,6 +20,10 @@ import {
   startErase,
   fetchCreditsLeft,
   fetchLanguages,
+  fetchJoin,
+  saveJoin,
+  uploadJoinVideo,
+  joinVideoUrl,
 } from "./dubApi.mjs";
 
 test("buildDubFormData sends exactly the fields app/main.py:dub_start expects", () => {
@@ -752,4 +756,60 @@ test("buildDubFormData: the voice engine travels when one is chosen, and only th
                "qwen3");
   // No choice sent: the server's saved default decides.
   assert.equal(buildDubFormData({ video, direction: "en_to_ko" }).get("tts_engine"), null);
+});
+
+// ---- A video brought into a finished audio project (app/api/join.py) ----
+
+test("the join calls: the state is read and saved at one path, and the picture plays from its own", async () => {
+  const real = globalThis.fetch;
+  const calls = [];
+  const state = { video: { name: "walk.mp4", seconds: 104 }, audio_seconds: 92,
+                  ranges: { video: [[0, 104]], audio: [[0, 92]] }, tempo: 1, stamp: "s1" };
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url, method: opts.method || "GET", body: opts.body, headers: opts.headers });
+      return new Response(JSON.stringify(opts.method === "PUT" ? {} : state), { status: 200 });
+    };
+    assert.deepEqual(await fetchJoin("j1"), state);
+    assert.deepEqual(calls[0], { url: "/api/dub/jobs/j1/join", method: "GET", body: undefined, headers: undefined });
+    await saveJoin("j1", { video: [[0, 50]], audio: [[0, 92]], tempo: 1.5 });
+    assert.equal(calls[1].url, "/api/dub/jobs/j1/join");
+    assert.equal(calls[1].method, "PUT");
+    assert.deepEqual(calls[1].headers, { "Content-Type": "application/json" });
+    assert.deepEqual(JSON.parse(calls[1].body), { video: [[0, 50]], audio: [[0, 92]], tempo: 1.5 });
+    // The stamp is on the picture's address, so a replaced video is fetched afresh.
+    assert.equal(joinVideoUrl("j1", "s1"), "/api/dub/jobs/j1/join/video?v=s1");
+    assert.equal(joinVideoUrl("j1"), "/api/dub/jobs/j1/join/video");
+    // An answer that is not a yes is thrown, never taken for "no video".
+    globalThis.fetch = async () => new Response("{}", { status: 500 });
+    await assert.rejects(fetchJoin("j1"));
+    await assert.rejects(saveJoin("j1", { video: [], audio: [], tempo: 1 }));
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("bringing a video in posts the file as `video`, and a refusal carries the app's sentence", async () => {
+  const real = globalThis.fetch;
+  const file = new Blob(["picture bytes"], { type: "video/mp4" });
+  try {
+    let sent = null;
+    globalThis.fetch = async (url, opts) => { sent = { url, opts }; return new Response("{}", { status: 200 }); };
+    await uploadJoinVideo("j1", file);
+    assert.equal(sent.url, "/api/dub/jobs/j1/join/video");
+    assert.equal(sent.opts.method, "POST");
+    assert.ok(sent.opts.body instanceof FormData);
+    assert.deepEqual([...sent.opts.body.keys()], ["video"]);
+    assert.equal(sent.opts.body.get("video").size, file.size);
+    // The app's own sentence, whichever shape it comes in...
+    globalThis.fetch = async () => new Response(JSON.stringify({ detail: "This tool takes video files only." }), { status: 400 });
+    await assert.rejects(uploadJoinVideo("j1", file), { message: "This tool takes video files only." });
+    globalThis.fetch = async () => new Response(JSON.stringify({ detail: { message: "Only for audio projects." } }), { status: 409 });
+    await assert.rejects(uploadJoinVideo("j1", file), { message: "Only for audio projects.", status: 409 });
+    // ...and the page's own when the app gave none.
+    globalThis.fetch = async () => new Response("oops", { status: 500 });
+    await assert.rejects(uploadJoinVideo("j1", file), { message: "Could not bring the video in." });
+  } finally {
+    globalThis.fetch = real;
+  }
 });

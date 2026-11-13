@@ -1867,8 +1867,10 @@
     display: inline-flex; align-items: center; justify-content: center;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
   .video-bigplay[hidden] { display: none; }
-  /* No video in the panel: no play sign over nothing, and the foot's play is off. */
-  .video-wrap:has(> video:not([src])) .video-bigplay { display: none; }
+  /* No video in the panel: no play sign over nothing, and the foot's play is off.
+     Asked of the player alone: the element beside it is a brought-in video's
+     picture, empty on every other project. */
+  .video-wrap:has(> #doneVideo:not([src])) .video-bigplay { display: none; }
   /* An audio project (the body's "audio-project", ui/src/app.mjs): the box
      has no picture, only the sound sign and the word in its middle. The
      <video> still plays the sound and is still what the subtitles are placed
@@ -1880,6 +1882,27 @@
   body.audio-project .video-audio { display: flex; }
   body.audio-project :is(.video-wrap, .running-video) video { width: 100%; height: 100%; }
   body.audio-project .video-bigplay { display: none; }
+  /* A finished audio project takes a video (ui/src/joinPlayer.mjs). Until one
+     is in, the way to bring it sits under the sound sign and the word, the
+     two centred together, with what went wrong on a line below. */
+  .video-bring { position: absolute; left: 50%; top: 50%; transform: translate(-50%, 14px);
+    display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .video-bring[hidden] { display: none; }
+  .video-wrap:has(> .video-bring:not([hidden])) .video-audio { transform: translate(-50%, calc(-50% - 19px)); }
+  .video-bring-row { display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    font-size: 11px; color: var(--muted-foreground); }
+  .video-bring-row .btn { height: 26px; padding: 0 12px; font-size: 11px; font-weight: 500; }
+  .video-bring-note { font-size: 11px; color: var(--muted-foreground); text-align: center; }
+  .video-bring-note:empty { display: none; }
+  /* With a video in (the body's "joined-video", ui/src/app.mjs): its picture
+     has an element of its own, sized as any project's video is. The sound
+     goes on playing from #doneVideo, which takes no room. The box is a
+     picture again, so the sign and the row go and the play sign comes back. */
+  #joinVideo { display: none; }
+  body.joined-video #joinVideo { display: block; width: auto; height: auto; }
+  body.joined-video #doneVideo { position: absolute; width: 0; height: 0; }
+  body.joined-video :is(.video-audio, .video-bring) { display: none; }
+  body.joined-video .video-bigplay:not([hidden]) { display: inline-flex; }
   /* The row under the picture: the small play button and the clock. The big
      button in the middle of the picture stays -- it is the "this is stopped"
      sign. This one is the control you reach for without covering the video. */

@@ -5,9 +5,13 @@
 // this one is tied to the script and the timeline, so it is a file of its own.
 // Lifted out of the page's script unchanged (2026-10-10).
 //
-// The elements this file touches: #doneVideo, #bigPlay, #playToggle,
-// #videoTime, #fullscreenBtn, #videoWrap, #videoPane and its .vtab buttons,
-// #vtabDubbed, #doneMain, and the rows in #scriptBox.
+// A video brought into an audio project (ui/src/joinPlayer.mjs) plays on two
+// elements: the sound stays on #doneVideo, and play, pause, the clock and the
+// pane's shape are the joined video's while one is in.
+//
+// The elements this file touches: #doneVideo, #joinVideo (a press on it),
+// #bigPlay, #playToggle, #videoTime, #fullscreenBtn, #videoWrap, #videoPane
+// and its .vtab buttons, #vtabDubbed, #doneMain, and the rows in #scriptBox.
 import { resultUrl } from "./dubApi.mjs";
 import { fmtClockTenths } from "./format.mjs";
 import { lucide } from "./icons.mjs";
@@ -23,15 +27,22 @@ import { t } from "./i18n.mjs";
  * @param {{paintTimeline: (t: number, total: number, clock: string) => void}} deps.timeline
  *        where the timeline is told the moment. The page wires the timeline
  *        after this, so it is reached only when called.
+ * @param {{getJoin: () => object|null, playing: () => boolean, play: () => void,
+ *          pause: () => void, time: () => number, end: () => number}} [deps.join]
+ *        the join player (ui/src/joinPlayer.mjs)
+ * @param {any} [deps.picture]  #joinVideo, the brought-in video's picture
  * @returns {{ openJob: (jobId: string) => boolean,
  *   doneVideoSrc: (job: object, which: string) => string,
  *   getDoneSource: () => string, getDoneVersion: () => number, getDoneClock: () => string,
  *   toggleDonePlay: () => void, sizeVideoPane: () => void,
  *   isNowLine: (t: number, el: any) => boolean, paintPlayhead: () => void,
+ *   paintJoined: () => void,
  *   showVideoSource: (which: string) => Promise<void>,
  *   releaseDoneVideo: () => void, reloadDoneVideo: () => void }}
  */
-export function initDonePlayer({ $, state, doneVideo, timeline }) {
+export function initDonePlayer({ $, state, doneVideo, timeline, join = null, picture = null }) {
+  // Is a brought-in video playing with the sound right now?
+  const joined = () => !!join && !!join.getJoin();
   // Which of the two files the player is showing. The tabs swap it in place.
   let doneSource = "dubbed";
   // Bumped when a remade line changes the finished video under the player, so the
@@ -67,6 +78,14 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   // The frame is the whole transport: there are no player controls, so the big
   // round button and the picture itself both start and stop it.
   function toggleDonePlay() {
+    // The joined video runs on after its sound ends, so whether it is playing
+    // is the join player's to say, and to change.
+    if (joined()) {
+      if (join.playing()) { join.pause(); return; }
+      cancelRange(doneVideo);
+      join.play();
+      return;
+    }
     if (!doneVideo.paused) { doneVideo.pause(); return; }
     // Playing on from here means the line's stopping point no longer applies.
     cancelRange(doneVideo);
@@ -75,6 +94,7 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   $("bigPlay").addEventListener("click", toggleDonePlay);
   $("playToggle").addEventListener("click", toggleDonePlay);
   doneVideo.addEventListener("click", toggleDonePlay);
+  if (picture) picture.addEventListener("click", toggleDonePlay);
 
   // The small button under the picture says what pressing it will do, so it is
   // the pause sign while the video plays and the play sign the rest of the time.
@@ -84,7 +104,7 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   const SMALL_PAUSE = lucide("pause", 12.8, true);
   function paintPlayToggle() {
     const btn = $("playToggle");
-    const playing = !doneVideo.paused && !doneVideo.ended;
+    const playing = joined() ? join.playing() : !doneVideo.paused && !doneVideo.ended;
     btn.innerHTML = playing ? SMALL_PAUSE : SMALL_PLAY;
     btn.classList.toggle("playing", playing);
     btn.setAttribute("aria-label", playing ? t("Pause") : t("Play"));
@@ -99,7 +119,8 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   // comes back the moment the video stops, however it stopped -- and the small one
   // changes face at the same moment.
   for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; paintPlayToggle(); });
-  for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; paintPlayToggle(); });
+  // (Unless a joined video's picture is running on after its sound.)
+  for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = joined() && join.playing(); paintPlayToggle(); });
   for (const e of ["timeupdate", "loadedmetadata", "seeked", "emptied"]) doneVideo.addEventListener(e, paintPlayhead);
   // The left and center panels share the row the way the mockup does (866 : 861,
   // in the stylesheet) until the grip between them is dragged; a dragged width
@@ -115,9 +136,11 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
     if (!room) return;   // the screen is not on show, so there is nothing to measure
     const stacked = room < 820;
     main.classList.toggle("stacked", stacked);
-    pane.classList.toggle("portrait", doneVideo.videoHeight > doneVideo.videoWidth);
+    const shape = joined() ? picture : doneVideo;
+    pane.classList.toggle("portrait", shape.videoHeight > shape.videoWidth);
   }
   doneVideo.addEventListener("loadedmetadata", sizeVideoPane);
+  if (picture) picture.addEventListener("loadedmetadata", sizeVideoPane);
   // Full screen is the picture with its subtitles, not the bare video element:
   // the overlay is drawn over the video, and it has to come along.
   $("fullscreenBtn").addEventListener("click", () => {
@@ -147,7 +170,10 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   function paintPlayhead() {
     const t = doneVideo.currentTime || 0;
     const total = Number.isFinite(doneVideo.duration) ? doneVideo.duration : 0;
-    const clock = `${fmtClockTenths(t)} / ${fmtClockTenths(total)}`;
+    // With a video brought in, the clock counts the joined video; the script
+    // rows, and the timeline until it draws both lanes, keep the sound's time.
+    const clock = joined() ? `${fmtClockTenths(join.time())} / ${fmtClockTenths(join.end())}`
+      : `${fmtClockTenths(t)} / ${fmtClockTenths(total)}`;
     doneClock = clock;
     $("videoTime").textContent = clock;
     for (const row of $("scriptBox").querySelectorAll(".sc-row[data-start]")) {
@@ -155,6 +181,16 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
     }
     // On the Erase tab the timeline follows that tab's own video instead.
     if (document.body.dataset.screen !== "erase") timeline.paintTimeline(t, total, clock);
+  }
+
+  // The joined video stopped, started or moved with no signal from the sound
+  // element (its tail, its end, a seek in joined time): the join player says
+  // so, and everything that shows the moment is painted from it.
+  function paintJoined() {
+    if (!joined()) return;
+    $("bigPlay").hidden = join.playing();
+    paintPlayToggle();
+    paintPlayhead();
   }
 
   // Original / Dubbed. The same moment in the same video, so the position and
@@ -232,7 +268,7 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   }
 
   return {
-    openJob, doneVideoSrc, toggleDonePlay, sizeVideoPane, isNowLine, paintPlayhead, showVideoSource,
+    openJob, doneVideoSrc, toggleDonePlay, sizeVideoPane, isNowLine, paintPlayhead, paintJoined, showVideoSource,
     releaseDoneVideo, reloadDoneVideo,
     // Read by the subtitles (only the dubbed file has them), the Export dialog
     // (the remake mark) and the timeline (the clock it starts out showing).
