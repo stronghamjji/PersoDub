@@ -879,3 +879,103 @@ test("the page hands the dialog the project's media, for a draft and for a dubbi
   assert.match(block, /return \{ kind: "draft", media: getDraft\(\)\.media, /);
   assert.match(block, /kind: "dub", [^}]*\bmedia: job\.media,/);
 });
+
+// ---- a video brought into a finished audio project ---------------------------
+// The app's answer about it (app/api/join.py GET /join), as the page hands it
+// over after a save still waiting has gone out (ui/src/app.mjs exportContext).
+const JOIN = { video: { name: "walk.mp4", seconds: 95 }, audio_seconds: 80,
+               ranges: { video: [[0, 95]], audio: [[0, 80]] }, tempo: 1, stamp: "a1b2c3" };
+const JOINED = { ...AUDIO, joined: JOIN };
+const NOTE = "The audio lane is cut, so the subtitle file's times differ from the dubbed video's.";
+
+test("a video brought in comes first, as Dubbed video under Video; the audio and subtitles rows stay as they were", () => {
+  const rows = exportRows(JOINED, "flac");
+  assert.deepEqual(rows[0], { id: "video", group: "video", icon: "film", label: "Dubbed video",
+                              href: "/api/dub/result/J1/joined?download=1&v=a1b2c3", name: "dub_ko.mp4" });
+  assert.deepEqual(rows.slice(1), exportRows(AUDIO, "flac"));
+  // Its picture is the user's own, in its own shape: no ratio rides on it.
+  assert.equal(exportRows({ ...JOINED, ratio: "9:16" }, "mp3")[0].href, "/api/dub/result/J1/joined?download=1&v=a1b2c3");
+  // Another stamp after a cut: another address, so no file from before it is served.
+  assert.equal(exportRows({ ...JOINED, joined: { ...JOIN, stamp: "ffee00" } }, "mp3")[0].href,
+               "/api/dub/result/J1/joined?download=1&v=ffee00");
+  const headings = [...rowsHtml(rows, "flac").matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]);
+  assert.deepEqual(headings, ["Video", "Audio", "Subtitles &amp; script"]);
+});
+
+test("without a video brought in, an audio project and a video project are what they were", () => {
+  assert.deepEqual(exportRows({ ...AUDIO, joined: null }, "mp3"), exportRows(AUDIO, "mp3"));
+  assert.deepEqual(exportRows({ ...STEMS, joined: JOIN }, "mp3"), exportRows(STEMS, "mp3"));
+  assert.equal(rowsHtml(exportRows(AUDIO, "mp3"), "mp3").includes("export-note"), false);
+  assert.equal(rowsHtml(exportRows(STEMS, "mp3"), "mp3").includes("export-note"), false);
+});
+
+test("the dialog opens on Dubbed video the first time, and its ticks are remembered apart from the plain audio project's", async () => {
+  const h = harness({ ctx: JOINED, stored: { [TICKS_KEY]: '{"dub-audio":["srt"],"dub":["audio"]}' } });
+  await h.api.open();
+  assert.deepEqual(h.ticked(), ["video"]);
+  h.tick("audio");
+  assert.deepEqual(JSON.parse(h.store.get(TICKS_KEY)),
+                   { "dub-audio": ["srt"], dub: ["audio"], "dub-joined": ["video", "audio"] });
+  const again = harness({ ctx: JOINED, stored: { [TICKS_KEY]: h.store.get(TICKS_KEY) } });
+  await again.api.open();
+  assert.deepEqual(again.ticked(), ["video", "audio"]);
+  const plain = harness({ ctx: AUDIO, stored: { [TICKS_KEY]: h.store.get(TICKS_KEY) } });
+  await plain.api.open();
+  assert.deepEqual(plain.ticked(), ["srt"]);
+});
+
+test("the subtitles group says the times differ only when the audio lane is cut or sped", async (t) => {
+  const with_ = (change) => rowsHtml(exportRows({ ...JOINED, joined: { ...JOIN, ...change } }, "mp3"), "mp3");
+  // Escaped, as every row's words are.
+  const note = `<div class="export-note">${NOTE.replaceAll("'", "&#39;")}</div>`;
+  const notes = (html) => html.split('class="export-note"').length - 1;
+  assert.equal(notes(with_({})), 0, "whole and at normal speed");
+  assert.equal(notes(with_({ ranges: { video: [[0, 95]], audio: [[0, 40], [40, 80]] } })), 0, "split, nothing taken out");
+  assert.equal(notes(with_({ ranges: { video: [[10, 95]], audio: [[0, 80]] } })), 0, "only the picture cut");
+  for (const change of [{ ranges: { video: [[0, 95]], audio: [[0, 30], [50, 80]] } },
+                        { ranges: { video: [[0, 95]], audio: [[2, 80]] } },
+                        { tempo: 2 }, { tempo: 0.5 }]) {
+    const html = with_(change);
+    assert.equal(notes(html), 1);
+    // Under the last row of the group, before nothing else.
+    assert.ok(html.endsWith(`</a>${note}`));
+    assert.ok(/data-row="script"[^]*<\/a><div class="export-note">/.test(html), "right after the script row");
+  }
+  // Under the .srt when there is no script, and nowhere when there is neither.
+  const srtOnly = rowsHtml(exportRows({ ...JOINED, hasScript: false, joined: { ...JOIN, tempo: 2 } }, "mp3"), "mp3");
+  assert.ok(srtOnly.endsWith(`</a>${note}`));
+  assert.equal(notes(rowsHtml(exportRows({ ...JOINED, hasSrt: false, hasScript: false, joined: { ...JOIN, tempo: 2 } }, "mp3"), "mp3")), 0);
+  await inKorean(t);
+  assert.match(with_({ tempo: 3 }), /<div class="export-note">오디오 줄을 잘라서 자막 파일의 시간이 더빙 영상과 달라요\.<\/div>/);
+});
+
+// Built on request, as the subtitled video is: the file is asked for first,
+// the line under the rows says which one is going out and the buttons wait.
+test("the dubbed video is made first, the way the subtitled video is, then handed over under its name", async () => {
+  let made = null;
+  const asked = [];
+  const h = harness({ ctx: JOINED, fetchFn: (href) => { asked.push(href); return new Promise((r) => { made = r; }); } });
+  await h.api.open();
+  h.go();
+  await settle();
+  assert.deepEqual(asked, ["/api/dub/result/J1/joined?download=1&v=a1b2c3"]);
+  assert.equal(h.$("exportWhere").textContent, "Downloading 1 of 1…");
+  assert.equal(h.$("exportGoBtn").disabled, true);
+  assert.equal(h.$("exportCloseBtn").disabled, true);
+  assert.deepEqual(h.followed, [], "not handed over before it is made");
+  made({ ok: true });
+  await settle();
+  assert.deepEqual(h.followed, [["/api/dub/result/J1/joined?download=1&v=a1b2c3", "dub_ko.mp4"]]);
+  assert.deepEqual(h.saved(), ["video"]);
+});
+
+// The page sends a cut still waiting before it asks for the stamp, so the
+// link is the one for what is on the timeline now.
+test("the page saves a waiting change, then hands the dialog the app's answer as `joined`", () => {
+  const app = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
+  const block = app.slice(app.indexOf("async function exportContext()"), app.indexOf("const exportDialog = initExportDialog("));
+  const saved = block.indexOf("await joinPlayer.saved()");
+  const asked = block.indexOf("/api/dub/jobs/${job.id}/join`");
+  assert.ok(saved > 0 && asked > saved, "saved first, then asked");
+  assert.match(block, /kind: "dub", [^}]*\bjoined,/);
+});

@@ -2174,6 +2174,16 @@ async function exportContext() {
   // still has it (a dubbing made wholly on Perso has neither).
   const stems = await fetch(`/api/dub/result/${job.id}/stems`)
     .then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  // A video brought into an audio project: a cut still waiting goes out first,
+  // then the app is asked, so the Dubbed video link carries the stamp of what
+  // the timeline shows now. No answer leaves the audio project's own rows.
+  let joined = null;
+  if (joinPlayer.getJoin()) {
+    await joinPlayer.saved();
+    const d = await fetch(`/api/dub/jobs/${job.id}/join`)
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    joined = d && d.video ? d : null;
+  }
   // The subtitled video downloads in the look chosen on the work screen: the
   // same subStyle the player edits (preset, position, size). Nothing to pick
   // here -- the dialog only hands files over (user, 2026-09-03). The remake
@@ -2184,8 +2194,9 @@ async function exportContext() {
   const { preset: subPreset, query: posQ } = subtitles.exportParams();
   return {
     kind: "dub", jobId: job.id, target, mark, hasSrt, hasScript, stems, project: job.project, fromLink: !!job.from_link, ratio,
-    // "audio" for an audio project, whose rows are its sounds and no video.
-    media: job.media,
+    // "audio" for an audio project, whose rows are its sounds and no video,
+    // and the video brought into it, when there is one.
+    media: job.media, joined,
     // The script's file name: the project as the screens show it, and both languages.
     title: shownName(job), source: job.source_lang,
     // The same URL the player is on, remake mark and all: without it a download

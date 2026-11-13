@@ -2901,6 +2901,9 @@
     color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
   .export-seg :is([data-fmt], [data-tempo]).on { background: var(--primary); color: var(--primary-foreground); }
   .export-list a .export-seg + .export-state { margin-left: 0; }
+  /* A line said under a row (the subtitle file's times after the audio lane
+     is cut): quiet, the size of a group's heading. */
+  .export-list .export-note { margin: -2px 12px 0; font-size: 11px; color: var(--muted-foreground); }
   /* The "?" beside Voice and Background: what each file is, in the same tip
      the timeline's tools show ([data-tip] above), hung from the "?"'s left
      edge and wrapped at 180px: the dialog is narrow and clips what leaves
