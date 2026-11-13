@@ -430,6 +430,23 @@ def test_a_job_that_was_running_comes_back_as_interrupted(tmp_path):
     assert j["logs"] == [] and j["notices"] == []
 
 
+def test_a_job_whose_helper_was_stopped_by_a_quit_ends_interrupted():
+    # Issue #237: the computer closing sent the separation helper SIGTERM a
+    # few seconds before the app quit; the job was saved as a failure, and the
+    # next launch reported it as a crash instead of an interrupted dub.
+    from app.run_errors import describe_exit_failure
+
+    class _Result:
+        stderr, stdout, returncode = "", "", -15
+
+    def work(log):
+        raise RuntimeError("Voice separation failed on this computer. Check the video file. (%s)"
+                           % describe_exit_failure("local separation", _Result()))
+    store = JobStore()
+    j = _wait(store, store.run_async(work))
+    assert j["status"] == "error" and j["error"] == "interrupted"
+
+
 def test_restore_skips_a_broken_job_json(tmp_path):
     (tmp_path / "day" / "job").mkdir(parents=True)
     (tmp_path / "day" / "job" / "job.json").write_text("{ not json", encoding="utf-8")
