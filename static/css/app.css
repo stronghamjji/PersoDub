@@ -1901,7 +1901,11 @@
   #joinVideo { display: none; }
   body.joined-video #joinVideo { display: block; width: auto; height: auto; }
   body.joined-video #doneVideo { position: absolute; width: 0; height: 0; }
-  body.joined-video :is(.video-audio, .video-bring) { display: none; }
+  body.joined-video .video-audio { display: none; }
+  /* With a video in, the box keeps only the line (bringing another in, a
+     refusal, a picture this browser cannot show), under the play sign. */
+  body.joined-video .video-bring-row { display: none; }
+  body.joined-video .video-bring { transform: translate(-50%, 44px); width: max-content; max-width: 80%; }
   body.joined-video .video-bigplay:not([hidden]) { display: inline-flex; }
   /* The row under the picture: the small play button and the clock. The big
      button in the middle of the picture stays -- it is the "this is stopped"
@@ -2161,6 +2165,27 @@
   .tl-cut { cursor: pointer; }
   .tl-cut .tl-film { height: 55px; }
   .tl-cut.sel { outline: 2px solid #fff; outline-offset: -1px; z-index: 1; }
+  /* A video brought into an audio project (ui/src/timeline.mjs joinLanesHtml):
+     its picture's lane is a draft's film strip alone, over the sound's lane,
+     and its name carries the quiet way to swap the video at its right end. */
+  .tl-name-join, .tl-lane-join, .tl-lane-join .tl-vclip, .tl-lane-join .tl-seam { height: 55px; }
+  .tl-swap { margin-left: auto; margin-right: 8px; padding: 0; border: 0; background: none;
+    font: inherit; color: var(--muted-foreground); cursor: pointer; white-space: nowrap;
+    text-decoration: underline; text-underline-offset: 2px; }
+  .tl-swap:hover { color: var(--foreground); }
+  /* Its head: the audio speed in the Download dialog's switch (.export-seg),
+     then the pill that says which lane is longer. */
+  .tl-speed { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; white-space: nowrap; }
+  .tl-speed .export-seg { margin-left: 0; }
+  .tl-speed .export-seg [data-tempo] { border: 0; background: none; font-family: inherit; padding: 2px 5px;
+    font-variant-numeric: tabular-nums; }
+  .tl-pill { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 20px;
+    margin-left: 12px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .tl-pill.warn { color: var(--timeline-short); background: color-mix(in srgb, var(--timeline-short) 16%, transparent); }
+  .tl-pill.ok { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+  .tl-pill .lu { stroke-width: 2.6; }
+  /* Its tip is a sentence or two: wrapped, hung from its left edge. */
+  .tl-pill[data-tip]::after { white-space: normal; width: 260px; left: 0; transform: none; }
   /* Two adjacent clips show near-identical video frames, so the couple of
      pixels between them (left dark, the same as the space around the strip)
      used to be too faint to read as a cut. A thin accent-coloured line fills
@@ -2872,9 +2897,9 @@
      export-ratio 1): the Captions tab's segment, lit in the primary colour. */
   .export-seg { margin-left: auto; display: inline-flex; background: var(--secondary);
     border-radius: var(--radius-sm); padding: 2px; }
-  .export-seg [data-fmt] { border-radius: 5px; padding: 3px 6px; font-size: var(--font-label);
+  .export-seg :is([data-fmt], [data-tempo]) { border-radius: 5px; padding: 3px 6px; font-size: var(--font-label);
     color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
-  .export-seg [data-fmt].on { background: var(--primary); color: var(--primary-foreground); }
+  .export-seg :is([data-fmt], [data-tempo]).on { background: var(--primary); color: var(--primary-foreground); }
   .export-list a .export-seg + .export-state { margin-left: 0; }
   /* The "?" beside Voice and Background: what each file is, in the same tip
      the timeline's tools show ([data-tip] above), hung from the "?"'s left

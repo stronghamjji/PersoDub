@@ -2057,9 +2057,13 @@ test("with a video brought in the box shows its picture: no badge, no bring-in r
   assert.match(html, /body\.joined-video #joinVideo \{ display: block; width: auto; height: auto; \}/);
   // The sound goes on playing from #doneVideo, which takes no room.
   assert.match(html, /body\.joined-video #doneVideo \{ position: absolute; width: 0; height: 0; \}/);
-  assert.match(html, /body\.joined-video :is\(\.video-audio, \.video-bring\) \{ display: none; \}/);
-  assert.ok(html.indexOf("body.joined-video :is(.video-audio, .video-bring)") > html.indexOf("body.audio-project .video-audio { display: flex; }"),
+  assert.match(html, /body\.joined-video \.video-audio \{ display: none; \}/);
+  assert.ok(html.indexOf("body.joined-video .video-audio") > html.indexOf("body.audio-project .video-audio { display: flex; }"),
             "after the rule it overrides");
+  // Of the bring-in row, only its line stays (another video coming in, a
+  // refusal, a picture the browser cannot show), under the play sign.
+  assert.match(html, /body\.joined-video \.video-bring-row \{ display: none; \}/);
+  assert.match(html, /body\.joined-video \.video-bring \{ transform: translate\(-50%, 44px\);/);
   // A picture standing still has its play sign back.
   assert.match(html, /body\.joined-video \.video-bigplay:not\(\[hidden\]\) \{ display: inline-flex; \}/);
   // "No video in the panel" asks the player, not the picture's element, which is empty on every other project.
@@ -2085,4 +2089,12 @@ test("a finished audio project asks once whether a video was brought in, and the
   assert.match(html, /new ResizeObserver\(subtitles\.syncVideoChrome\)\.observe\(\$\("joinVideo"\)\);/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["Not for a video brought into an audio project."], "오디오 프로젝트에 가져온 영상에는 쓸 수 없어요");
+});
+
+test("the timeline reads the brought-in video's lanes from the join player, and is drawn again when a video comes in", () => {
+  const html = readPage();
+  assert.match(html, /getJoin: \(\) => joinPlayer\.getJoin\(\),\n {2}changeJoinVideo: \(\) => joinPlayer\.change\(\),/);
+  const at = html.indexOf("const joinPlayer = initJoinPlayer({");
+  const wiring = html.slice(at, html.indexOf("\n});", at));
+  assert.match(wiring, /subtitles\.syncVideoChrome\(\);\n {4}timeline\.redraw\(\);/);
 });

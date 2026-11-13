@@ -17,6 +17,15 @@
 // ui/src/cutTools.mjs's. Before a video is imported there is one empty row,
 // which takes a dropped video file (ui/src/draftImport.mjs).
 //
+// A finished audio project with a video brought in (getJoin, the join
+// player's handle, ui/src/joinPlayer.mjs): a Video lane over the Audio lane,
+// each its kept parts laid end to end in joined time, then the lines drawn
+// where their sound lands. The draft's cut tools and keys act on the lane
+// whose clip was clicked; one undo stack covers both lanes and the audio
+// speed beside them, and the pill says which lane is longer. The sums are
+// ui/src/joinCuts.mjs's. The playhead, the ruler and a press on a lane read
+// joined time, which the join player turns into each file's own.
+//
 // The Erase tab (showErase): the same strip, the same tools and keys, on the
 // erase screen's own video, with one more lane under the video that says what
 // is erased and how far along. Before an erase the clips are the draft's, so
@@ -58,6 +67,9 @@ import {
   totalOf, keptToSource, sourceToKept, playableFrom,
   split, removeClip, removeLeft, removeRight, sameRanges, createHistory,
 } from "./cutTools.mjs";
+import {
+  TEMPOS, cloneJoin, joinedLength, applyCut, landing, lineSpan, lengthPill, snapToEnds, toSave,
+} from "./joinCuts.mjs";
 
 // Roughly the room one time label needs. Exported because the New project
 // dialog's trim bar rules its own ruler by it -- one answer to "how much room
@@ -128,6 +140,10 @@ const SPEAKER_COLOURS = 6;
  *        a draft makes count kept time too
  * @param {() => any[]} [deps.videos]  every video getVideo can answer with, so
  *        each one plays a draft's kept parts only
+ * @param {() => object|null} [deps.getJoin]  the video brought into the open
+ *        audio project (ui/src/joinPlayer.mjs getJoin), or null for none
+ * @param {() => void} [deps.changeJoinVideo]  ask for another file to replace
+ *        the brought-in video
  * @returns the operations the rest of the page calls.
  */
 export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, getSubStyle,
@@ -140,6 +156,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
                                  // "captions"): no voices, so no voice lanes
                                  // and no voice legend, only the video and captions.
                                  ownSubtitles = () => false,
+                                 getJoin = () => null, changeJoinVideo = () => {},
                                  loadImage = defaultLoadImage, fetchJson = defaultFetchJson }) {
   // There is no floor under the scale: Fit has to show the whole video at
   // once however long it is. A floor of 10px a second kept a 26-minute job
@@ -186,6 +203,36 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   const jobClip = () => (erase && erase.strip && erase.strip !== "draft" ? erase.strip : null);
   const locked = () => !!erase && !!erase.locked;
 
+  // A video brought into this finished audio project (getJoin): the two
+  // lanes as drawn, splits kept as splits, and the speed -- ui/src/joinCuts.mjs's
+  // state -- with their one history, the lane whose clip was clicked, that
+  // clip, and a count that changes with every new video so its film strip is
+  // asked for afresh.
+  let jstate = null;
+  let jfor = null;          // the handle jstate belongs to
+  let jhistory = null;
+  let jlane = "";           // "video", "audio", or "" until a clip is clicked
+  let jsel = -1;
+  let jgen = 0;
+  // The handle, while a finished job's strip is drawing its lanes.
+  const joined = () => (mode === "job" && jfor && getJoin() === jfor ? jfor : null);
+  // The lanes follow the join player: a new handle (another video, or the
+  // project opened again) or ranges changed from elsewhere start afresh; our
+  // own change echoing back keeps the splits.
+  function syncJoin() {
+    const j = getJoin();
+    if (!j) { jstate = null; jfor = null; jhistory = null; jlane = ""; jsel = -1; return; }
+    const c = { ...j.clips(), tempo: j.tempo() };
+    const now = (s) => toSave(s, j.video.duration, j.audio.duration);
+    if (j === jfor && jstate.tempo === c.tempo && sameRanges(now(jstate).video, now(c).video)
+        && sameRanges(now(jstate).audio, now(c).audio)) return;
+    if (j !== jfor) jgen += 1;
+    jstate = c;
+    jfor = j;
+    jhistory = createHistory(jstate, 100, cloneJoin);
+    jlane = ""; jsel = -1;
+  }
+
   // ---- The pictures of the video: film strip and waveform ---------------------
   // Fetched once per URL and kept for the session; the strip is drawn in the
   // plain clip colour until they arrive, then drawn again.
@@ -219,14 +266,16 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // screen of the part on show are in the page, and a scroll draws the rest as
   // they come. (Widening the boxes to fit a cap of 400 stretched every frame
   // sideways on a long video -- owner, 2026-10-14.)
-  function filmHtml(media, a, b, w, h, x) {
+  // `media.strip` and `full` are the brought-in video's: its strip's own
+  // address, and its own length (the strip's length is the sound's).
+  function filmHtml(media, a, b, w, h, x, full) {
     // Sound alone has no frames: no strip is drawn, and none is asked for.
     if (isAudio(media)) return "";
-    const url = `/api/media/${media.kind}/${encodeURIComponent(media.id)}/filmstrip`;
+    const url = media.strip || `/api/media/${media.kind}/${encodeURIComponent(media.id)}/filmstrip`;
     const strip = picture(url, (u) => loadImage(u).then((img) => ({ n: Math.max(1, Math.round(img.width / FRAME_W)) })));
     if (!strip || !(b > a)) return '<div class="tl-film"></div>';
     const fw = FRAME_W * h / FRAME_H;
-    const f = { strip, a, w, x, fw, k0: -1, k1: -1 };
+    const f = { strip, a, w, x, fw, k0: -1, k1: -1, full };
     const i = films.push(f) - 1;
     const [k0, k1] = filmRange(f);
     return `<div class="tl-film" data-film="${i}" style="--strip:url('${url}');--strip-w:${(strip.n * fw).toFixed(1)}px">${filmTiles(f, k0, k1)}</div>`;
@@ -242,7 +291,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   }
 
   function filmTiles(f, k0, k1) {
-    const full = videoLength();
+    const full = f.full || videoLength();
     f.k0 = k0; f.k1 = k1;
     let tiles = "";
     for (let k = k0; k < k1; k++) {
@@ -293,11 +342,31 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   const tool = (id, icon, size, label, key = "") =>
     `<button class="tl-tool" id="${id}" type="button" data-tip="${label}"${key ? ` data-tip-key="${key}"` : ""} aria-label="${label}">${lucide(icon, size)}</button>`;
 
+  const cutToolsHtml = () =>
+    `<span class="tl-tools">${tool("tlUndo", "undo-2", 15, t("Undo"), `${modKey()}+Z`)}${tool("tlRedo", "redo-2", 15, t("Redo"), `Shift+${modKey()}+Z`)}<span class="tl-sep"></span>`
+    + `${tool("tlSplit", "gap-horizontal", 13.8, t("Split at playhead"), `${modKey()}+B`)}${tool("tlDelLeft", "split-left", 13.8, t("Delete left of playhead"))}`
+    + `${tool("tlDelRight", "split-right", 13.8, t("Delete right of playhead"))}${tool("tlDelete", "trash", 16.2, t("Delete selected"), "Delete")}</span>`;
+
+  // The audio speed in the owner's fixed steps, in the Download dialog's
+  // switch (.export-seg).
+  function speedHtml() {
+    const on = jstate.tempo;
+    return `<span class="tl-speed">${t("Audio speed")}<span class="export-seg" role="radiogroup" aria-label="${t("Audio speed")}">`
+      + TEMPOS.map((x, i) => `<button type="button" id="tlSpeed${i}" data-tempo="${x}" role="radio" aria-checked="${x === on}"`
+        + `${x === on ? ' class="on"' : ""}>${x}×</button>`).join("") + "</span></span>";
+  }
+
+  // Which lane is longer, on its tip what that means (ui/src/joinCuts.mjs).
+  const pillNow = () => lengthPill(jstate, jfor.audio.duration);
+  const pillInner = (p) => (p.kind === "ok" ? lucide("check", 11) : "") + escapeHtml(p.text);
+  function pillHtml() {
+    const p = pillNow();
+    return `<span class="tl-pill ${p.kind}" id="tlJoinPill"${p.tip ? ` data-tip="${escapeHtml(p.tip)}"` : ""}>${pillInner(p)}</span>`;
+  }
+
   function headHtml() {
-    const left = mode === "draft"
-      ? `<span class="tl-tools">${tool("tlUndo", "undo-2", 15, t("Undo"), `${modKey()}+Z`)}${tool("tlRedo", "redo-2", 15, t("Redo"), `Shift+${modKey()}+Z`)}<span class="tl-sep"></span>`
-        + `${tool("tlSplit", "gap-horizontal", 13.8, t("Split at playhead"), `${modKey()}+B`)}${tool("tlDelLeft", "split-left", 13.8, t("Delete left of playhead"))}`
-        + `${tool("tlDelRight", "split-right", 13.8, t("Delete right of playhead"))}${tool("tlDelete", "trash", 16.2, t("Delete selected"), "Delete")}</span>`
+    const left = mode === "draft" ? cutToolsHtml()
+      : joined() ? cutToolsHtml() + speedHtml() + pillHtml()
       : ownSubtitles() ? '<span class="tl-legend"></span>' : `<span class="tl-legend">
         <span><i class="tl-sw-voice"></i>${t("Voice length")}</span>
         <span><i class="tl-sw-slot"></i>${t("Time available")}</span>
@@ -325,7 +394,13 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     // call below is pinned by its source (indexHtml.test.mjs).
     const name = (cls, icon, size, text, lead = "") => `<div class="tl-name ${cls}">${lead || lucide(icon, size)}<span>${t(text)}</span></div>`;
     // The first lane is the file itself: a video, or an audio project's sound.
-    const file = isAudio(mediaNow()) ? name("tl-name-video", "volume-2", 11, "Audio")
+    // With a video brought in, the picture's lane comes first, with the way
+    // to swap the video at its right end.
+    const file = joined()
+      ? `<div class="tl-name tl-name-join">${lucide("square-play", 12.3)}<span>${t("Video")}</span>`
+        + `<button class="tl-swap" id="tlJoinSwap" type="button">${t("Change the video")}</button></div>`
+        + name("tl-name-video", "volume-2", 11, "Audio")
+      : isAudio(mediaNow()) ? name("tl-name-video", "volume-2", 11, "Audio")
       : name("tl-name-video", "square-play", 12.3, "Video");
     if (mode === "draft") {
       if (!clips) return "";
@@ -343,6 +418,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
 
   // The whole strip: the toolbar, the lane names and the (still empty) track.
   function renderShell() {
+    syncJoin();
     const box = $("timeline");
     box.classList.toggle("tl-draftmode", mode === "draft");
     box.innerHTML = headHtml() + `
@@ -486,21 +562,29 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // past its slot still plays the line it belongs to. Only the Translated block
   // is a tab stop: three per line would bury the rest of the screen behind
   // hundreds of presses of the Tab key. `inner` is markup, built and escaped by
-  // the caller; the title is text and is escaped here.
-  function timelineBlock(l, cls, text, inner, stop = false) {
-    const left = l.start * timelinePps;
-    const width = Math.max(3, (l.end - l.start) * timelinePps);
+  // the caller; the title is text and is escaped here. `span` is where it is
+  // drawn when that is not its own time: [from, to] on a brought-in video's
+  // strip (ui/src/joinCuts.mjs lineSpan); data-start and data-end stay its own.
+  function timelineBlock(l, cls, text, inner, stop = false, span = [l.start, l.end]) {
+    const left = span[0] * timelinePps;
+    const width = Math.max(3, (span[1] - span[0]) * timelinePps);
     return `<button type="button" class="tl-blk ${cls}"${stop ? "" : ' tabindex="-1"'}
     data-start="${l.start}" data-end="${l.end}"
     style="left:${left.toFixed(1)}px;width:${width.toFixed(1)}px"
     title="${escapeHtml(text || t("Line {n}", { n: l.line }))}">${inner}</button>`;
   }
 
+  // How long the strip is in its own time: the kept clips of a draft, the
+  // longer lane with a video brought in, the video otherwise.
+  function stripLen() {
+    if (mode === "draft") return totalOf(clips || []);
+    return joined() ? joinedLength(jstate) : timelineDuration;
+  }
   // The scale for the room there is: 77px a second times the zoom. Fit is the
   // zoom that shows the whole length at once, the tail past the end included,
   // so there is nothing left to scroll.
   function fitZoom() {
-    const len = mode === "draft" ? totalOf(clips || []) : timelineDuration;
+    const len = stripLen();
     const room = Math.max(1, timelineRoom - TL_TAIL_PX);
     return len > 0 ? Math.min(TL_ZOOM_MAX, room / len / TL_PPS) : 1;
   }
@@ -531,6 +615,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   function drawTimelineTrack() {
     const track = $("timelineTrack");
     if (!track || !mode) return;
+    if (mode === "job") syncJoin();
     timelineRoom = track.clientWidth;
     if (fitDraftNext && mode === "draft" && clips && timelineRoom > 0) {
       fitDraftNext = false;
@@ -541,7 +626,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     timelinePps = TL_PPS * timelineZoom;
     films = [];
     const lanes = mode === "draft" ? draftLanesHtml() : jobLanesHtml();
-    const len = mode === "draft" ? totalOf(clips || []) : timelineDuration;
+    const len = stripLen();
     // At least the room, so the ruler runs the whole way across; a bit past the
     // end, so the last clip's edge is not flush with the scrollbar's.
     const width = Math.max(timelineRoom, len * timelinePps + (len ? TL_TAIL_PX : 0));
@@ -561,7 +646,11 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     const media = getMedia();
     const w = timelineDuration * timelinePps;
     const name = media ? escapeHtml(media.name || "") : "";
-    const video = `<div class="tl-lane tl-lane-video"><div class="tl-vclip" style="left:0;width:${w.toFixed(1)}px">
+    // With a video brought in, every line is drawn where its sound lands on
+    // the strip, and not at all where its sound was cut away.
+    const jn = joined();
+    const where = (a, b) => (jn ? lineSpan(jstate, a, b) : [a, b]);
+    const video = jn ? joinLanesHtml(media, name) : `<div class="tl-lane tl-lane-video"><div class="tl-vclip" style="left:0;width:${w.toFixed(1)}px">
       <div class="tl-vcap">${name}<b>${fmtLength(timelineDuration)}</b></div>
       ${media ? filmHtml(media, 0, timelineDuration, w, 39, 0) : ""}
       <div class="tl-wave">${media ? waveHtml(media, 0, timelineDuration) : ""}</div></div></div>`;
@@ -571,13 +660,15 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     let voices = "";
     let originals = "";
     for (const l of timelineLines) {
+      const span = where(l.start, l.end);
+      if (!span) continue;
       const who = speakers.get(l.speaker) || 1;
       const spk = ` tl-s${((who - 1) % SPEAKER_COLOURS) + 1}`;
       // The words alone: the line's number lives in the script table, not here (user, 2026-09-30).
       const label = escapeHtml(l.text || "");
       if (l.audio_sec == null) {
         // No voice on disk yet: the slot alone, dashed, is the whole truth.
-        voices += timelineBlock(l, `tl-voice tl-novoice${spk}`, l.text, label, true);
+        voices += timelineBlock(l, `tl-voice tl-novoice${spk}`, l.text, label, true, span);
       } else {
         // The table's verdict, in its colours: red past the slot, orange much
         // shorter than it, green between. The strip is not handed the cut
@@ -588,37 +679,67 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
         const slot = Math.max(l.end - l.start, 0.001);
         const fill = over ? 100 : Math.min(100, (l.audio_sec / slot) * 100);
         voices += timelineBlock(l, `tl-voice${over ? " tl-over" : kind === "short" ? " tl-short" : ""}${spk}`, l.text,
-          `${label}<i class="tl-vlen" style="width:${fill.toFixed(1)}%"></i>`, true);
+          `${label}<i class="tl-vlen" style="width:${fill.toFixed(1)}%"></i>`, true, span);
         // A long voice: past its slot, a red tint over whatever follows, so the
         // next line's block still reads while the red says how far this runs.
         if (over) {
           const tip = t("Line {n} runs {secs}s past its time", { n: l.line, secs: over.toFixed(1) });
-          voices += `<span class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
-            + `width:${(over * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}"></span>`;
+          voices += `<span class="tl-spill" style="left:${(span[1] * timelinePps).toFixed(1)}px;`
+            + `width:${((jn ? over / jstate.tempo : over) * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}"></span>`;
         }
       }
-      originals += timelineBlock(l, "tl-org", l.source || "", escapeHtml(l.source || ""));
+      originals += timelineBlock(l, "tl-org", l.source || "", escapeHtml(l.source || ""), false, span);
     }
 
     // The subtitle lane: when each line's words are on screen. The user drags
     // a block's ends to keep a subtitle up longer or take it down sooner; the
     // voices above never move.
     let caps = "";
+    // With a video brought in the blocks have no ends to pull: a pull is in
+    // the sound's own seconds, and the strip there is the joined video's.
+    const hdl = (side) => (jn ? "" : `<span class="tl-hdl ${side}"></span>`);
     timelineLines.forEach((l, idx) => {
       const c = subCueOf(l, idx);
+      const span = where(c.start, c.end);
+      if (!span) return;
       const words = escapeHtml(l.text || "");
       const exdot = getSubStyle().widths[String(idx + 1)] != null
         ? `<span class="tl-exdot" title="${t("Back to the all-lines width")}">✱</span>` : "";
       caps += `<div class="tl-cap" data-idx="${idx}"
-      style="left:${(c.start * timelinePps).toFixed(1)}px;width:${Math.max(8, (c.end - c.start) * timelinePps).toFixed(1)}px"
-      title="${words}"><span class="tl-hdl l"></span><span
-      class="tl-cap-txt">${words}</span><span class="tl-hdl r"></span>${exdot}</div>`;
+      style="left:${(span[0] * timelinePps).toFixed(1)}px;width:${Math.max(8, (span[1] - span[0]) * timelinePps).toFixed(1)}px"
+      title="${words}">${hdl("l")}<span
+      class="tl-cap-txt">${words}</span>${hdl("r")}${exdot}</div>`;
     });
     const voiceLanes = ownSubtitles() ? "" : `
     <div class="tl-lane tl-lane-org">${originals}</div>
     <div class="tl-lane tl-lane-dub">${voices}</div>`;
     return `<div class="tl-lanes">${video}${voiceLanes}
     <div class="tl-lane tl-lane-caps${getSubStyle().enabled ? "" : " off"}">${caps}</div></div>`;
+  }
+
+  // A brought-in video's two lanes: the picture's kept parts as film strips,
+  // then the sound's as its waveform under its name and how long the part
+  // plays, both laid end to end in joined time; the clicked clip ringed.
+  function joinLanesHtml(media, name) {
+    const id = encodeURIComponent(media ? media.id : "");
+    const film = { kind: "join", id, strip: `/api/media/join/${id}/filmstrip?v=${jgen}` };
+    const lane = (which, speed, inner) => {
+      const parts = jstate[which];
+      let x = 0;
+      let html = "";
+      parts.forEach(([a, b], i) => {
+        const w = ((b - a) / speed) * timelinePps;
+        html += `<div class="tl-vclip tl-cut tl-jclip${which === jlane && i === jsel ? " sel" : ""}" data-lane="${which}" data-i="${i}"
+      style="left:${x.toFixed(1)}px;width:${Math.max(1, w - 2).toFixed(1)}px">${inner(a, b, w, x)}</div>`;
+        x += w;
+        if (i < parts.length - 1) html += `<div class="tl-seam" style="left:${(x - 2).toFixed(1)}px;width:2px"></div>`;
+      });
+      return html;
+    };
+    const picture = lane("video", 1, (a, b, w, x) => filmHtml(film, a, b, w, 55, x, jfor.video.duration));
+    const sound = lane("audio", jstate.tempo, (a, b) => `<div class="tl-vcap">${name}<b>${fmtLength((b - a) / jstate.tempo)}</b></div>`
+      + `<div class="tl-wave">${media ? waveHtml(media, a, b) : ""}</div>`);
+    return `<div class="tl-lane tl-lane-join">${picture}</div><div class="tl-lane tl-lane-video">${sound}</div>`;
   }
 
   function draftLanesHtml() {
@@ -674,7 +795,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     zoom = Math.min(TL_ZOOM_MAX, Math.max(minZoom(), zoom));
     if (Math.abs(zoom - timelineZoom) < 1e-9) return;
     const track = $("timelineTrack");
-    const t = timeOnStrip(getVideo().currentTime || 0);
+    const t = joined() ? joined().time() : timeOnStrip(getVideo().currentTime || 0);
     let frac = 0.5;
     if (track && track.clientWidth) {
       const f = (t * timelinePps - track.scrollLeft) / track.clientWidth;
@@ -689,8 +810,10 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   }
 
   // The video's time as the strip draws it: itself on a finished job, the kept
-  // time (the clips laid end to end) on a draft.
+  // time (the clips laid end to end) on a draft, and with a video brought in,
+  // where that moment of the sound lands in joined time.
   function timeOnStrip(t) {
+    if (joined()) return sourceToKept(jstate.audio, t) / jstate.tempo;
     return mode === "draft" && clips ? sourceToKept(clips, t) : t;
   }
 
@@ -698,9 +821,13 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // of the line that moment is inside, and (on a draft) which tools apply.
   function paintTimelineAt(t) {
     if (mode === "draft") paintTools(t);
+    // With a video brought in the playhead is the joined time, which the join
+    // player keeps (the sound's own time stands still in the picture's tail).
+    const jn = joined();
+    if (jn) paintJoinTools(jn.time());
     const head = $("timelinePlayhead");
     if (!head) return;
-    const x = timeOnStrip(t) * timelinePps;
+    const x = (jn ? jn.time() : timeOnStrip(t)) * timelinePps;
     head.style.left = `${x.toFixed(1)}px`;
     if (mode === "job") {
       for (const blk of $("timeline").querySelectorAll(".tl-voice, .tl-org")) {
@@ -728,6 +855,44 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     set("tlDelRight", t("Delete right of playhead"), !clips || !removeRight(c, secs), noPlayhead);
     set("tlDelete", t("Delete selected"), !clips || selected < 0 || !removeClip(c, selected),
         selected < 0 ? t("Select a part first") : t("The last part stays"));
+  }
+
+  // The same tools on a brought-in video's lanes: off, saying so, until a
+  // lane's clip is clicked; undo and redo need no lane, as one history holds
+  // both lanes and the speed.
+  function paintJoinTools(j) {
+    const set = (id, name, off, why) => {
+      const b = $(id);
+      if (!b) return;
+      b.disabled = off;
+      b.dataset.tip = off ? why : name;
+    };
+    const why = jlane ? t("Move the playhead into the video") : t("Click the video or the audio lane first");
+    const can = (op) => !!jlane && !!applyCut(jstate, jlane, op, j);
+    set("tlUndo", t("Undo"), !jhistory.canUndo(), t("Nothing to undo"));
+    set("tlRedo", t("Redo"), !jhistory.canRedo(), t("Nothing to redo"));
+    set("tlSplit", t("Split at playhead"), !can("split"), why);
+    set("tlDelLeft", t("Delete left of playhead"), !can("left"), why);
+    set("tlDelRight", t("Delete right of playhead"), !can("right"), why);
+    set("tlDelete", t("Delete selected"), !jlane || jsel < 0 || !applyCut(jstate, jlane, "remove", jsel),
+        !jlane ? why : jsel < 0 ? t("Select a part first") : t("The last part stays"));
+  }
+
+  // The head's parts that follow the lanes: the pill and the lit speed.
+  function paintJoinHead() {
+    const p = pillNow();
+    const pill = $("tlJoinPill");
+    if (pill) {
+      pill.className = `tl-pill ${p.kind}`;
+      pill.innerHTML = pillInner(p);
+      if (p.tip) pill.dataset.tip = p.tip; else delete pill.dataset.tip;
+    }
+    TEMPOS.forEach((x, i) => {
+      const b = $(`tlSpeed${i}`);
+      if (!b) return;
+      b.classList.toggle("on", x === jstate.tempo);
+      b.setAttribute("aria-checked", String(x === jstate.tempo));
+    });
   }
 
   // A strip longer than the window is a strip the playhead walks off the end of.
@@ -804,6 +969,41 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     applyClips(next);
   }
 
+  // ---- The cut tools and the speed (a brought-in video) ----------------------
+  // Every change goes to the join player as both lanes' ranges and the speed,
+  // then the playhead is put back on the moment it stood on (landing).
+  function commitJoin(next, lane, push = true) {
+    const j = joined();
+    const at = landing(jstate, next, lane, j.time());
+    if (push) jhistory.push(next);
+    jstate = next;
+    if (jlane && jsel >= jstate[jlane].length) jsel = -1;
+    if (next.tempo !== j.tempo()) j.setTempo(next.tempo);
+    j.setClips(toSave(next, j.video.duration, j.audio.duration));
+    j.seek(at);
+    drawTimelineTrack();
+    paintJoinHead();
+  }
+  function joinCut(op) {
+    const j = joined();
+    if (!j || !jlane) return;
+    const next = applyCut(jstate, jlane, op, op === "remove" ? jsel : j.time());
+    if (!next) return;
+    if (op === "remove") jsel = -1;
+    commitJoin(next, jlane);
+  }
+  function joinStep(next) {
+    if (!next) return;
+    jsel = -1;
+    commitJoin(next, null, false);
+  }
+  const joinUndo = () => { if (joined()) joinStep(jhistory.undo()); };
+  const joinRedo = () => { if (joined()) joinStep(jhistory.redo()); };
+  function setJoinTempo(x) {
+    if (!joined() || x === jstate.tempo || !TEMPOS.includes(x)) return;
+    commitJoin({ ...cloneJoin(jstate), tempo: x }, "audio");
+  }
+
   // Playing a draft plays the kept parts only: a cut-away gap is jumped over
   // the frame it is reached, and the end of the last clip is the end.
   function keepToKeptParts() {
@@ -868,6 +1068,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     if (e.target.closest("#tlZoomOut")) { setTimelineZoom(timelineZoom / TL_ZOOM_STEP); return; }
     if (e.target.closest("#tlZoomFit")) { fitTimeline(); return; }
     if (mode === "draft") { onDraftClick(e); return; }
+    if (joined() && onJoinClick(e)) return;
     const blk = e.target.closest(".tl-blk");
     if (!blk) return;
     const which = blk.classList.contains("tl-org") ? "original" : "dubbed";
@@ -894,6 +1095,31 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     if (next !== selected) { selected = next; drawTimelineTrack(); }
   }
 
+  // A brought-in video's strip: its tools, its speed, its swap, and its clips,
+  // a click on one picking its lane. True when the click was the strip's;
+  // anything else lets go of the clip (not the lane) and goes on to the
+  // lines, which still play.
+  function onJoinClick(e) {
+    if (e.target.closest("#tlUndo")) { joinUndo(); return true; }
+    if (e.target.closest("#tlRedo")) { joinRedo(); return true; }
+    if (e.target.closest("#tlSplit")) { joinCut("split"); return true; }
+    if (e.target.closest("#tlDelLeft")) { joinCut("left"); return true; }
+    if (e.target.closest("#tlDelRight")) { joinCut("right"); return true; }
+    if (e.target.closest("#tlDelete")) { joinCut("remove"); return true; }
+    const speed = e.target.closest("[data-tempo]");
+    if (speed) { setJoinTempo(+speed.dataset.tempo); return true; }
+    if (e.target.closest("#tlJoinSwap")) { changeJoinVideo(); return true; }
+    if (e.target.closest(".tl-head")) return true;
+    const clip = e.target.closest(".tl-jclip");
+    if (clip) {
+      const lane = clip.dataset.lane, i = +clip.dataset.i;
+      if (lane !== jlane || i !== jsel) { jlane = lane; jsel = i; drawTimelineTrack(); }
+      return true;
+    }
+    if (jsel >= 0) { jsel = -1; drawTimelineTrack(); }
+    return false;
+  }
+
   // ---- The keyboard ---------------------------------------------------------
   // Space plays from where the playhead stands (and pauses again); Enter plays
   // from the very start; + - 0 zoom the timeline. On a draft, Delete takes the
@@ -915,23 +1141,30 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     if (e.isComposing) return;
     if (e.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
     if (document.querySelector(".modal-overlay.open")) return;
-    if (draftOn && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "z") {
+    // A brought-in video's lanes take the same keys.
+    const jn = draftOn ? null : joined();
+    if ((draftOn || jn) && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "z") {
       e.preventDefault();
-      if (e.shiftKey) redo(); else undo();
+      if (jn) { if (e.shiftKey) joinRedo(); else joinUndo(); } else if (e.shiftKey) redo(); else undo();
       return;
     }
-    if (draftOn && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "b") {
+    if ((draftOn || jn) && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "b") {
       e.preventDefault();
-      splitAtPlayhead();
+      if (jn) joinCut("split"); else splitAtPlayhead();
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (draftOn && (e.key === "Delete" || e.key === "Backspace")) {
+    if ((draftOn || jn) && (e.key === "Delete" || e.key === "Backspace")) {
       e.preventDefault();
-      deleteSelected();
+      if (jn) joinCut("remove"); else deleteSelected();
     } else if (e.key === " ") {
       e.preventDefault();   // space scrolls the page otherwise
       toggleDonePlay();
+    } else if (e.key === "Enter" && jn) {
+      // The joined video's start, played by the join player.
+      cancelRange(getVideo());
+      jn.seek(0);
+      if (jn.paused()) toggleDonePlay();
     } else if (e.key === "Enter") {
       cancelRange(getVideo());
       getVideo().currentTime = draftOn && clips ? clips[0][0] : 0;
@@ -1002,6 +1235,8 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     const inner = $("timeline").querySelector(".tl-inner");
     if (!inner || !timelinePps) return null;
     const x = clientX - inner.getBoundingClientRect().left;
+    // Joined time, onto a lane's end when it is a few pixels off it.
+    if (joined()) return snapToEnds(jstate, Math.min(Math.max(x / timelinePps, 0), stripLen()), timelinePps);
     if (mode === "draft") {
       if (!clips) return null;
       return keptToSource(clips, Math.min(Math.max(x / timelinePps, 0), totalOf(clips)));
@@ -1015,7 +1250,9 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   function seekDoneVideo(t) {
     if (t == null || !Number.isFinite(t)) return;
     cancelRange(getVideo());   // playing on from here means no stopping point
-    getVideo().currentTime = t;
+    // A brought-in video's time is joined time: the join player moves both files.
+    const jn = joined();
+    if (jn) jn.seek(t); else getVideo().currentTime = t;
     paintPlayhead();
   }
 

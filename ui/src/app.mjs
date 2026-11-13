@@ -817,13 +817,14 @@ function openProject() {
 // read; joinPlayer.saved() sends a change still waiting.
 const joinPlayer = initJoinPlayer({
   $, sound: $("doneVideo"), picture: $("joinVideo"), checkFile: videoProblem,
-  // A video came in or was let go: the box, the pane's shape, the clock and
-  // where the subtitles sit all follow it.
+  // A video came in or was let go: the box, the pane's shape, the clock,
+  // where the subtitles sit and the timeline's lanes all follow it.
   onChange: () => {
     paintMediaKind();
     donePlayer.sizeVideoPane();
     donePlayer.paintPlayhead();
     subtitles.syncVideoChrome();
+    timeline.redraw();
   },
   onTick: () => donePlayer.paintJoined(),
 });
@@ -2421,6 +2422,9 @@ const timeline = initTimelineUi({
   toggleDonePlay: () => (onEraseTab() ? toggleErasePlay() : donePlayer.toggleDonePlay()),
   markClippedNames: projects.markClippedNames,
   ownSubtitles: () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions",
+  // A video brought into this audio project: its lanes, cuts and speed.
+  getJoin: () => joinPlayer.getJoin(),
+  changeJoinVideo: () => joinPlayer.change(),
 });
 // The keyboard, the observer that re-measures the track and the window resize
 // that puts the remembered pane sizes back -- everything that listens outside

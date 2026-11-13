@@ -116,31 +116,33 @@ export function sameRanges(x, y) {
 /**
  * Undo and redo over whole lists of clips. `limit` steps back are kept (the
  * oldest fall off); a new change after an undo drops the steps that were
- * undone, as every editor does.
+ * undone, as every editor does. `clone` is how a step is copied: a list of
+ * clips by default; a timeline with more than one lane hands its own
+ * (ui/src/joinCuts.mjs cloneJoin).
  */
-export function createHistory(initial, limit = 100) {
+export function createHistory(initial, limit = 100, clone = copy) {
   let past = [];
-  let now = copy(initial);
+  let now = clone(initial);
   let future = [];
   return {
-    current: () => copy(now),
+    current: () => clone(now),
     push(clips) {
       past.push(now);
       if (past.length > limit) past = past.slice(past.length - limit);
-      now = copy(clips);
+      now = clone(clips);
       future = [];
     },
     undo() {
       if (!past.length) return null;
       future.push(now);
       now = past.pop();
-      return copy(now);
+      return clone(now);
     },
     redo() {
       if (!future.length) return null;
       past.push(now);
       now = future.pop();
-      return copy(now);
+      return clone(now);
     },
     canUndo: () => past.length > 0,
     canRedo: () => future.length > 0,

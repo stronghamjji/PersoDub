@@ -121,3 +121,13 @@ test("at least fifty steps can be undone", () => {
   while (small.undo()) n++;
   assert.equal(n, 50, "the oldest fall off past the limit");
 });
+
+test("the history copies with the copier it is handed, so it can hold more than one list", () => {
+  const two = (s) => ({ a: s.a.map(([x, y]) => [x, y]), n: s.n });
+  const h = createHistory({ a: [[0, 10]], n: 1 }, 100, two);
+  h.push({ a: [[0, 5]], n: 2 });
+  assert.deepEqual(h.undo(), { a: [[0, 10]], n: 1 });
+  h.current().a[0][0] = 99;
+  assert.deepEqual(h.redo(), { a: [[0, 5]], n: 2 });
+  assert.deepEqual(h.current(), { a: [[0, 5]], n: 2 });
+});

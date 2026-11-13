@@ -581,3 +581,101 @@ test("an answer that arrives after another project was opened is dropped", async
     assert.equal(h.$("joinBring").hidden, false);
   } finally { h.restore(); }
 });
+
+// -- Change the video, and a picture this browser cannot show -------------------
+
+test("Change the video opens the same picker; the picture lets go of its file before the new one is sent", async () => {
+  let h = null;
+  let srcAtSend = "unset";
+  const upload = (jid) => {
+    srcAtSend = h.picture.getAttribute("src");
+    h.joins[jid] = { ...structuredClone(JOINED), video: { name: "other.mp4", seconds: 20 }, stamp: "s2" };
+    return new Response("{}", { status: 200 });
+  };
+  h = await joined(JOINED, { upload });
+  try {
+    h.sound.play();
+    h.player.change();
+    assert.equal(h.$("joinFile").clicks, 1);
+    h.$("joinFile").files = [file("other.mp4")];
+    h.$("joinFile").fire("change");
+    // While it goes in: stopped, the picture's file let go, and the box says so.
+    assert.equal(h.sound.paused, true);
+    assert.equal(h.picture.getAttribute("src"), null);
+    assert.ok(h.picture.loads >= 1, "the element is told to drop what it had open");
+    assert.equal(h.$("joinBringNote").textContent, "Bringing the video in…");
+    assert.equal(h.$("joinBring").hidden, false, "the line is shown over the picture");
+    await turn();
+    await turn();
+    assert.equal(srcAtSend, null, "nothing held the old file while the new one was sent");
+    assert.equal(h.picture.getAttribute("src"), "/api/dub/jobs/a/join/video?v=s2");
+    assert.equal(h.player.getJoin().video.name, "other.mp4");
+    assert.equal(h.$("joinBringNote").textContent, "");
+    assert.equal(h.$("joinBring").hidden, true);
+  } finally { h.restore(); }
+});
+
+test("a replacement the app refuses puts the old picture back and says why; no video in, no picker", async () => {
+  const upload = () => new Response(JSON.stringify({ detail: "Not enough room." }), { status: 507 });
+  const h = await joined(JOINED, { upload });
+  try {
+    const before = h.player.getJoin();
+    h.player.change();
+    h.$("joinFile").files = [file()];
+    h.$("joinFile").fire("change");
+    await turn();
+    await turn();
+    assert.equal(h.picture.getAttribute("src"), "/api/dub/jobs/a/join/video?v=s1");
+    assert.equal(h.player.getJoin(), before);
+    assert.equal(h.$("joinBringNote").textContent, "Not enough room.");
+    assert.ok(h.$("joinBringNote").classes.has("form-error"));
+    assert.equal(h.$("joinBring").hidden, false);
+  } finally { h.restore(); }
+  const g = harness({ joins: { a: { video: null } } });
+  try {
+    g.player.open("a");
+    await turn();
+    g.player.change();
+    assert.equal(g.$("joinFile").clicks, 0, "bringing one in is the box's button");
+  } finally { g.restore(); }
+});
+
+test("a picture this browser cannot decode says so in the box, and the sound plays on", async () => {
+  const h = await joined();   // 30 s of sound, 40 s of picture
+  try {
+    h.picture.fire("error");
+    assert.equal(h.$("joinBringNote").textContent,
+      "This video cannot be previewed here. The dubbed video is still made.");
+    assert.ok(!h.$("joinBringNote").classes.has("form-error"), "a fact, not a failure");
+    assert.equal(h.$("joinBring").hidden, false);
+    const join = h.player.getJoin();
+    h.sound.play();
+    h.sound.playTo(12);
+    h.frame();
+    assert.equal(h.sound.paused, false);
+    assert.equal(join.paused(), false);
+    assert.equal(join.time(), 12, "the sound is the clock");
+    // Where the sound ends there is no picture to run on: the joined video stops.
+    h.sound.playTo(30);
+    h.sound.ended = true;
+    h.frame();
+    h.frame();
+    assert.equal(join.paused(), true);
+    assert.equal(h.frames.length, 0, "nothing left waiting on a picture that never moves");
+  } finally { h.restore(); }
+});
+
+test("an error from an element with no picture on it says nothing, and another project clears the line", async () => {
+  const h = await joined();
+  try {
+    h.picture.removeAttribute("src");
+    h.picture.fire("error");
+    assert.equal(h.$("joinBringNote").textContent, "");
+    h.picture.setAttribute("src", "x");
+    h.picture.fire("error");
+    assert.notEqual(h.$("joinBringNote").textContent, "");
+    h.joins.b = { video: null };
+    h.player.open("b");
+    assert.equal(h.$("joinBringNote").textContent, "");
+  } finally { h.restore(); }
+});

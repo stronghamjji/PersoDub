@@ -13,6 +13,10 @@
 // The state is the app's (ui/src/dubApi.mjs fetchJoin): asked once per opened
 // project, saved a moment after each change.
 //
+// A video already in is replaced through the same picker (change, the
+// timeline's "Change the video"). A picture the browser cannot decode is said
+// so in the box, and the sound plays on.
+//
 // The elements this file touches: #joinVideo and #doneVideo (handed in),
 // #joinBring, #joinBringBtn, #joinFile, #joinBringNote, and #videoWrap (a
 // video dropped on the box).
@@ -44,7 +48,8 @@ const copy = (ranges) => ranges.map(([a, b]) => [a, b]);
  * @param {() => number} [deps.clock]  milliseconds, for how long a move takes
  * @returns {{ open: (jobId: string|null) => void, getJoin: () => object|null,
  *   playing: () => boolean, play: () => void, pause: () => void,
- *   time: () => number, end: () => number, saved: () => Promise<void> }}
+ *   time: () => number, end: () => number, saved: () => Promise<void>,
+ *   change: () => void }}
  *   open: the finished audio project on screen, or null for none. getJoin:
  *   null with no video in, else {video: {name, duration}, audio: {duration},
  *   clips() -> {video, audio}, setClips({video, audio}), tempo(), setTempo(x),
@@ -62,6 +67,7 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
   let tail = false;       // the sound has run out: the picture is the clock
   let looping = false;    // a frame is already asked for
   let busy = false;       // a video is on its way in
+  let broken = false;     // the picture cannot be decoded here
   // How long the picture's last move took, in seconds: the next move while
   // playing aims that far ahead, so it lands where the sound has got to.
   let lead = 0;
@@ -109,13 +115,21 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
     }
   }
   picture.addEventListener("loadedmetadata", () => { if (now && !playing) settle(); });
+  // A picture this browser cannot decode: said in the box, and the sound plays
+  // on. With no picture to run on, the tail is not waited for (frame below).
+  // An element with nothing on it (a video let go) has nothing to say.
+  picture.addEventListener("error", () => {
+    if (!now || !picture.getAttribute("src")) return;
+    broken = true;
+    say(t("This video cannot be previewed here. The dubbed video is still made."));
+  });
 
   function frame() {
     looping = false;
     if (!playing || !now) return;
     // A file opened on the sound element stops it with no "pause" signal.
     if (!tail && sound.paused) { halt(); return; }
-    const s = step(now, { ...position(), soundEnded: sound.ended, pictureEnded: picture.ended });
+    const s = step(now, { ...position(), soundEnded: sound.ended, pictureEnded: picture.ended || broken });
     if (s.done) { finish(); return; }
     if (s.tail && !tail) {
       // Set before the sound is stopped: its "pause" must not stop the picture.
@@ -241,6 +255,7 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
       };
       tail = false;
       lead = 0;
+      broken = false;
       picture.setAttribute("src", joinVideoUrl(openId, d.stamp));
       setRate();
       // Brought in while the sound was playing: the picture joins it.
@@ -255,6 +270,7 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
     const had = !!now;
     playing = false;
     tail = false;
+    broken = false;
     loaded = false;
     now = null;
     handle = null;
@@ -285,21 +301,34 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
     const note = $("joinBringNote");
     note.textContent = text;
     note.classList.toggle("form-error", isError);
+    // With a video in, the line is the only thing the box shows for it.
+    paintBring();
   }
   const canBring = () => !!openId && loaded && !now;
+  // With a video in, the box shows only the line under it, and only when it
+  // has something to say (the stylesheet hides the button row then).
   function paintBring() {
-    $("joinBring").hidden = !canBring();
+    $("joinBring").hidden = !canBring() && !(now && $("joinBringNote").textContent);
     $("joinBringBtn").disabled = busy;
   }
 
+  // A video brought in, or (with one in, from change) replacing it.
   async function bring(file) {
     const jobId = openId;
-    if (!file || !canBring() || busy) return;
+    if (!file || !openId || !loaded || busy) return;
     const bad = checkFile(file);
     if (bad) { say(bad, true); return; }
     busy = true;
     paintBring();
     say(t("Bringing the video in…"));
+    // Windows will not let the app replace a file the page still has open,
+    // so the picture lets go of it first, and takes it back if the app says no.
+    const held = now ? picture.getAttribute("src") : null;
+    if (held) {
+      pause();
+      picture.removeAttribute("src");
+      picture.load();
+    }
     // Another project may be on screen by the time the app answers: the video
     // is in for the one it was brought into, and nothing is said on this one.
     try {
@@ -307,10 +336,17 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
       const d = await fetchJoin(jobId);
       if (openId === jobId) { say(""); take(d); }
     } catch (e) {
-      if (openId === jobId) say((e && e.message) || t("Could not bring the video in."), true);
+      if (openId === jobId) {
+        if (held) picture.setAttribute("src", held);
+        say((e && e.message) || t("Could not bring the video in."), true);
+      }
     }
     busy = false;
     paintBring();
+  }
+  // Change the video: the same picker, with a video in.
+  function change() {
+    if (now && !busy) $("joinFile").click();
   }
   $("joinBringBtn").addEventListener("click", () => $("joinFile").click());
   $("joinFile").addEventListener("change", (e) => {
@@ -330,5 +366,5 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
   });
 
   paintBring();
-  return { open, getJoin: () => handle, playing: () => playing, play, pause, time, end, saved };
+  return { open, getJoin: () => handle, playing: () => playing, play, pause, time, end, saved, change };
 }
