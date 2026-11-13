@@ -180,7 +180,7 @@ To enable the cloud engines:
 
 ### Step 6. Try your first dub
 
-1. Drop a short video file (mp4) onto the app.
+1. Drop a short video file (mp4) or audio file (mp3) onto the app.
 2. Pick the target language and press start.
 3. When it finishes, save the result.
 

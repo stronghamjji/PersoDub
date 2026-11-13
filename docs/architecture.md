@@ -286,7 +286,7 @@ flowchart TD
   s3 --> s4["4/6 synthesize + assemble"]
   s4 --> s5["5/6 check: leakage gate"]
   s5 --> s6["6/6 build: mux"]
-  s6 --> out(["dubbed.mp4"])
+  s6 --> out(["dubbed.mp4<br/>dubbed.wav for an audio project"])
   cloud --> out
 ```
 
@@ -304,7 +304,12 @@ flowchart TD
    the job) and checks the room the whole job needs (507). Then come the
    optional `sub.srt` (a finished translation) and `source.srt` (a source
    script), and the stems of a matching finished separation job, in which
-   case the run starts in resume mode and skips stage 1.
+   case the run starts in resume mode and skips stage 1. The file is asked
+   what it is when it comes in, never by its name (`app/media.py media_kind`,
+   `app/api/_shared.py dub_media`): one with a picture is a video; sound with
+   no picture must be WAV, FLAC, MP3 or M4A and makes an audio project, whose
+   record says `media: "audio"`; anything else is a 422. `input.mp4` keeps
+   its name whatever it holds.
 3. `app/api/_launch.py launch_job` makes the record, stamps the engine
    choices on it, writes `job.json`, logs the first line and hands the work to
    the store.
@@ -325,7 +330,7 @@ a stage's position in it. The page folds the six into four progress steps.
 | 3 | `translate` | Translating | Hunyuan, Gemma or Qwen through Ollama | ChatGPT (through the Codex CLI), Gemini, Vertex AI | `original.srt`, `speakers.json`, `translated.srt`, `chatgpt_answers/` |
 | 4 | `synthesize` | Dubbing | Qwen3-TTS sidecar (`app/qwen_pipeline.py`) | none | `qwen_ref_<speaker>.wav`, `speaker_refs.json`, `qwen_line_<i>.wav`, `lines.json`, `qwen_dub_48k.wav`, `clipped_lines.json`, `nonverbal_manifest.json` |
 | 5 | `check` | Dubbing | `pipeline.leakage_gate`: measures the original voice left under the dub and cancels echo runs (`PERSODUB_LEAKAGE_GATE` `on`/`measure`/`off`); never fails the dub | none | `dub_leakfix.wav`, only when it rewrote the mix |
-| 6 | `build` | Dubbing | ffmpeg mux, length check, then the losing takes are deleted | none | `dubbed.mp4` |
+| 6 | `build` | Dubbing | ffmpeg mux, length check, then the losing takes are deleted. An audio project has no picture to mux onto: its result is the mix itself, made the source's length (`media.build_result`) | none | `dubbed.mp4`, or `dubbed.wav` for an audio project |
 
 In more detail:
 
@@ -366,9 +371,20 @@ the finished screen's own files (`edited.srt`,
 per-line voices, the background and the speaker references are kept on
 purpose: re-speaking a single line needs all three.
 
+A **video brought into a finished audio project** (`app/api/join.py`) adds
+nothing to the job's record. Four files in the folder say everything: the
+user's video as `join.mp4`, the kept parts of each timeline lane and the audio
+speed (0.5, 1, 1.5, 2 or 3) in `join.json`, and `joined.mp4` with
+`joined.json`, the recipe it was built from. `GET /api/dub/result/{id}/joined`
+builds the file with `media.join_video` on the first ask and again whenever
+the recipe no longer matches: a cut, another speed, a remade line or another
+video. The video's own sound is left out, and `dubbed.wav`, the script and
+the other downloads are only read, so they stay whole.
+
 A **Perso API dub** (`dub_mode="perso"`) runs none of the six: it logs
 `1/1 Dubbing in the Perso cloud…`, uploads `input.mp4`, lets Perso
-translate and voice it, and downloads `dubbed.mp4`; the Perso project and
+translate and voice it, and downloads `dubbed.mp4` (an audio project is
+registered with Perso as audio and comes back as `dubbed.wav`); the Perso project and
 workspace numbers go on the record so its script can be opened later
 (`app/perso_materialize.py`, `app/perso_edit.py`). A local dub can still
 send its separation or transcription to Perso. Either way a Perso failure
@@ -431,7 +447,7 @@ finishes first.
 
 | Layer | Modules | Notes |
 |---|---|---|
-| HTTP | `app/main.py`; `app/api/*.py`, one router per area: `agent`, `clips`, `downloads`, `dub`, `erase`, `media`, `misc`, `models`, `report`, `results`, `script`, `separate`, `settings`, `thumbs`, `view`; `app/api/_launch.py` (the start every job route shares: `check_space`, `job_dir`, `today`, `missing_models`, `raise_models_needed`, `require_perso_workspace`, `launch_job`, `goes_beside_the_line`); `app/api/_shared.py` (where a job's folder is, file naming, the trim and kept-parts rules) | The only modules that import FastAPI. `main.py` holds the app, the host allow-list and the cross-origin write guard, the page, `/js/{name}`, `/css/{name}`, `/health`, and the router list. |
+| HTTP | `app/main.py`; `app/api/*.py`, one router per area: `agent`, `clips`, `downloads`, `dub`, `erase`, `join`, `media`, `misc`, `models`, `report`, `results`, `script`, `separate`, `settings`, `thumbs`, `view`; `app/api/_launch.py` (the start every job route shares: `check_space`, `job_dir`, `today`, `missing_models`, `raise_models_needed`, `require_perso_workspace`, `launch_job`, `goes_beside_the_line`); `app/api/_shared.py` (where a job's folder is, file naming, the trim and kept-parts rules, whether a file that came in is a video or audio) | The only modules that import FastAPI. `main.py` holds the app, the host allow-list and the cross-origin write guard, the page, `/js/{name}`, `/css/{name}`, `/health`, and the router list. |
 | Application services | `app/pipeline.py` (`run_dub` and its stages), `app/qwen_pipeline.py` (the voice stage, line remakes), `app/dub_launch.py`, `app/erase_launch.py`, `app/separate_launch.py` (a job's work from its record), `app/jobs.py`, `app/state.py` (`WORKSPACE`, the one `job_store`), `app/dub_script.py`, `app/retranslate.py`, `app/perso_materialize.py`, `app/perso_edit.py`, `app/downloads.py` (held videos) | Nothing here knows about a request. Routers call in; services never import `app.api`. |
 | Domain logic | `app/text/*` (subtitles, cues, prompts, length and pace fitting, numbers, naming), `app/audio/*` (PCM, wav I/O, time spans, short-line merging, onsets, stray sounds, ambience), `app/qwen_assemble.py` (placement, gains, gating), `app/qwen_select.py`, `app/nonverbal.py`, `app/subtitle_ass.py`, `app/stages.py`, `app/room.py`, `app/languages.py`, `app/report_mask.py`, `app/run_errors.py`, `app/timeouts.py` | Mostly pure. `app/stages.py`, `app/report_mask.py` and `app/audio/pcm.py` import nothing from the app. |
 | Adapters | `app/perso_client.py`, `app/translate.py`, `app/engines/*`, `app/media.py` (ffmpeg; imports only `app/timeouts.py`), `app/media_preview.py`, `app/ratio.py`, `app/source_fetch.py` (yt-dlp), `app/models.py` (model catalog and downloads), worker bridges (`app/separate.py`, `app/stt_local.py`, `app/diar_campplus_client.py`, `app/qwen_scoring.py`, `app/eraser.py`), `app/codex_fetch.py`, `app/agents/*` (CLI drivers), `app/mcp_server.py` | The only places that speak to another program or service. |
@@ -449,10 +465,10 @@ and `static/css/agent.css` are its stylesheets. `ui/src/` is flat:
 | Composition root | `app.mjs`: imports every screen, wires them together in page order (the order is behaviour), owns the page state |
 | API layer | `dubApi.mjs`: form building, polling, progress parsing, the stage table, engine labels |
 | Screens | `homeScreen`, `homeSidebar`, `projects`, `runningScreen`, `eraseScreen`, `eraseArea`, `draftSetup`, `draftImport`, `importBlock`, `newProject`, `newProjectWindow`, `workFrame`, `leftTabs`, `languageRow` |
-| Finished-dub editor | `scriptTable`, `scriptWatch`, `timeline`, `cutTools`, `trimBar`, `donePlayer`, `playerFoot`, `playRange`, `subtitleOverlay`, `subtitleLayout`, `captionsTab`, `ratio`, `speakers` |
+| Finished-dub editor | `scriptTable`, `scriptWatch`, `timeline`, `cutTools`, `trimBar`, `donePlayer`, `playerFoot`, `playRange`, `subtitleOverlay`, `subtitleLayout`, `captionsTab`, `ratio`, `speakers`; for a video brought into an audio project, `joinPlayer`, `joinClock`, `joinCuts` |
 | Dialogs | `settingsDialog`, `modelsDialog` + `modelsUi`, `keyWindow`, `chatgptSignIn`, `chatgptSetup`, `confirmDialogs`, `exportDialog`, `updateWindow`, `whatsNew`, `translatorChoice` |
 | Small state | `draft`, `keptDrafts`, `rememberedChoices`, `reportedOnce`, `pendingSave` |
-| Shared helpers | `format`, `icons`, `linkField`, `escapeKey`, `persoModels` |
+| Shared helpers | `format`, `icons`, `linkField`, `escapeKey`, `persoModels`, `mediaKind` |
 | Dub Agent | `agentStrip.mjs`, started by its own block so the feature stays removable |
 
 A screen module exports `initX({ $, ...what it needs })`, taking the element
@@ -667,7 +683,7 @@ means changing every reader in the same release.
 
 | Contract | Defined in | Read by | Pinned by |
 |---|---|---|---|
-| HTTP routes, methods, form and query names, response shapes, status codes and `detail` sentences | `app/main.py`, `app/api/*.py` | the page, the MCP server, the shell (`/health`, `/api/dub/jobs/{id}`, `/api/report/bundle`) | `tests/test_routes_table.py` (96 method and path pairs of the app's, plus FastAPI's own 8), the route tests |
+| HTTP routes, methods, form and query names, response shapes, status codes and `detail` sentences | `app/main.py`, `app/api/*.py` | the page, the MCP server, the shell (`/health`, `/api/dub/jobs/{id}`, `/api/report/bundle`) | `tests/test_routes_table.py` (108 method and path pairs of the app's, plus FastAPI's own 8), the route tests |
 | Job record: `job.json` fields, statuses, kinds | `app/jobs.py SAVED_FIELDS`, `LIST_FIELDS` | the backend on every restart, the page, the shell's usage counts, the MCP server | `tests/test_jobs.py`, `tests/test_dub_queue.py` |
 | Job folder file names | `app/pipeline.py`, `app/qwen_pipeline.py`, `app/dub_script.py`, the routes | Resume, the script screen, the result downloads, the Dub Agent | the pipeline and API tests |
 | `kit.env` keys | `desktop/src/installSpec.js writeKitEnv`; `app/settings_env.py` | shell, backend, workers, sidecar | `desktop/src/installSpec.test.mjs`, `tests/test_settings_api.py` |
@@ -683,7 +699,8 @@ means changing every reader in the same release.
 **HTTP.** The routes group by area: dub jobs (`/api/dub/start`,
 `/api/dub/jobs...`), scripts and line edits (`/api/dub/jobs/{id}/script...`,
 `/perso/...`), results and subtitles (`/api/dub/result/...`,
-`/api/subtitles/...`), erase (`/api/erase...`), separate (`/api/separate...`),
+`/api/subtitles/...`), a video brought into an audio project
+(`/api/dub/jobs/{id}/join...`, `/api/dub/result/{id}/joined`), erase (`/api/erase...`), separate (`/api/separate...`),
 held videos (`/api/downloads...`), settings, setup and models
 (`/api/settings`, `/api/perso/spaces`, `/api/setup`, `/api/models...`), the
 agent (`/api/agent/...`), and small ones (`/api/engines`, `/api/languages`,
@@ -701,7 +718,8 @@ are deliberately not saved. `GET /api/dub/jobs` returns `LIST_FIELDS`
 `GET /api/dub/jobs/{id}` returns the whole live record including `logs` and
 `notices`. Statuses are `"queued"`, `"running"`, `"cancelling"`,
 `"cancelled"`, `"done"`, `"error"`; kinds are `"dub"`, `"erase"`,
-`"separate"`; `"interrupted"` is an `error` value, not a status. A record
+`"separate"`; `"interrupted"` is an `error` value, not a status. `media` is
+`"audio"` for an audio project and absent for a video. A record
 written by an older version may lack any field, and every reader treats a
 missing field as unknown.
 

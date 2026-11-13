@@ -34,10 +34,11 @@ is at the right end of the tabs above the video.
 
 ## Dubbing
 
-The first screen asks one thing: which video? Drop files on the **Create project**
+The first screen asks one thing: which file? Drop files on the **Create project**
 banner, click it to choose them, or paste a video link into its link box. MP4 and MOV
-are accepted, up to 2 GB each. Several at once is fine: they queue and run one after
-another.
+video and WAV, FLAC, MP3 and M4A audio are accepted, up to 2 GB each. Several at once
+is fine: they queue and run one after another. An audio file becomes an
+[audio project](#audio-projects).
 
 A pasted link is fetched onto your machine before anything else happens, with the
 percentage on screen. Once it is here it behaves exactly like a file you dropped:
@@ -148,9 +149,42 @@ time slot goes first, then the original line, so the translation always stays wh
 
 **Download** opens a dialog with a row per file, each with a tick box; a dubbing's rows
 stand under three headings, **Video**, **Subtitles & script** and **Audio**. The dialog's own
-**Download** button saves the ticked rows. Sound rows can be MP3 or WAV. The app saves
-without asking, into `Downloads` / the day the job ran / the project's name; a saved
-row gets a check, and the line under the rows says where it went.
+**Download** button saves the ticked rows. Sound rows can be MP3, WAV, FLAC or M4A. The
+app saves without asking, into `Downloads` / the day the job ran / the project's name; a
+saved row gets a check, and the line under the rows says where it went.
+
+## Audio projects
+
+An audio file is dubbed the same way as a video, with **Local model** or **Perso API**,
+on the same screens. The player shows **Audio** where the picture would be, and the
+timeline's first lane is the sound. The **Erase**, **Burn in subtitles** and **Save
+video** tabs need a picture and stay locked.
+
+The result is the dubbed audio. **Download** has no **Video** heading: its rows are the
+dubbed audio, the original voice and the background, then the `.srt` and the script.
+Before dubbing, it saves the kept part as audio.
+
+### Bring in a video
+
+A finished audio project can take the video its sound belongs on. **Bring in a video**,
+under **Audio** in the player, takes an MP4 or MOV file. The picture then plays with the
+dubbed audio, and the timeline has a **Video** lane over the **Audio** lane.
+
+- Click a lane, and the timeline's cut tools work on that lane.
+- **Audio speed** plays the dubbed audio at 0.5×, 1×, 1.5×, 2× or 3×.
+- The mark at the top of the timeline says which lane is longer and by how much. Where
+  the video is longer, its end plays without sound; where the audio is longer, it is cut
+  where the video ends.
+- **Change the video**, on the video lane, puts another video in its place.
+- **Download** gains **Dubbed video**, at the top: your video with the dubbed audio in
+  place of its own sound. It is made when you download it, and a video cut at its start
+  or in the middle is re-encoded first, which takes longer.
+
+The cuts and the speed go into the dubbed video only. The dubbed audio, the script and
+the `.srt` stay whole, so after a cut on the audio lane or a change of speed the `.srt`'s
+times no longer match the dubbed video; the dialog says so. The video you brought in is
+not changed, and it is joined on this computer, also in a Perso API project. The three
+tabs stay locked.
 
 ## Erase subtitles
 

@@ -45,7 +45,7 @@
 
 ### Dub
 
-One video in, one dubbed video out, in each speaker's own voice. 646 languages on your computer with OmniVoice, 100+ with the Perso API, depending on the dubbing model.
+One video in, one dubbed video out, in each speaker's own voice. 646 languages on your computer with OmniVoice, 100+ with the Perso API, depending on the dubbing model. Audio works too: WAV, FLAC, MP3 or M4A in, dubbed audio out, and you can bring in a video for it afterwards.
 
 </td>
 <td width="50%" valign="top">
@@ -114,7 +114,7 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 ## Get started
 
 1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.1.0-arm64.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.1.0.exe).
-2. Drop in a video, or paste a link.
+2. Drop in a video or an audio file, or paste a link.
 3. Pick a language and press **Start dubbing**.
 
 **Updating from 0.8.4 or earlier?** Download and install the latest version once. From 0.8.5 on, PersoDub updates itself.
