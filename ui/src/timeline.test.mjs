@@ -893,7 +893,8 @@ test("before a video is imported, one row says what to do; an imported one is on
   h.api.showDraft();
   let html = h.box.innerHTML;
   const track = () => h.$("timelineTrack").innerHTML;
-  assert.ok(track().includes("Drop videos here"), "even before any video is imported");
+  // What is dropped here starts a dubbing, which takes audio too.
+  assert.ok(track().includes('<span>Drop videos or audio here</span>'), "even before any video is imported");
   assert.equal(h.box.classes.has("tl-draftmode"), true);
   for (const id of ["tlUndo", "tlRedo", "tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]) {
     assert.ok(html.includes(`id="${id}"`), id);
@@ -905,7 +906,7 @@ test("before a video is imported, one row says what to do; an imported one is on
   // No + and no drag onto the strip (mockup edit-flow): imported is on it.
   setDraft(DRAFT);
   html = h.box.innerHTML;
-  assert.ok(!track().includes("Drop videos here"));
+  assert.ok(!track().includes("Drop videos"));
   assert.ok(html.includes('<span>Video</span>'), "the Video lane alone");
   assert.ok(!html.includes('<span>Original</span>'));
   // One clip, the whole video: 770px, less the 2px that shows where clips meet.
@@ -1197,6 +1198,20 @@ test("while an erase runs the cuts are locked, but the playhead and playback are
   assert.equal(h.log.toggled, 1);
 });
 
+test("the empty row says what a drop on it takes: videos or audio for a dubbing, videos alone on the Erase tab", (t) => {
+  clearDraft();
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.showDraft();
+  const row = () => /<div class="tl-empty" id="tlDrop">.*?<span>(.*?)<\/span><\/div>/.exec(h.$("timelineTrack").innerHTML)[1];
+  assert.equal(row(), "Drop videos or audio here");
+  h.api.showErase({ strip: null, lane: null, locked: true });
+  assert.equal(row(), "Drop videos here");
+  h.api.showErase(null);
+  assert.equal(row(), "Drop videos or audio here");
+});
+
 test("an erase job's strip is its own video, and giving the strip back restores what was there", async (t) => {
   clearDraft();
   const h = harness();
@@ -1210,7 +1225,8 @@ test("an erase job's strip is its own video, and giving the strip back restores 
   setDraft(DRAFT);
   h.api.showErase({ strip: null, lane: null, locked: true });
   assert.ok(h.box.classes.has("tl-draftmode"));
-  assert.ok(h.$("timelineTrack").innerHTML.includes("Drop videos here"));
+  // Erase subtitles works on the picture: its row asks for videos alone.
+  assert.ok(h.$("timelineTrack").innerHTML.includes('<span>Drop videos here</span>'));
   assert.ok(!h.$("timelineTrack").innerHTML.includes("tl-vclip"));
   clearDraft();
   // A finished dub's lines arriving meanwhile wait for the strip to come back.
@@ -1220,7 +1236,7 @@ test("an erase job's strip is its own video, and giving the strip back restores 
                     locked: true, lane: { text: "Erased", cls: "ok", pct: 0 } });
   await settle();
   assert.ok(h.log.fetched.includes("/api/media/job/E1/filmstrip"));
-  assert.ok(!h.$("timelineTrack").innerHTML.includes("Drop videos here"));
+  assert.ok(!h.$("timelineTrack").innerHTML.includes("Drop videos"));
   // Its time is the strip's own: 3s of the video is 3s along.
   h.api.paintTimeline(3, 8, "clock");
   assert.equal(h.$("timelinePlayhead").style.left, `${(3 * TL_PPS).toFixed(1)}px`);

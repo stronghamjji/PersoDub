@@ -102,7 +102,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     if (box) box.hidden = !script;
     if (!active) return;
     newProject.moveOptionsInto($("draftOptionsSlot"));
-    $("draftPartCard").innerHTML = videoCardHtml({ name: d.name, kept: keptSeconds(d), total: d.duration });
+    $("draftPartCard").innerHTML = videoCardHtml({ name: d.name, kept: keptSeconds(d), total: d.duration, media: d.media });
     // Over 30 minutes of kept video: not refused, but said plainly, with the
     // way out (cut into parts). The old New project dialog said it; this card
     // took its place and said nothing (Windows B11, 2026-10-07).

@@ -708,7 +708,10 @@ test("Before dubbing says an audio file comes out as dubbed audio, subtitles and
   const { $ } = harness();
   setDraft({ downloadId: "d1", name: "talk.wav", duration: 30, videoUrl: "/v", media: "audio" });
   assert.equal($("draftResultWhat").textContent, "Dubbed audio, subtitles and script files");
+  // The card over it names the file as what it is.
+  assert.ok($("draftPartCard").innerHTML.startsWith('<div class="k">Audio</div><div class="m vc-name" title="talk.wav">'));
   setDraft({ downloadId: "d2", name: "a.mp4", duration: 30, videoUrl: "/v" });
   assert.equal($("draftResultWhat").textContent, "Dubbed video, subtitles and audio files");
+  assert.ok($("draftPartCard").innerHTML.startsWith('<div class="k">Video</div>'));
   clearDraft();
 });

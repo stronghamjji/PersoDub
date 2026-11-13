@@ -305,3 +305,22 @@ test("the Video card: its label, the file name and the kept length, with what wa
   assert.equal(videoCardHtml({ name: "a.mp4", kept: 10, total: 10 }),
     '<div class="k">Video</div><div class="m vc-name" title="a.mp4">a.mp4</div><div class="s vc-len">00:10</div>');
 });
+
+// A project of sound alone has no video to name (ui/src/mediaKind.mjs).
+test("an audio project's card is labelled Audio, in Korean too; any other mark is a video", async (t) => {
+  assert.deepEqual(videoCard({ name: "talk.wav", kept: 30, total: 30, media: "audio" }),
+    { label: "Audio", name: "talk.wav", length: "00:30", cut: "" });
+  assert.equal(videoCardHtml({ name: "talk.wav", kept: 20, total: 30, media: "audio" }),
+    '<div class="k">Audio</div><div class="m vc-name" title="talk.wav">talk.wav</div>'
+    + '<div class="s vc-len">00:20<span class="vc-cut">00:10 cut</span></div>');
+  assert.equal(videoCard({ name: "a.mp4", kept: 10, total: 10, media: undefined }).label, "Video");
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  assert.equal(videoCard({ name: "talk.wav", kept: 30, total: 30, media: "audio" }).label, "오디오");
+  assert.equal(videoCard({ name: "a.mp4", kept: 10, total: 10 }).label, "영상");
+});

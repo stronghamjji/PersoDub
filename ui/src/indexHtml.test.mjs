@@ -1956,6 +1956,16 @@ test("the ways into dubbing take the six kinds of file; Erase and Burn in subtit
   assert.match(html, /const bad = source\.file \? videoProblem\(source\.file\) : null;\n\s*if \(bad\) \{ draftImport\.say\(bad, true\); return Promise\.resolve\(\); \}\n\s*return draftImport\.importSource\(source\);/);
 });
 
+test("a file over the size limit is told so in words that fit a video and an audio file alike", () => {
+  const html = readPage();
+  const sentence = "This file is {size}. The limit is {limit}. Please use a shorter or smaller file.";
+  assert.ok(html.includes(`function tooBig(file) {\n  if (file.size > MAX_VIDEO_MB * 1024 * 1024) {\n    return t("${sentence}",`));
+  assert.ok(!html.includes("This video is {size}"));
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko[sentence], "이 파일은 {size}예요. 최대 {limit}까지 돼요. 더 짧거나 작은 파일을 골라요.");
+  assert.ok(!Object.keys(ko).some((k) => k.startsWith("This video is {size}")));
+});
+
 test("an audio project's video box is the sound sign and the word Audio, with no play sign over it", () => {
   const html = readPage();
   const badge = `<div class="video-audio">${lucide("volume-2", 22)}<span data-i18n>Audio</span></div>`;

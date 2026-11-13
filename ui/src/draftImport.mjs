@@ -2,7 +2,7 @@
 // mockup, owner 2026-09-30): one project holds one video, so there is no bin
 // to keep it in. With no video the Dubbing tab shows the one shared
 // Import block (ui/src/importBlock.mjs) over the timeline's empty row "Drop
-// videos here"; a file, a drop or a link lands as the draft
+// videos or audio here"; a file, a drop or a link lands as the draft
 // (ui/src/draft.mjs), on the timeline at once, and the tab that was open
 // stays open. What the import is doing ("Importing…", "Reading the link…",
 // "Downloading… 40%", why it failed) is said on the line under each block.

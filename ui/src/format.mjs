@@ -4,6 +4,7 @@
 // static/index.html (the app and the Dub Agent strip) can share the same
 // copy. ui/src/format.test.mjs pins the behaviour, edge cases included.
 import { t } from "./i18n.mjs";
+import { isAudio } from "./mediaKind.mjs";
 
 // 00:00:10 -- hours, minutes, seconds, two digits each.
 // Anything that is not a number, and anything below zero, reads as 00:00:00.
@@ -37,10 +38,12 @@ export function fmtLength(sec) {
 // The first card of the Dubbing, Audio and Erase tabs: which video this is
 // and how much of it is kept. The one place its words are made, so changing
 // the card is a change here. `cut` is "" for a video nothing was cut from.
-export function videoCard({ name = "", kept = 0, total = 0 } = {}) {
+// `media` is the project's own mark: sound alone is labelled Audio
+// (ui/src/mediaKind.mjs).
+export function videoCard({ name = "", kept = 0, total = 0, media } = {}) {
   // A hair added first: 39.7 - 29.7 must not come out a whisker under 10.
   const cut = Math.floor((Number(total) || 0) - (Number(kept) || 0) + 1e-6);
-  return { label: t("Video"), name: String(name || ""),
+  return { label: isAudio({ media }) ? t("Audio") : t("Video"), name: String(name || ""),
            length: Number(total) > 0 ? fmtLength(kept) : "",
            cut: cut >= 1 ? t("{length} cut", { length: fmtLength(cut) }) : "" };
 }

@@ -991,7 +991,7 @@ const MAX_VIDEO_LABEL = MAX_VIDEO_MB >= 1024 ? `${MAX_VIDEO_MB / 1024} GB` : `${
 // alone (ui/src/mediaKind.mjs). The size limit is the same for all of them.
 function tooBig(file) {
   if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
-    return t("This video is {size}. The limit is {limit}. Please use a shorter or smaller file.",
+    return t("This file is {size}. The limit is {limit}. Please use a shorter or smaller file.",
       { size: formatBytes(file.size), limit: MAX_VIDEO_LABEL });
   }
   return null;

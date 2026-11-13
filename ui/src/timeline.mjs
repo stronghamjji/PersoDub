@@ -623,7 +623,10 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
 
   function draftLanesHtml() {
     if (!clips) {
-      return `<div class="tl-empty" id="tlDrop">${lucide("film", 15)}<span>${t("Drop videos here")}</span></div>`;
+      // A drop here starts a dubbing, which takes audio too; on the Erase tab
+      // it is that tool's video.
+      const words = erase ? t("Drop videos here") : t("Drop videos or audio here");
+      return `<div class="tl-empty" id="tlDrop">${lucide("film", 15)}<span>${words}</span></div>`;
     }
     const media = mediaNow();
     let x = 0;
