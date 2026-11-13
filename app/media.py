@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from typing import Callable, Optional
 
 from app.timeouts import scaled_timeout
@@ -364,6 +365,24 @@ def cut_ranges(path: str, ranges, on_cut=None) -> None:
             os.remove(tmp)
 
 
+# Windows will not replace or delete a file that something still has open:
+# the page's player, a download still being saved, a virus scanner. Most let
+# go within a moment, so the ask is made again for about two seconds.
+HOLD_TRIES, HOLD_STEP = 20, 0.1
+
+
+def when_free(act, *paths):
+    """os.replace or os.remove (`act`) on a file that may still be open
+    somewhere: asked again while it is refused as held. One held to the end
+    raises the PermissionError, and nothing has been changed."""
+    for _ in range(HOLD_TRIES):
+        try:
+            return act(*paths)
+        except PermissionError:
+            time.sleep(HOLD_STEP)
+    return act(*paths)
+
+
 def join_video(video: str, sound: str, out: str, video_ranges, sound_ranges, tempo: float = 1.0,
                what: str = "Could not make the dubbed video") -> None:
     """A video brought into an audio project and its dubbed sound, as one new
@@ -378,7 +397,9 @@ def join_video(video: str, sound: str, out: str, video_ranges, sound_ranges, tem
     again, since a copy would land on the nearest keyframe. A picture mp4
     cannot hold as it is gets encoded too, once the copy has failed. A
     failure raises RuntimeError in the words of `what` (see _failure), and
-    `out` appears whole or not at all.
+    `out` appears whole or not at all. An `out` already there that stays
+    open elsewhere (Windows, a download still reading it) is left as it is
+    and PermissionError is raised (when_free).
     """
     kept = sum(b - a for a, b in video_ranges)
     cut_sound, cut_picture, part = out + ".sound.wav", out + ".picture.mp4", out + ".part.mp4"
@@ -412,7 +433,7 @@ def join_video(video: str, sound: str, out: str, video_ranges, sound_ranges, tem
             r = mux(cut_picture, sound, part, kept)
         if r.returncode != 0:
             raise RuntimeError(_failure(what, r.stderr, (video, sound, cut_picture, part)))
-        os.replace(part, out)
+        when_free(os.replace, part, out)
     finally:
         for scratch in (cut_sound, cut_picture, part):
             if os.path.exists(scratch):

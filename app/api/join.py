@@ -48,6 +48,13 @@ VIDEO, CUTS, BUILT, RECIPE = "join.mp4", "join.json", "joined.mp4", "joined.json
 TEMPOS = (0.5, 1.0, 1.5, 2.0, 3.0)
 
 
+def _in_use() -> HTTPException:
+    """What is answered when Windows will not replace or delete a file that
+    is still open (the page playing it, a download reading it), even after
+    media.when_free has waited: nothing was changed, and asking again works."""
+    return HTTPException(status_code=409, detail=t("The video is still in use. Try again in a moment."))
+
+
 def _job(jid: str) -> dict:
     job = state.job_store.get(jid)
     if job is None:
@@ -82,8 +89,9 @@ def _write(path: str, data: dict) -> None:
 
 def _forget(work: str, *names: str) -> None:
     """Remove these files of the folder, those that are there. One that
-    cannot be removed yet (Windows, while the page still plays it) is left:
-    join.json is what says a video is in, and it goes first."""
+    cannot be removed yet (Windows, while something still reads it) is left,
+    so the video itself is never removed this way: with join.json it is what
+    says a video is in (join_video_remove)."""
     for name in names:
         with contextlib.suppress(OSError):
             os.remove(os.path.join(work, name))
@@ -140,9 +148,10 @@ def join_video_bring(jid: str, video: UploadFile = File(...)):
     The file is written under a scratch name and asked what it is there: one
     with no picture is refused with 422 and not kept, and a video already in
     stays as it was, with its cuts. So it does when the new file cannot take
-    its place (Windows, while the page still plays the old one). A video that
-    is taken starts whole and at normal speed, and a joined file built from
-    the one before is removed.
+    its place (Windows, while the old one is still open somewhere), which is
+    answered with 409 once the wait is over. A video that is taken starts
+    whole and at normal speed, and a joined file built from the one before
+    is removed.
     """
     job = _job(jid)
     sound = _sound(job)
@@ -157,7 +166,10 @@ def join_video_bring(jid: str, video: UploadFile = File(...)):
         seconds = round(media_preview._duration(part), 3)
         if seconds <= 0:
             raise HTTPException(status_code=422, detail=t("That file does not look like a video."))
-        os.replace(part, dest)
+        try:
+            media.when_free(os.replace, part, dest)
+        except PermissionError:
+            raise _in_use()
     finally:
         if os.path.exists(part):
             os.remove(part)
@@ -173,10 +185,20 @@ def join_video_bring(jid: str, video: UploadFile = File(...)):
 @router.delete("/api/dub/jobs/{jid}/join/video")
 def join_video_remove(jid: str):
     """Take the video out again: its four files go, and the pictures the
-    timeline drew of it (app/media_preview.py). Nothing else is touched."""
+    timeline drew of it (app/media_preview.py). Nothing else is touched.
+
+    The video itself goes first. While it cannot (Windows, still open
+    somewhere) nothing is removed and the answer is 409: join.json gone
+    with join.mp4 still there would say no video is in, over one that is."""
     work = work_dir_of(_job(jid))
     if work:
-        _forget(work, CUTS, RECIPE, BUILT, VIDEO, VIDEO + ".filmstrip.jpg", VIDEO + ".waveform.json")
+        try:
+            media.when_free(os.remove, os.path.join(work, VIDEO))
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            raise _in_use()
+        _forget(work, CUTS, RECIPE, BUILT, VIDEO + ".filmstrip.jpg", VIDEO + ".waveform.json")
     return {"video": None}
 
 
@@ -234,7 +256,9 @@ def dub_result_joined(jid: str, download: int = 0):
     One build at a time for a project: a second ask waits and is served the
     same file. The recipe is read before the build starts, so a save that
     arrives while ffmpeg runs leaves a file that is already old, and the
-    next ask builds it again.
+    next ask builds it again. So does a new file that cannot take the old
+    one's place (Windows, while a download still reads it): 409, and the old
+    one stays whole.
     """
     job = _job(jid)
     sound = _sound(job)
@@ -255,6 +279,8 @@ def dub_result_joined(jid: str, download: int = 0):
                                  recipe["tempo"], what=t("Could not make the dubbed video"))
             except RuntimeError as e:
                 raise HTTPException(status_code=503, detail=str(e))
+            except PermissionError:
+                raise _in_use()
             _write(os.path.join(work, RECIPE), recipe)
     headers = ({"Content-Disposition": 'attachment; filename="dub_%s.mp4"' % _target_code(job)}
                if download else None)

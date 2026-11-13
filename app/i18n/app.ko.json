@@ -166,6 +166,7 @@
   "The translation runtime is not running. Quit and reopen {app}.": "번역 엔진이 꺼져 있어요. {app}을 완전히 껐다가 다시 켜 주세요.",
   "The translation runtime is still starting. Try again in a minute.": "번역 엔진이 아직 켜지는 중이에요. 1분 뒤 다시 시도해 주세요.",
   "The trim must start at 0 seconds or later and keep at least half a second of video.": "자르는 구간은 0초 이후에 시작하고 영상을 0.5초 이상 남겨야 해요.",
+  "The video is still in use. Try again in a moment.": "영상을 아직 쓰고 있어요. 잠시 뒤에 다시 해 봐요.",
   "The voice engine is busy. Wait for the running dubbing to finish, then try this line again.": "목소리 엔진이 바빠요. 진행 중인 더빙이 끝난 뒤 이 줄을 다시 시도해 주세요.",
   "The voice engine is not running. Quit and reopen {app}.": "목소리 엔진이 꺼져 있어요. {app}을 완전히 껐다가 다시 켜 주세요.",
   "The voice engine is still starting. Try again in a minute.": "목소리 엔진이 아직 켜지는 중이에요. 1분 뒤 다시 시도해 주세요.",

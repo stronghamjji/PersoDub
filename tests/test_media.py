@@ -512,3 +512,64 @@ def test_the_failure_is_said_in_the_words_the_caller_gives(monkeypatch, folder):
         media.join_video(str(video), str(sound), str(folder / "joined.mp4"), [[1, 8]], [[0, 10.0]],
                          what="더빙 영상을 만들지 못했어요")
     assert str(caught.value) == "더빙 영상을 만들지 못했어요: boom"
+
+
+# --- a file something still has open (Windows) ---------------------------------
+
+def test_a_file_held_for_a_moment_is_waited_for(monkeypatch):
+    monkeypatch.setattr(media, "HOLD_STEP", 0)
+    asks = []
+
+    def act(*paths):
+        asks.append(paths)
+        if len(asks) <= 3:
+            raise PermissionError(13, "in use")
+        return "done"
+
+    assert media.when_free(act, "new", "old") == "done"
+    assert asks == [("new", "old")] * 4
+
+
+def test_a_file_still_held_after_about_two_seconds_is_given_up_on(monkeypatch):
+    assert 1.5 <= media.HOLD_TRIES * media.HOLD_STEP <= 3
+    monkeypatch.setattr(media, "HOLD_STEP", 0)
+    asks = []
+
+    def act(path):
+        asks.append(path)
+        raise PermissionError(13, "in use")
+
+    with pytest.raises(PermissionError):
+        media.when_free(act, "old")
+    assert len(asks) == media.HOLD_TRIES + 1
+
+
+def test_only_a_held_file_is_waited_for(monkeypatch):
+    monkeypatch.setattr(media, "HOLD_STEP", 0)
+    asks = []
+
+    def act(path):
+        asks.append(path)
+        raise FileNotFoundError(2, "gone")
+
+    with pytest.raises(FileNotFoundError):
+        media.when_free(act, "old")
+    assert asks == ["old"]
+
+
+def test_a_joined_file_still_being_read_is_replaced_once_it_is_let_go(monkeypatch, folder, hold):
+    (folder / "joined.mp4").write_bytes(b"the one built before")
+    refused = hold("joined.mp4", times=3)
+    runs, error = _join(monkeypatch, folder, [[0, 12.0]], [[0, 10.0]])
+    assert error is None and refused == ["replace"] * 3
+    assert (folder / "joined.mp4").read_bytes() == b"run 1"
+
+
+def test_a_joined_file_that_stays_held_is_left_whole_with_no_scratch_beside_it(monkeypatch, folder, hold):
+    (folder / "joined.mp4").write_bytes(b"the one built before")
+    refused = hold("joined.mp4")
+    with pytest.raises(PermissionError):
+        _join(monkeypatch, folder, [[2, 8]], [[0, 5.0]], tempo=2.0)
+    assert refused == ["replace"] * (media.HOLD_TRIES + 1)
+    assert (folder / "joined.mp4").read_bytes() == b"the one built before"
+    assert sorted(p.name for p in folder.iterdir()) == ["dubbed.wav", "join.mp4", "joined.mp4"]

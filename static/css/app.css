@@ -2169,6 +2169,10 @@
      its picture's lane is a draft's film strip alone, over the sound's lane,
      and its name carries the quiet way to swap the video at its right end. */
   .tl-name-join, .tl-lane-join, .tl-lane-join .tl-vclip, .tl-lane-join .tl-seam { height: 55px; }
+  /* The picked clip of its two lanes: the draft's white ring is lost on a
+     bright film strip, so 2px of the primary colour go round it (the ring
+     covers the shadow's first pixel). */
+  .tl-jclip.sel { box-shadow: 0 0 0 3px var(--primary); }
   .tl-swap { margin-left: auto; margin-right: 8px; padding: 0; border: 0; background: none;
     font: inherit; color: var(--muted-foreground); cursor: pointer; white-space: nowrap;
     text-decoration: underline; text-underline-offset: 2px; }

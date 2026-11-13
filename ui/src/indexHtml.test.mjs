@@ -2098,3 +2098,12 @@ test("the timeline reads the brought-in video's lanes from the join player, and 
   const wiring = html.slice(at, html.indexOf("\n});", at));
   assert.match(wiring, /subtitles\.syncVideoChrome\(\);\n {4}timeline\.redraw\(\);/);
 });
+
+test("the picked clip of a brought-in video's lanes has a ring of the primary colour round the white one", () => {
+  // White alone is lost on a bright film strip. The white ring is the
+  // draft's own (.tl-cut.sel), which stays as it was.
+  const html = readPage();
+  assert.match(html, /\.tl-cut\.sel \{ outline: 2px solid #fff; outline-offset: -1px; z-index: 1; \}/);
+  assert.match(html, /\.tl-jclip\.sel \{ box-shadow: 0 0 0 3px var\(--primary\); \}/);
+  assert.match(readFileSync(TIMELINE, "utf8"), /class="tl-vclip tl-cut tl-jclip\$\{which === jlane && i === jsel \? " sel" : ""\}"/);
+});

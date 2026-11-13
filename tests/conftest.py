@@ -235,3 +235,38 @@ def after_a_restart(monkeypatch):
         return jid
 
     return run
+
+
+@pytest.fixture
+def hold(monkeypatch):
+    """hold(name, times) -> the list every refusal is added to.
+
+    Windows will not replace or delete a file something still has open (the
+    page's player, a download, a virus scanner): os.replace and os.remove
+    raise PermissionError. The tests run on macOS and Linux too, where both
+    go through, so this makes the file called `name` refuse the next `times`
+    asks, or every ask when no number is given. The wait between asks
+    (app/media.py when_free) takes no time."""
+    import os
+
+    from app import media
+    monkeypatch.setattr(media, "HOLD_STEP", 0)
+    real = {"replace": os.replace, "remove": os.remove}
+
+    def hold(name, times=None):
+        refused = []
+
+        def stand_in(which):
+            def act(*paths):
+                if os.path.basename(paths[-1]) == name and (times is None or len(refused) < times):
+                    refused.append(which)
+                    raise PermissionError(13, "The process cannot access the file because it is being "
+                                              "used by another process", paths[-1])
+                return real[which](*paths)
+            return act
+
+        monkeypatch.setattr(os, "replace", stand_in("replace"))
+        monkeypatch.setattr(os, "remove", stand_in("remove"))
+        return refused
+
+    return hold
