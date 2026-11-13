@@ -31,6 +31,7 @@ from starlette.routing import Route
 import app.main
 
 ROUTES = [
+    ('DELETE', '/api/dub/jobs/{jid}/join/video'),
     ('DELETE', '/api/dub/jobs/{jid}/workspace'),
     ('DELETE', '/api/models/{mid}'),
     ('GET', '/'),
@@ -41,6 +42,8 @@ ROUTES = [
     ('GET', '/api/downloads/{did}/video'),
     ('GET', '/api/dub/jobs'),
     ('GET', '/api/dub/jobs/{jid}'),
+    ('GET', '/api/dub/jobs/{jid}/join'),   # a video brought into an audio project (app/api/join.py)
+    ('GET', '/api/dub/jobs/{jid}/join/video'),
     ('GET', '/api/dub/jobs/{jid}/perso/edit'),
     ('GET', '/api/dub/jobs/{jid}/script'),
     ('GET', '/api/dub/jobs/{jid}/script.xlsx'),   # the script as Perso's spreadsheet (app/api/script.py)
@@ -51,6 +54,7 @@ ROUTES = [
     ('GET', '/api/dub/jobs/{jid}/view'),   # the ratio the player was left on (app/api/view.py)
     ('GET', '/api/dub/result/{jid}'),
     ('GET', '/api/dub/result/{jid}/audio'),
+    ('GET', '/api/dub/result/{jid}/joined'),
     ('GET', '/api/dub/result/{jid}/original'),
     ('GET', '/api/dub/result/{jid}/srt'),
     ('GET', '/api/dub/result/{jid}/stem/{which}'),
@@ -103,6 +107,7 @@ ROUTES = [
     ('POST', '/api/downloads/{did}/save'),
     ('POST', '/api/dub/jobs/{jid}/again'),
     ('POST', '/api/dub/jobs/{jid}/cancel'),
+    ('POST', '/api/dub/jobs/{jid}/join/video'),
     ('POST', '/api/dub/jobs/{jid}/perso/materialize'),
     ('POST', '/api/dub/jobs/{jid}/perso/proofread'),
     ('POST', '/api/dub/jobs/{jid}/perso/script/{line}/fit'),
@@ -139,6 +144,7 @@ ROUTES = [
     ('POST', '/api/subtitles/extract'),
     ('POST', '/api/translate'),
     ('POST', '/api/tts/say'),
+    ('PUT', '/api/dub/jobs/{jid}/join'),
     ('PUT', '/api/dub/jobs/{jid}/subtitle_style'),
     ('PUT', '/api/dub/jobs/{jid}/view'),
 ]

@@ -362,3 +362,58 @@ def cut_ranges(path: str, ranges, on_cut=None) -> None:
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
+
+
+def join_video(video: str, sound: str, out: str, video_ranges, sound_ranges, tempo: float = 1.0,
+               what: str = "Could not make the dubbed video") -> None:
+    """A video brought into an audio project and its dubbed sound, as one new
+    file `out`: the kept parts of the picture (`video_ranges`) with the kept
+    parts of the sound (`sound_ranges`) played `tempo` times faster, each
+    laid end to end from zero. The video's own sound is left out, and neither
+    file given is written to.
+
+    The file is as long as the picture kept: a shorter sound ends in silence
+    and a longer one is cut there (mux). The picture is copied as it is when
+    only its tail is cut; a cut at the head or in the middle encodes it
+    again, since a copy would land on the nearest keyframe. A picture mp4
+    cannot hold as it is gets encoded too, once the copy has failed. A
+    failure raises RuntimeError in the words of `what` (see _failure), and
+    `out` appears whole or not at all.
+    """
+    kept = sum(b - a for a, b in video_ranges)
+    cut_sound, cut_picture, part = out + ".sound.wav", out + ".picture.mp4", out + ".part.mp4"
+    try:
+        # A sound that only starts at zero is not whole: as it is, it would
+        # play on past where it was cut.
+        whole = (len(sound_ranges) == 1 and sound_ranges[0][0] <= 0
+                 and sound_ranges[0][1] >= video_duration(sound) - 0.05)
+        if not (whole and tempo == 1):
+            argv = audio_command(sound, cut_sound, "wav", sound_ranges)
+            if tempo != 1:
+                # atempo changes the speed and keeps the pitch. Older ffmpeg
+                # takes 0.5 to 2 in one step and newer ones drop samples
+                # above 2, so a faster speed is several steps of 2 or less.
+                steps, left = [], tempo
+                while left > 2:
+                    steps.append(2.0)
+                    left /= 2
+                speed = ",".join(f"atempo={step:g}" for step in steps + [left])
+                graph = argv.index("-filter_complex") + 1
+                argv[graph] = argv[graph].removesuffix("[a]") + "," + speed + "[a]"
+            run_new_file(argv, sum(b - a for a, b in sound_ranges), what)
+            sound = cut_sound
+        picture = video
+        if len(video_ranges) != 1 or video_ranges[0][0] > 0:
+            run_new_file(cut_ranges_command(video, cut_picture, video_ranges, audio=False), kept, what)
+            picture = cut_picture
+        r = mux(picture, sound, part, kept)
+        if r.returncode != 0 and picture == video:
+            run_new_file(cut_ranges_command(video, cut_picture, [[0, kept]], audio=False), kept, what)
+            r = mux(cut_picture, sound, part, kept)
+        if r.returncode != 0:
+            raise RuntimeError(_failure(what, r.stderr, (video, sound, cut_picture, part)))
+        os.replace(part, out)
+    finally:
+        for scratch in (cut_sound, cut_picture, part):
+            if os.path.exists(scratch):
+                os.remove(scratch)

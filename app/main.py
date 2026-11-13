@@ -31,6 +31,7 @@ from app.api import clips as clips_api
 from app.api import downloads as downloads_api
 from app.api import dub as dub_api
 from app.api import erase as erase_api
+from app.api import join as join_api
 from app.api import media as media_api
 from app.api import misc as misc_api
 from app.api import models as models_api
@@ -161,6 +162,7 @@ app.include_router(clips_api.router)
 app.include_router(downloads_api.router)
 app.include_router(dub_api.router)
 app.include_router(erase_api.router)
+app.include_router(join_api.router)
 app.include_router(separate_api.router)
 app.include_router(captions_api.router)
 app.include_router(media_api.router)
