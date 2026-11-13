@@ -214,6 +214,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   let jlane = "";           // "video", "audio", or "" until a clip is clicked
   let jsel = -1;
   let jgen = 0;
+  let fitJoinNext = false;
   // The handle, while a finished job's strip is drawing its lanes.
   const joined = () => (mode === "job" && jfor && getJoin() === jfor ? jfor : null);
   // The lanes follow the join player: a new handle (another video, or the
@@ -226,7 +227,9 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     const now = (s) => toSave(s, j.video.duration, j.audio.duration);
     if (j === jfor && jstate.tempo === c.tempo && sameRanges(now(jstate).video, now(c).video)
         && sameRanges(now(jstate).audio, now(c).audio)) return;
-    if (j !== jfor) jgen += 1;
+    // A video that has just come in, or another in its place, is shown whole:
+    // the next draw fits it (drawTimelineTrack, where the room is measured).
+    if (j !== jfor) { jgen += 1; fitJoinNext = true; }
     jstate = c;
     jfor = j;
     jhistory = createHistory(jstate, 100, cloneJoin);
@@ -421,6 +424,12 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     syncJoin();
     const box = $("timeline");
     box.classList.toggle("tl-draftmode", mode === "draft");
+    // One more lane needs a taller pane: the stylesheet's own height follows
+    // the class, a remembered one is put back with the lane added or taken off.
+    if (box.classList.contains("tl-joined") !== !!joined()) {
+      box.classList.toggle("tl-joined", !!joined());
+      fitTimelineHeight();
+    }
     box.innerHTML = headHtml() + `
     <div class="tl-body">
       <div class="tl-names"><div class="tl-corner"></div>${namesHtml()}</div>
@@ -619,6 +628,11 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     timelineRoom = track.clientWidth;
     if (fitDraftNext && mode === "draft" && clips && timelineRoom > 0) {
       fitDraftNext = false;
+      timelineZoom = fitZoom();
+      timelineAt = 0;
+    }
+    if (fitJoinNext && joined() && timelineRoom > 0) {
+      fitJoinNext = false;
       timelineZoom = fitZoom();
       timelineAt = 0;
     }
@@ -1379,6 +1393,24 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     };
   }
 
+  // The timeline's own. With a video brought in the strip has one lane more
+  // (55px and its 6px gap), so the pane is drawn that much taller, as far as
+  // its ceiling lets it. The size dragged to and remembered is the ordinary
+  // project's, without the lane: every other project gets back what it had.
+  const JOIN_LANE_PX = 61;
+  const joinLane = () => (joined() ? JOIN_LANE_PX : 0);
+  const fitTimelineHeight = makeGrip({
+    el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
+    read: () => $("timeline").offsetHeight - joinLane(),
+    // At most 40% of the window, and never so tall that the top bar (52), the
+    // gutters (18), the script pane's name (30), the table's own header (40)
+    // and a few rows of script cannot share what is left -- about 340px above
+    // it. (Stacked it is the video that also has to fit up there, but there
+    // the strip is as tall as its lanes and this ceiling is not reached.)
+    limits: () => [110, Math.max(110, Math.min(window.innerHeight * 0.4, window.innerHeight - 340) - joinLane())],
+    apply: (h) => { $("timeline").style.height = `${h + joinLane()}px`; },
+  });
+
   const layoutFits = [
     makeGrip({
       el: $("gripSidebar"), axis: "x", key: "persodub.layout.sidebarW", before: true,
@@ -1399,17 +1431,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     // other order let a remembered tall timeline push a remembered tall video
     // pane's share of the room out from under the table, which then slid under
     // the timeline (13-inch screen, user, 2026-09-02).
-    makeGrip({
-      el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
-      read: () => $("timeline").offsetHeight,
-      // At most 40% of the window, and never so tall that the top bar (52), the
-      // gutters (18), the script pane's name (30), the table's own header (40)
-      // and a few rows of script cannot share what is left -- about 340px above
-      // it. (Stacked it is the video that also has to fit up there, but there
-      // the strip is as tall as its lanes and this ceiling is not reached.)
-      limits: () => [110, Math.max(110, Math.min(window.innerHeight * 0.4, window.innerHeight - 340))],
-      apply: (h) => { $("timeline").style.height = `${h}px`; },
-    }),
+    fitTimelineHeight,
     // Layout G (user, 2026-09-08): the video is RIGHT of the table, so this
     // handle sizes a width, not a height. A new key, because a height saved by
     // the old stacked screen would come back as a width here and hand the video

@@ -2107,3 +2107,26 @@ test("the picked clip of a brought-in video's lanes has a ring of the primary co
   assert.match(html, /\.tl-jclip\.sel \{ box-shadow: 0 0 0 3px var\(--primary\); \}/);
   assert.match(readFileSync(TIMELINE, "utf8"), /class="tl-vclip tl-cut tl-jclip\$\{which === jlane && i === jsel \? " sel" : ""\}"/);
 });
+
+test("with a video brought in the timeline pane is the picture's lane taller", () => {
+  // The lane is 55px and its 6px gap: Translated and Captions fell under the
+  // pane's foot without them (owner, 2026-11-13). A height the grip
+  // remembered is added to by ui/src/timeline.mjs instead.
+  const html = readPage();
+  assert.match(html, /\.tl-name-join, \.tl-lane-join, \.tl-lane-join \.tl-vclip, \.tl-lane-join \.tl-seam \{ height: 55px; \}/);
+  assert.match(html, /\.timeline\.tl-joined \{ height: clamp\(301px, 100vh - 499px, 355px\); \}/);
+  const src = readFileSync(TIMELINE, "utf8");
+  assert.ok(src.includes('box.classList.toggle("tl-joined", !!joined());\n      fitTimelineHeight();'));
+  assert.ok(src.includes("const JOIN_LANE_PX = 61;"));
+});
+
+test("the New project dialog's box has the sound sign and the word Audio for a batch with no video", () => {
+  // Three audio files left the box plain black (owner, 2026-11-13).
+  const html = readPage();
+  assert.ok(html.includes(`<video id="projectVideo" muted playsinline></video><div class="project-audio">${lucide("volume-2", 22)}<span data-i18n>Audio</span></div>`));
+  assert.match(html, /\.project-audio \{ display: none; position: absolute; inset: 0;[^}]*pointer-events: none; \}/);
+  assert.match(html, /\.project-thumb\.audio \.project-audio \{ display: flex; \}/);
+  // The finished screen's own sign answers to the body's mark; this one must
+  // not, or an audio project open behind the dialog would put it over a video.
+  assert.equal(html.split('class="video-audio"').length - 1, 2);
+});

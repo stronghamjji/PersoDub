@@ -761,6 +761,10 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     const v = $("projectVideo");
     // A local file can be played and scrubbed; a link only ever has a still.
     v.hidden = !file;
+    // What the box shows of a batch: its first video, or with no video in it
+    // the sound sign and the word (the stylesheet's .project-thumb.audio).
+    const shown = (files && files.find((f) => fileKind(f.name) === "video")) || file;
+    $("projectThumb").classList.toggle("audio", !!shown && fileKind(shown.name) === "audio");
     // How many, said once: here and nowhere else in the window. "Videos"
     // while every one is; a batch may hold audio files too (ui/src/mediaKind.mjs).
     $("projectTitle").textContent = !files ? t("New project")
@@ -776,7 +780,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // this link actually has to be fetched.
     $("dlRow").hidden = true;
     if (file) {
-      projectObjectUrl = URL.createObjectURL(file);
+      projectObjectUrl = URL.createObjectURL(shown);
       v.src = projectObjectUrl;
       // Only a real file ever fires this, so only a real file may register it --
       // a once-listener that never fires never detaches, and one per link would

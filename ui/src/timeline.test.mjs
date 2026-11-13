@@ -1600,9 +1600,14 @@ function fakeJoin({ video = 10, audio = 8, ranges = {}, tempo = 1 } = {}) {
   };
 }
 const TALK = { kind: "job", id: "j1", name: "talk.wav", media: "audio" };
+// A video that has just come in is fitted to the room. The room here is what
+// the lanes take at the usual scale and the tail, so fitted is 77px a second.
 function joining(opts = {}, h0 = {}) {
   const join = fakeJoin(opts);
-  const h = harness({ media: TALK, join, ...h0 });
+  const kept = (ranges) => ranges.reduce((n, [x, y]) => n + y - x, 0);
+  const { video, audio } = join.clips();
+  const room = Math.max(kept(video), kept(audio) / join.tempo()) * TL_PPS + 80;
+  const h = harness({ media: TALK, join, room, ...h0 });
   h.api.attach();
   h.api.renderTimeline(LINES, opts.audio || 8);
   return { ...h, join };
@@ -1865,4 +1870,94 @@ test("another video, or the same project opened again, starts a fresh history; n
   h.api.redraw();
   assert.ok(h.box.innerHTML.includes("Voice length") && !h.box.innerHTML.includes("tlSplit"));
   assert.ok(!tr(h).includes("tl-jclip"));
+});
+
+// The owner's capture (2026-11-13): a 10 s audio project sat fitted to the
+// room, a 20 s video came in, and the film strip ran off the right edge.
+test("a video that comes in or is changed is shown whole from 00:00, and a cut or a speed leaves the scale alone", (t) => {
+  let join = null;
+  const h = harness({ media: TALK, join: () => join, room: 1200 });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.renderTimeline(LINES, 8);
+  const track = h.$("timelineTrack");
+  assert.ok(track.innerHTML.includes('<div class="tl-vclip" style="left:0;width:616.0px">'), "the audio project at the usual scale");
+  h.box.fire("click", evt({ "#tlZoomIn": {} }));
+  track.scrollLeft = 90;
+  h.box.fire("scroll", { target: track });
+
+  // 20 s in 1200px less the 80px tail: 56px to the second.
+  join = fakeJoin({ video: 20 });
+  h.api.redraw();
+  assert.equal(track.scrollLeft, 0, "from 00:00");
+  assert.match(track.innerHTML, /class="tl-inner" style="width:1200px"/, "nothing left to scroll");
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:1118.0px"'));
+
+  // A cut and a speed are drawn at that same scale.
+  join.seek(10);
+  h.box.fire("click", pick("video"));
+  h.box.fire("click", evt({ "#tlDelRight": {} }));
+  assert.deepEqual(join.log.sets.at(-1).video, [[0, 10]]);
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:558.0px"'));
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "2" } } }));
+  assert.deepEqual(join.log.tempos, [2]);
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:558.0px"'));
+
+  // Another video in its place: fitted again, 28px to the second.
+  join = fakeJoin({ video: 40 });
+  h.api.redraw();
+  assert.match(track.innerHTML, /class="tl-inner" style="width:1200px"/);
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:1118.0px"'));
+});
+
+// The owner's capture (2026-11-13): with the picture's lane added, Translated
+// and Captions fell under the pane's foot. The lane is 55px and its 6px gap.
+test("with a video brought in the timeline pane is one lane taller, and the remembered size stays the ordinary one", (t) => {
+  let join = fakeJoin();
+  const h = harness({ media: TALK, join: () => join,
+                      stored: { "persodub.layout.timelineHeight": "250" } });
+  t.after(h.log.restore);
+  const box = h.$("timeline");
+  h.api.attach();
+  assert.equal(box.style.height, "250px", "no strip drawn yet: the remembered size");
+  h.api.renderTimeline(LINES, 8);
+  assert.equal(box.style.height, "311px");
+  assert.equal(box.classes.has("tl-joined"), true);
+
+  // Dragged with the video in: what is remembered is the size without its lane.
+  const grip = h.$("gripTimeline");
+  box.offsetHeight = 311;
+  grip.fire("pointerdown", evt({}, { clientY: 500 }));
+  grip.fire("pointermove", { clientY: 480 });
+  assert.equal(box.style.height, "331px");
+  // Never past the pane's ceiling: 40% of a 900px window, the lane included.
+  grip.fire("pointermove", { clientY: 100 });
+  assert.equal(box.style.height, "360px");
+  grip.fire("pointermove", { clientY: 480 });
+  box.offsetHeight = 331;
+  grip.fire("pointerup", {});
+  assert.equal(h.log.stored.get("persodub.layout.timelineHeight"), "270");
+
+  // The video gone: the lane's room is given back.
+  join = null;
+  h.api.redraw();
+  assert.equal(box.style.height, "270px");
+  assert.equal(box.classes.has("tl-joined"), false);
+  assert.equal(h.log.stored.get("persodub.layout.timelineHeight"), "270");
+});
+
+test("a remembered timeline height near the ceiling grows only as far as the window lets it, and none leaves it to the stylesheet", (t) => {
+  // A 700px window: 40% of it is 280px.
+  const h = harness({ media: TALK, join: fakeJoin(), innerHeight: 700,
+                      stored: { "persodub.layout.timelineHeight": "250" } });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.renderTimeline(LINES, 8);
+  assert.equal(h.$("timeline").style.height, "280px");
+
+  // Nothing remembered: the class is the stylesheet's cue for the taller pane.
+  const fresh = joining();
+  t.after(fresh.log.restore);
+  assert.equal(fresh.$("timeline").style.height, undefined);
+  assert.equal(fresh.$("timeline").classes.has("tl-joined"), true);
 });
