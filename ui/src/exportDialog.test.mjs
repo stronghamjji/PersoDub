@@ -229,9 +229,10 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
   const store = new Map(Object.entries(stored));
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
   const asked = [];      // what was fetched first
+  const wanted = [];     // the rows each opening named, as the page is told
   const followed = [];   // what was handed to the browser
   const api = initExportDialog({
-    $, getContext: async () => ctx, storage, shell,
+    $, getContext: async (only) => { wanted.push(only); return ctx; }, storage, shell,
     fetchFn: fetchFn || (async (href) => { asked.push(href); return { ok: true }; }),
     follow: (href, name) => followed.push([href, name]),
     record: (name, props) => steps.push([name, props]),
@@ -248,7 +249,7 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
   const tick = (id) => click({ closest: (sel) => (sel === "a" ? { dataset: { row: id } } : null) });
   const pick = (fmt) => click({ closest: (sel) => (sel === "[data-fmt]" ? { dataset: { fmt } } : null) });
   const go = () => $("exportGoBtn").listeners.click();
-  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, followed, steps };
+  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, wanted, followed, steps };
 }
 
 test("the dialog draws a dubbing's headings, and a press on one ticks nothing", async () => {
@@ -308,6 +309,17 @@ test("an opening that names its rows ticks those, and what was remembered stays 
 
 // The Save video tab (owner, 2026-10-23): the project's own video and nothing
 // else -- a draft's video, a project's original whatever it came from.
+// A dubbing project's Erase tab has nothing of its own to hand back, so the
+// page answered "nothing" there, and Save video, which asks for the project's
+// original, did nothing at all (Windows test, 2026-11-14). The page is told
+// which rows the opening is for, and gives the project for its original.
+test("the page is told which rows an opening is for", async () => {
+  const h = harness({ ctx: DUB });
+  await h.api.open(["original"], ["original"]);
+  await h.api.open();
+  assert.deepEqual(h.wanted, [["original"], null]);
+});
+
 test("an opening for some rows offers those alone, the original included for any project", async () => {
   const fromFile = { ...DUB, fromLink: false };
   const only = ["original"];
@@ -875,7 +887,7 @@ test("an audio project's downloads are steps in the charts under the same names 
 // record carries (ui/src/app.mjs exportContext): a draft's own and a job's.
 test("the page hands the dialog the project's media, for a draft and for a dubbing", () => {
   const app = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
-  const block = app.slice(app.indexOf("async function exportContext()"), app.indexOf("const exportDialog = initExportDialog("));
+  const block = app.slice(app.indexOf("async function exportContext("), app.indexOf("const exportDialog = initExportDialog("));
   assert.match(block, /return \{ kind: "draft", media: getDraft\(\)\.media, /);
   assert.match(block, /kind: "dub", [^}]*\bmedia: job\.media,/);
 });
@@ -973,7 +985,7 @@ test("the dubbed video is made first, the way the subtitled video is, then hande
 // link is the one for what is on the timeline now.
 test("the page saves a waiting change, then hands the dialog the app's answer as `joined`", () => {
   const app = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
-  const block = app.slice(app.indexOf("async function exportContext()"), app.indexOf("const exportDialog = initExportDialog("));
+  const block = app.slice(app.indexOf("async function exportContext("), app.indexOf("const exportDialog = initExportDialog("));
   const saved = block.indexOf("await joinPlayer.saved()");
   const asked = block.indexOf("/api/dub/jobs/${job.id}/join`");
   assert.ok(saved > 0 && asked > saved, "saved first, then asked");

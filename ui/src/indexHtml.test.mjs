@@ -517,8 +517,20 @@ test("an erase screen exports only the video it shows", () => {
   const html = readPage();
   assert.match(html, /exportable = undefined \}\) \{/);
   assert.match(html, /\$\("exportBtn"\)\.disabled = exportable !== undefined \? !exportable/);
-  assert.match(html, /if \(document\.body\.dataset\.screen === "erase" && !eraseScreen\.exportsDraft\(\)\) return null;/);
+  assert.match(html, /if \(document\.body\.dataset\.screen === "erase" && !eraseScreen\.exportsDraft\(\) && !original\) return null;/);
   assert.match(html, /projectOpen: \(\) => !!state\.jobId,/);
+});
+
+// A dubbing project's Erase tab holds that project's video, which is not a
+// draft of the screen's own, so the screen had nothing to hand back and Save
+// video there did nothing: no dialog, no word (Windows test, 2026-11-14). It
+// is the project's original that tab saves, as from the project's other tabs,
+// until the screen has an erased video of its own.
+test("Save video on a dubbing project's Erase tab saves the project's original", () => {
+  const html = readPage();
+  assert.match(html, /async function exportContext\(only = null\) \{/);
+  assert.match(html, /const original = !!state\.jobId && \(only \|\| \[\]\)\.includes\("original"\);/);
+  assert.match(html, /const own = erase && \(eraseScreen\.erasedJob\(\) \|\| eraseScreen\.exportsDraft\(\)\);\n  const row = state\.jobId && !own \? \["original"\] : \["video"\];/);
 });
 
 // The agent lives in a right-hand column and the finished screen puts the
@@ -874,7 +886,7 @@ test("the left panel is a row of tabs, each over a body of its own", () => {
   assert.match(words, /\['#leftTabs \[data-tab="captions"\]', t\("Burn in subtitles"\)\]/);
   assert.match(words, /\['#leftTabs \[data-tab="save"\]', t\("Save video"\)\]/);
   // It opens the Download dialog with the project's own video alone.
-  assert.match(html, /const row = state\.jobId && document\.body\.dataset\.screen !== "erase" \? \["original"\] : \["video"\];\n\s*exportDialog\.open\(row, row\);/);
+  assert.match(html, /const row = state\.jobId && !own \? \["original"\] : \["video"\];\n\s*exportDialog\.open\(row, row\);/);
   assert.ok(!/tabMedia|mediaTab|media-thumb|mediaSearch|mediaImpBtn/.test(html), "nothing of the Media tab is left");
   assert.ok(!html.includes('id="tabAudio"'), "no Audio tab body");
   assert.match(pane, /<button class="left-tab on"[^>]*data-tab="dubbing" aria-selected="true">/, "Dubbing is on to begin with");

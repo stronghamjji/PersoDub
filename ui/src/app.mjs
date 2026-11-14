@@ -743,7 +743,10 @@ onSave: () => {
     leftTabs.show("save");
     return;
   }
-  const row = state.jobId && document.body.dataset.screen !== "erase" ? ["original"] : ["video"];
+  // A project's Erase tab holds the project's video, not one of its own, until
+  // it has erased it: Save video there is the project's original still.
+  const own = erase && (eraseScreen.erasedJob() || eraseScreen.exportsDraft());
+  const row = state.jobId && !own ? ["original"] : ["video"];
   exportDialog.open(row, row);
 } });
 // A dub that is open (running, finished or stopped): its Erase tab starts
@@ -2134,7 +2137,7 @@ const donePlayer = initDonePlayer({
 // parts, a finished dub's files, an erased video. The dialog, its rows and
 // the receipt each row gives are ui/src/exportDialog.mjs; this is only what
 // is on screen right now, in the shape that file reads.
-async function exportContext() {
+async function exportContext(only = null) {
   // The shape the Ratio button is on: every video row is saved in it
   // (ui/src/exportDialog.mjs puts it on the links and hands it to save).
   const ratio = ratioUi.current();
@@ -2145,8 +2148,11 @@ async function exportContext() {
     return { kind: "erase", ratio: (getDraft() || {}).ratio || "original", where: t("Saved in Downloads"), save: (what) => eraseScreen.exportErased(what) };
   }
   // Any other erase screen hands back only the draft it shows: an empty one
-  // saved whatever draft was still held (Windows test E9).
-  if (document.body.dataset.screen === "erase" && !eraseScreen.exportsDraft()) return null;
+  // saved whatever draft was still held (Windows test E9). An open project's
+  // original, asked for by name (Save video), is the project's to give
+  // whichever tab is up.
+  const original = !!state.jobId && (only || []).includes("original");
+  if (document.body.dataset.screen === "erase" && !eraseScreen.exportsDraft() && !original) return null;
   // A draft with a video on the timeline, before any dub. An audio draft
   // says so (`media`), and the dialog offers its sound alone.
   if (!state.jobId && draftSetup.canExport()) {
