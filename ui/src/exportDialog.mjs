@@ -306,7 +306,7 @@ function followLink(href, name) {
 /**
  * @param {object} deps
  * @param {(id: string) => any} deps.$
- * @param {() => Promise<object|null>} deps.getContext  what is on screen, as
+ * @param {(only: string[]|null) => Promise<object|null>} deps.getContext  what is on screen, as
  *        exportRows reads it, plus `where` (the line under the rows, naming
  *        Downloads), for a dubbing `day` (its files' dated folder, with
  *        `project`) and, for a draft or an erased video,
@@ -492,7 +492,7 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
   // video's own opening ticks Video), remembering nothing. `only`: the rows
   // to offer, the rest left out (the Save video tab's original).
   async function open(tick = null, only = null) {
-    const next = await getContext();
+    const next = await getContext(only);
     if (!next) return;
     ctx = only ? { ...next, only } : next;
     folder = shell && shell.downloadFolder ? await shell.downloadFolder().catch(() => null) : null;
