@@ -32,7 +32,7 @@ test("Perso API greys the stage rows, each saying Perso handles it, and Local mo
   assert.equal($("dubModeSelect").value, "perso");
   assert.equal($("dubModePerso").getAttribute("aria-checked"), "true");
   assert.equal($("dubModeHint").textContent,
-    "Perso does the dubbing start to finish.\nSign up and the first minute is free. Credits after that.\nThe video is uploaded to Perso.");
+    "Perso does the dubbing start to finish.\nSign up and the first minute is free. Credits after that.");
   for (const id of HINTS) assert.equal($(id).textContent, "Perso handles this.", id);
   for (const id of STAGES) assert.equal($(id).disabled, true, `${id} is greyed`);
   assert.ok($("advancedBody").classList.contains("by-perso"), "and reads Perso (static/css/app.css)");

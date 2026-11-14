@@ -640,7 +640,6 @@
   "The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen {app}.": "The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen {app}.",
   "The video could not be fetched.": "The video could not be fetched.",
   "The video is still coming in": "The video is still coming in",
-  "The video is uploaded to Perso.": "The video is uploaded to Perso.",
   "The video is {n}s longer": "The video is {n}s longer",
   "The video with its subtitles erased": "The video with its subtitles erased",
   "The video with subtitles burned in, and the subtitle file": "The video with subtitles burned in, and the subtitle file",

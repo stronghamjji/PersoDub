@@ -640,7 +640,6 @@
   "The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen {app}.": "번역 엔진을 켜지 못해서 {name}으로 번역할 수 없어요. 다른 번역기를 고르거나 {app}을 껐다 켜면 돼요.",
   "The video could not be fetched.": "영상을 가져오지 못했어요.",
   "The video is still coming in": "영상을 아직 받는 중이에요",
-  "The video is uploaded to Perso.": "영상이 Perso로 올라가요.",
   "The video is {n}s longer": "영상이 {n}초 더 길어요",
   "The video with its subtitles erased": "자막을 지운 영상이 나와요",
   "The video with subtitles burned in, and the subtitle file": "자막을 입힌 영상과 자막 파일이 나와요",
