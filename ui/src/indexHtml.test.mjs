@@ -2061,9 +2061,11 @@ test("with a video brought in the box shows its picture: no badge, no bring-in r
   assert.ok(html.indexOf("body.joined-video .video-audio") > html.indexOf("body.audio-project .video-audio { display: flex; }"),
             "after the rule it overrides");
   // Of the bring-in row, only its line stays (another video coming in, a
-  // refusal, a picture the browser cannot show), under the play sign.
+  // refusal, a picture the browser cannot show): at the top of the picture,
+  // clear of the play sign, on the badge that reads on any picture.
   assert.match(html, /body\.joined-video \.video-bring-row \{ display: none; \}/);
-  assert.match(html, /body\.joined-video \.video-bring \{ transform: translate\(-50%, 44px\);/);
+  assert.match(html, /body\.joined-video \.video-bring \{ top: 10px; transform: translateX\(-50%\);/);
+  assert.match(html, /body\.joined-video \.video-bring-note \{[^}]*background: var\(--thumb-badge\); color: var\(--thumb-foreground\); \}/);
   // A picture standing still has its play sign back.
   assert.match(html, /body\.joined-video \.video-bigplay:not\(\[hidden\]\) \{ display: inline-flex; \}/);
   // "No video in the panel" asks the player, not the picture's element, which is empty on every other project.

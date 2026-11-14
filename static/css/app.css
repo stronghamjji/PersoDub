@@ -1903,9 +1903,14 @@
   body.joined-video #doneVideo { position: absolute; width: 0; height: 0; }
   body.joined-video .video-audio { display: none; }
   /* With a video in, the box keeps only the line (bringing another in, a
-     refusal, a picture this browser cannot show), under the play sign. */
+     refusal, a picture this browser cannot show). It lies on the picture, so
+     it sits at the top, clear of the play sign and of the subtitles at the
+     foot, on the badge the play sign wears: grey letters were lost on a
+     bright picture (Windows test, 2026-11-14). */
   body.joined-video .video-bring-row { display: none; }
-  body.joined-video .video-bring { transform: translate(-50%, 44px); width: max-content; max-width: 80%; }
+  body.joined-video .video-bring { top: 10px; transform: translateX(-50%); width: max-content; max-width: 90%; }
+  body.joined-video .video-bring-note { padding: 5px 10px; border-radius: 6px; font-size: 12px;
+    background: var(--thumb-badge); color: var(--thumb-foreground); }
   body.joined-video .video-bigplay:not([hidden]) { display: inline-flex; }
   /* The row under the picture: the small play button and the clock. The big
      button in the middle of the picture stays -- it is the "this is stopped"
