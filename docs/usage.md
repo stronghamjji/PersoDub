@@ -171,7 +171,7 @@ under **Audio** in the player, takes an MP4 or MOV file. The picture then plays 
 dubbed audio, and the timeline has a **Video** lane over the **Audio** lane.
 
 - Click a lane, and the timeline's cut tools work on that lane.
-- **Audio speed** plays the dubbed audio at 0.5×, 1×, 1.5×, 2× or 3×.
+- The speed button beside the **Audio** lane's name plays the dubbed audio at 0.5×, 1×, 1.5×, 2× or 3×.
 - The mark at the top of the timeline says which lane is longer and by how much. Where
   the video is longer, its end plays without sound; where the audio is longer, it is cut
   where the video ends.

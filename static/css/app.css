@@ -2186,12 +2186,31 @@
     font: inherit; color: var(--muted-foreground); cursor: pointer; white-space: nowrap;
     text-decoration: underline; text-underline-offset: 2px; }
   .tl-swap:hover { color: var(--foreground); }
-  /* Its head: the audio speed in the Download dialog's switch (.export-seg),
-     then the pill that says which lane is longer. */
-  .tl-speed { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; white-space: nowrap; }
-  .tl-speed .export-seg { margin-left: 0; }
-  .tl-speed .export-seg [data-tempo] { border: 0; background: none; font-family: inherit; padding: 2px 5px;
-    font-variant-numeric: tabular-nums; }
+  /* The audio speed, at the right of the Audio lane's name where the lane
+     above has Change the video (owner, 2026-11-14): a small button that says
+     the speed, and its menu of the steps hung under it from its right edge.
+     The menu lies over the names below, on a layer of its own because the
+     Captions name is one when its eye is off. The step playing is on the
+     pill colour and shows its tick; every step carries one. */
+  .tl-spd { position: relative; margin-left: auto; margin-right: 8px; }
+  .tl-spd-btn, .tl-spd-menu button { display: flex; align-items: center; border: 0;
+    font: inherit; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap;
+    color: var(--foreground); cursor: pointer; }
+  .tl-spd-btn { gap: 4px; height: 20px; padding: 0 4px 0 7px; border-radius: 5px;
+    background: var(--secondary); box-shadow: 0 0 0 1px var(--divider); }
+  .tl-spd-btn:hover { background: color-mix(in srgb, var(--foreground) 12%, var(--secondary)); }
+  .tl-name .tl-spd .lu { padding: 0; color: inherit; }
+  .tl-spd-btn .lu { opacity: 0.7; }
+  .tl-spd-menu { position: absolute; top: calc(100% + 3px); right: 0; z-index: 6; width: 78px; padding: 3px;
+    display: flex; flex-direction: column; background: var(--head-bg); border: 1px solid var(--divider);
+    border-radius: 7px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35); }
+  .tl-spd-menu[hidden] { display: none; }
+  .tl-spd-menu button { justify-content: space-between; flex: none; height: 19px; padding: 0 7px;
+    border-radius: 4px; background: none; }
+  .tl-spd-menu button:hover, .tl-spd-menu button[aria-checked="true"] { background: var(--secondary); }
+  .tl-spd-menu .lu { stroke-width: 2.6; visibility: hidden; }
+  .tl-spd-menu [aria-checked="true"] .lu { visibility: visible; }
+  /* Its head: the pill that says which lane is longer. */
   .tl-pill { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 20px;
     margin-left: 12px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; }
   .tl-pill.warn { color: var(--timeline-short); background: color-mix(in srgb, var(--timeline-short) 16%, transparent); }
@@ -2918,9 +2937,9 @@
      export-ratio 1): the Captions tab's segment, lit in the primary colour. */
   .export-seg { margin-left: auto; display: inline-flex; background: var(--secondary);
     border-radius: var(--radius-sm); padding: 2px; }
-  .export-seg :is([data-fmt], [data-tempo]) { border-radius: 5px; padding: 3px 6px; font-size: var(--font-label);
+  .export-seg [data-fmt] { border-radius: 5px; padding: 3px 6px; font-size: var(--font-label);
     color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
-  .export-seg :is([data-fmt], [data-tempo]).on { background: var(--primary); color: var(--primary-foreground); }
+  .export-seg [data-fmt].on { background: var(--primary); color: var(--primary-foreground); }
   .export-list a .export-seg + .export-state { margin-left: 0; }
   /* A line said under a row (the subtitle file's times after the audio lane
      is cut): quiet, the size of a group's heading. */
