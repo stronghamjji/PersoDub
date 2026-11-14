@@ -2122,6 +2122,30 @@ test("the picked clip of a brought-in video's lanes has a ring of the primary co
   assert.match(readFileSync(TIMELINE, "utf8"), /class="tl-vclip tl-cut tl-jclip\$\{which === jlane && i === jsel \? " sel" : ""\}"/);
 });
 
+test("the audio speed is a small button at the right of the Audio lane's name, its menu hung under it", () => {
+  // Owner, 2026-11-14: out of the head, which keeps the cut tools and the
+  // pill. 20px high where Change the video sits on the lane above; the menu
+  // 78px wide with 19px rows, the step playing on the pill colour with a tick.
+  const html = readPage();
+  assert.match(html, /\.tl-spd \{ position: relative; margin-left: auto; margin-right: 8px; \}/);
+  assert.match(html, /\.tl-spd-btn, \.tl-spd-menu button \{[^}]*font: inherit; font-size: 10\.5px; font-variant-numeric: tabular-nums;[^}]*color: var\(--foreground\);/);
+  assert.match(html, /\.tl-spd-btn \{[^}]*height: 20px;[^}]*background: var\(--secondary\); box-shadow: 0 0 0 1px var\(--divider\);/);
+  assert.match(html, /\.tl-spd-menu \{ position: absolute; top: calc\(100% \+ 3px\); right: 0; z-index: 6; width: 78px;[^}]*background: var\(--head-bg\); border: 1px solid var\(--divider\);/);
+  assert.match(html, /\.tl-spd-menu\[hidden\] \{ display: none; \}/);
+  assert.match(html, /\.tl-spd-menu button \{[^}]*height: 19px;/);
+  assert.match(html, /\.tl-spd-menu button:hover, \.tl-spd-menu button\[aria-checked="true"\] \{ background: var\(--secondary\); \}/);
+  assert.match(html, /\.tl-spd-menu \.lu \{[^}]*visibility: hidden; \}\n\s*\.tl-spd-menu \[aria-checked="true"\] \.lu \{ visibility: visible; \}/);
+  // The lane names' icons are padded 4px; the chevron and the tick are not.
+  assert.match(html, /\.tl-name \.tl-spd \.lu \{ padding: 0; color: inherit; \}/);
+  // The head's switch is gone, and the Download dialog's is its own again.
+  assert.doesNotMatch(html, /\.tl-speed\b/);
+  assert.doesNotMatch(html, /\.export-seg[^{]*data-tempo/);
+  assert.match(html, /\.export-seg \[data-fmt\] \{ border-radius: 5px; padding: 3px 6px; font-size: var\(--font-label\);/);
+  assert.match(html, /\.export-seg \[data-fmt\]\.on \{ background: var\(--primary\); color: var\(--primary-foreground\); \}/);
+  // Its mouse press leaves the focus where it was, as the head's tools do.
+  assert.ok(readFileSync(TIMELINE, "utf8").includes('if (e.target.closest(".tl-head button, .tl-spd button")) e.preventDefault();'));
+});
+
 test("with a video brought in the timeline pane is the picture's lane taller", () => {
   // The lane is 55px and its 6px gap: Translated and Captions fell under the
   // pane's foot without them (owner, 2026-11-13). A height the grip

@@ -43,6 +43,8 @@ function makeEl(id) {
     appendChild(kid) { this.children.push(kid); return kid; },
     remove() { this.removed = true; },
     setPointerCapture(pid) { this.captured.push(pid); },
+    scrollIntoView(how) { this.shown = how; },
+    focus() { this.focused = (this.focused || 0) + 1; },
     addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
     removeEventListener(ev, fn) {
       this.listeners[ev] = (this.listeners[ev] || []).filter((f) => f !== fn);
@@ -1259,7 +1261,7 @@ test("a press on a lane moves the playhead there before dubbing, and the click s
   assert.equal(press.prevented, undefined, "the click that follows is not stopped");
   assert.equal(h.log.painted, 1);
   // A tool pressed with the mouse does not keep the focus the space bar needs.
-  const down = evt({ ".tl-head button": {} });
+  const down = evt({ ".tl-head button, .tl-spd button": {} });
   h.box.fire("mousedown", down);
   assert.equal(down.prevented, true);
 });
@@ -1750,34 +1752,128 @@ test("one undo stack over both lanes, and Cmd+Z, Cmd+B and Delete work on the pi
   assert.equal(h.$("tlSplit").dataset.tip !== NO_LANE, true);
 });
 
-test("Audio speed offers the five steps, sets the speed and takes part in undo", (t) => {
+// The audio speed: a small button beside the Audio lane's name and the menu
+// it opens. The icons are taken out so the markup reads whole.
+const noIcons = (html) => html.replace(/<svg[^]*?<\/svg>/g, "<svg/>");
+const SPEED_STEPS = [["0.5", "0.5×"], ["1", "1×"], ["1.5", "1.5×"], ["2", "2×"], ["3", "3×"]];
+const speedCell = (now) => '<div class="tl-name tl-name-video"><svg/><span>Audio</span><span class="tl-spd">'
+  + `<button class="tl-spd-btn" id="tlSpeed" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Audio speed ${now}×">${now}×<svg/></button>`
+  + '<span class="tl-spd-menu" id="tlSpeedMenu" role="menu" aria-label="Audio speed" hidden>'
+  + SPEED_STEPS.map(([x, words], i) => `<button type="button" id="tlSpeed${i}" data-tempo="${x}" role="menuitemradio" aria-checked="${x === now}">${words}<svg/></button>`).join("")
+  + '</span></span></div><div class="tl-name tl-name-org">';
+// The page as the strip's HTML leaves it: the menu shut. Hands back a press
+// on the button, and what is open.
+function speedMenu(h) {
+  const btn = h.$("tlSpeed"), menu = h.$("tlSpeedMenu");
+  menu.hidden = true;
+  return { btn, menu, press: () => h.box.fire("click", evt({ "#tlSpeed": {} })),
+           open: () => [menu.hidden, btn.attrs["aria-expanded"]].join() === "false,true",
+           shut: () => [menu.hidden, btn.attrs["aria-expanded"]].join() === "true,false" };
+}
+
+test("Audio speed is a small button beside the Audio lane's name that says the speed, and the head keeps only the tools and the pill", (t) => {
+  const h = joining({ tempo: 1.5 });
+  t.after(h.log.restore);
+  const html = noIcons(h.box.innerHTML);
+  assert.ok(html.includes(speedCell("1.5")), "the Audio name, the button, then the menu of the five steps, shut");
+  assert.ok(h.box.innerHTML.includes('aria-label="Audio speed 1.5×">1.5×<svg class="lu" width="12" height="12"'), "the speed and a small chevron");
+  // After the picture's name and its Change the video, in the names.
+  assert.ok(html.indexOf('id="tlJoinSwap"') < html.indexOf('id="tlSpeed"'));
+  assert.ok(html.indexOf('<div class="tl-names">') < html.indexOf('id="tlJoinSwap"'));
+  // Nothing of the head's switch is left: the tools, then the pill, then the clock.
+  const head = html.slice(html.indexOf('<div class="tl-head">'), html.indexOf('<div class="tl-body">'));
+  assert.doesNotMatch(head, /tlSpeed|data-tempo|Audio speed/);
+  assert.doesNotMatch(html, /tl-speed|export-seg|radiogroup|role="radio"/);
+  assert.match(head, /id="tlDelete"[^]*?<\/button><\/span><span class="tl-pill warn" id="tlJoinPill"/);
+  assert.ok(head.indexOf('id="tlJoinPill"') < head.indexOf('id="timelineClock"'));
+});
+
+test("the speed button opens its menu; a step chosen sets the speed, shuts the menu and takes part in undo", (t) => {
   const h = joining();
   t.after(h.log.restore);
-  const html = h.box.innerHTML;
-  assert.ok(html.includes('<span class="tl-speed">Audio speed<span class="export-seg" role="radiogroup" aria-label="Audio speed">'));
-  const steps = [...html.matchAll(/data-tempo="([\d.]+)"[^>]*>([^<]*)</g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(steps, [["0.5", "0.5×"], ["1", "1×"], ["1.5", "1.5×"], ["2", "2×"], ["3", "3×"]]);
-  assert.ok(html.includes('data-tempo="1" role="radio" aria-checked="true" class="on"'));
-  // Right of the tools, left of the pill.
-  assert.ok(html.indexOf('id="tlDelete"') < html.indexOf("tl-speed"));
-  assert.ok(html.indexOf("tl-speed") < html.indexOf('id="tlJoinPill"'));
-  assert.ok(html.indexOf('id="tlJoinPill"') < html.indexOf('id="timelineClock"'));
+  const m = speedMenu(h);
+  const says = () => [noIcons(m.btn.innerHTML), m.btn.attrs["aria-label"]];
+  const ticked = () => SPEED_STEPS.map((_, i) => h.$(`tlSpeed${i}`).attrs["aria-checked"]).join();
+  m.press();
+  assert.ok(m.open());
+  assert.deepEqual(m.menu.shown, { block: "nearest" }, "a pane dragged short scrolls its menu into sight");
+  assert.deepEqual(h.join.log.tempos, [], "opening changes nothing");
 
   h.join.seek(4);
   h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "2" } } }));
   assert.deepEqual(h.join.log.tempos, [2]);
   assert.equal(h.join.log.seeks.at(-1), 2, "the same word of the sound stays under the playhead");
   assert.ok(tr(h).includes('data-lane="audio" data-i="0"\n      style="left:0.0px;width:306.0px"'));
-  assert.equal(h.$("tlSpeed3").classes.has("on"), true);
-  assert.equal(h.$("tlSpeed1").classes.has("on"), false);
-  assert.equal(h.$("tlSpeed3").attrs["aria-checked"], "true");
+  assert.ok(m.shut());
+  assert.deepEqual(says(), ["2×<svg/>", "Audio speed 2×"]);
+  assert.equal(ticked(), "false,false,false,true,false");
   assert.equal(h.$("tlUndo").disabled, false, "a speed can be undone with no lane picked");
+
+  // Undo and redo put the button's words and the tick back with the speed.
   h.box.fire("click", evt({ "#tlUndo": {} }));
   assert.deepEqual(h.join.log.tempos, [2, 1]);
-  assert.equal(h.$("tlSpeed1").classes.has("on"), true);
-  // The same speed again is no change.
-  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "1" } } }));
-  assert.deepEqual(h.join.log.tempos, [2, 1]);
+  assert.deepEqual(says(), ["1×<svg/>", "Audio speed 1×"]);
+  assert.equal(ticked(), "false,true,false,false,false");
+  h.log.fireDoc("keydown", key("z", { metaKey: true, shiftKey: true }));
+  assert.deepEqual(h.join.log.tempos, [2, 1, 2]);
+  assert.deepEqual(says(), ["2×<svg/>", "Audio speed 2×"]);
+  assert.ok(m.shut(), "neither opens it");
+
+  // The step it is on already: no change, and the menu shuts all the same.
+  m.press();
+  assert.ok(m.open());
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "2" } } }));
+  assert.deepEqual(h.join.log.tempos, [2, 1, 2]);
+  assert.ok(m.shut());
+  // The button again shuts what it opened.
+  m.press();
+  m.press();
+  assert.ok(m.shut());
+});
+
+test("the speed menu shuts on a press anywhere else and on Escape, and a strip drawn again has it shut", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  const m = speedMenu(h);
+  // A press on the button or in the menu is not a press elsewhere.
+  m.press();
+  h.log.fireDoc("click", evt({ ".tl-spd": {} }));
+  assert.ok(m.open());
+  h.log.fireDoc("click", evt({}));
+  assert.ok(m.shut());
+  assert.equal(m.btn.focused, undefined, "the focus is left where the press put it");
+
+  m.press();
+  h.log.fireDoc("keydown", key("Escape"));
+  assert.ok(m.shut());
+  assert.equal(h.log.toggled, 0, "and Escape does nothing else");
+
+  // Shut from the keyboard with the focus on one of its steps: the focus
+  // goes back to the button, not down with the menu.
+  m.press();
+  globalThis.document.activeElement = { closest: (sel) => (sel === "#tlSpeedMenu" ? {} : null) };
+  h.log.fireDoc("keydown", key("Escape"));
+  assert.ok(m.shut());
+  assert.equal(m.btn.focused, 1);
+  // Shut already: nothing to do.
+  h.log.fireDoc("keydown", key("Escape"));
+  assert.equal(m.btn.focused, 1);
+
+  // Drawn again, the strip's HTML has the menu shut and the speed as it is now.
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "3" } } }));
+  h.api.redraw();
+  assert.ok(noIcons(h.box.innerHTML).includes(speedCell("3")));
+});
+
+test("a press of the mouse on the speed button or a step does not take the focus the space bar needs", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  const down = evt({ ".tl-head button, .tl-spd button": {} });
+  h.box.fire("mousedown", down);
+  assert.equal(down.prevented, true);
+  const elsewhere = evt({ "#tlJoinSwap": {} });
+  h.box.fire("mousedown", elsewhere);
+  assert.equal(elsewhere.prevented, undefined);
 });
 
 test("the pill says which is longer, or that they match, and its tip what that means", (t) => {
@@ -1869,6 +1965,7 @@ test("another video, or the same project opened again, starts a fresh history; n
   join = null;
   h.api.redraw();
   assert.ok(h.box.innerHTML.includes("Voice length") && !h.box.innerHTML.includes("tlSplit"));
+  assert.ok(!h.box.innerHTML.includes("tlSpeed"), "and no speed to pick");
   assert.ok(!tr(h).includes("tl-jclip"));
 });
 

@@ -350,13 +350,18 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     + `${tool("tlSplit", "gap-horizontal", 13.8, t("Split at playhead"), `${modKey()}+B`)}${tool("tlDelLeft", "split-left", 13.8, t("Delete left of playhead"))}`
     + `${tool("tlDelRight", "split-right", 13.8, t("Delete right of playhead"))}${tool("tlDelete", "trash", 16.2, t("Delete selected"), "Delete")}</span>`;
 
-  // The audio speed in the owner's fixed steps, in the Download dialog's
-  // switch (.export-seg).
+  // The audio speed in the owner's fixed steps: a small button beside the
+  // Audio lane's name that says the speed, and the menu of the steps it
+  // opens (owner, 2026-11-14: out of the head, which was crowded). Every step
+  // carries the tick; the stylesheet shows the one that is checked.
+  const speedFace = () => `${jstate.tempo}×${lucide("chevron-down", 12)}`;
+  const speedLabel = () => `${t("Audio speed")} ${jstate.tempo}×`;
   function speedHtml() {
-    const on = jstate.tempo;
-    return `<span class="tl-speed">${t("Audio speed")}<span class="export-seg" role="radiogroup" aria-label="${t("Audio speed")}">`
-      + TEMPOS.map((x, i) => `<button type="button" id="tlSpeed${i}" data-tempo="${x}" role="radio" aria-checked="${x === on}"`
-        + `${x === on ? ' class="on"' : ""}>${x}×</button>`).join("") + "</span></span>";
+    return `<span class="tl-spd"><button class="tl-spd-btn" id="tlSpeed" type="button" aria-haspopup="menu" aria-expanded="false"`
+      + ` aria-label="${speedLabel()}">${speedFace()}</button>`
+      + `<span class="tl-spd-menu" id="tlSpeedMenu" role="menu" aria-label="${t("Audio speed")}" hidden>`
+      + TEMPOS.map((x, i) => `<button type="button" id="tlSpeed${i}" data-tempo="${x}" role="menuitemradio"`
+        + ` aria-checked="${x === jstate.tempo}">${x}×${lucide("check", 11)}</button>`).join("") + "</span></span>";
   }
 
   // Which lane is longer, on its tip what that means (ui/src/joinCuts.mjs).
@@ -369,7 +374,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
 
   function headHtml() {
     const left = mode === "draft" ? cutToolsHtml()
-      : joined() ? cutToolsHtml() + speedHtml() + pillHtml()
+      : joined() ? cutToolsHtml() + pillHtml()
       : ownSubtitles() ? '<span class="tl-legend"></span>' : `<span class="tl-legend">
         <span><i class="tl-sw-voice"></i>${t("Voice length")}</span>
         <span><i class="tl-sw-slot"></i>${t("Time available")}</span>
@@ -398,11 +403,11 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     const name = (cls, icon, size, text, lead = "") => `<div class="tl-name ${cls}">${lead || lucide(icon, size)}<span>${t(text)}</span></div>`;
     // The first lane is the file itself: a video, or an audio project's sound.
     // With a video brought in, the picture's lane comes first, with the way
-    // to swap the video at its right end.
+    // to swap the video at its right end, and the sound's has its speed there.
     const file = joined()
       ? `<div class="tl-name tl-name-join">${lucide("square-play", 12.3)}<span>${t("Video")}</span>`
         + `<button class="tl-swap" id="tlJoinSwap" type="button">${t("Change the video")}</button></div>`
-        + name("tl-name-video", "volume-2", 11, "Audio")
+        + `<div class="tl-name tl-name-video">${lucide("volume-2", 11)}<span>${t("Audio")}</span>${speedHtml()}</div>`
       : isAudio(mediaNow()) ? name("tl-name-video", "volume-2", 11, "Audio")
       : name("tl-name-video", "square-play", 12.3, "Video");
     if (mode === "draft") {
@@ -892,7 +897,9 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
         !jlane ? why : jsel < 0 ? t("Select a part first") : t("The last part stays"));
   }
 
-  // The head's parts that follow the lanes: the pill and the lit speed.
+  // What follows the lanes outside the track: the head's pill, and the speed
+  // on its button and ticked in its menu. The names are only drawn with the
+  // whole strip, so an undo or a redo of a speed reaches the button here.
   function paintJoinHead() {
     const p = pillNow();
     const pill = $("tlJoinPill");
@@ -901,12 +908,32 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       pill.innerHTML = pillInner(p);
       if (p.tip) pill.dataset.tip = p.tip; else delete pill.dataset.tip;
     }
+    const btn = $("tlSpeed");
+    if (btn) {
+      btn.innerHTML = speedFace();
+      btn.setAttribute("aria-label", speedLabel());
+    }
     TEMPOS.forEach((x, i) => {
       const b = $(`tlSpeed${i}`);
-      if (!b) return;
-      b.classList.toggle("on", x === jstate.tempo);
-      b.setAttribute("aria-checked", String(x === jstate.tempo));
+      if (b) b.setAttribute("aria-checked", String(x === jstate.tempo));
     });
+  }
+
+  // The speed menu, opened or shut. Open is what its button says
+  // (aria-expanded) and nothing else remembers it: the strip drawn again
+  // writes the button and the menu afresh, shut, so it can neither stay open
+  // over new lanes nor be thought open when it is not. Opened in a pane
+  // dragged shorter than its lanes, it is scrolled into sight. Shut while the
+  // focus is on one of its steps (the keyboard: a mouse press leaves the
+  // focus alone), the focus goes back to the button instead of being lost.
+  function showSpeedMenu(open) {
+    const btn = $("tlSpeed"), menu = $("tlSpeedMenu");
+    if (!btn || !menu || open === (btn.getAttribute("aria-expanded") === "true")) return;
+    const held = document.activeElement;
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+    if (open) menu.scrollIntoView({ block: "nearest" });
+    else if (held && held.closest && held.closest("#tlSpeedMenu")) btn.focus();
   }
 
   // A strip longer than the window is a strip the playhead walks off the end of.
@@ -1121,7 +1148,11 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     if (e.target.closest("#tlDelRight")) { joinCut("right"); return true; }
     if (e.target.closest("#tlDelete")) { joinCut("remove"); return true; }
     const speed = e.target.closest("[data-tempo]");
-    if (speed) { setJoinTempo(+speed.dataset.tempo); return true; }
+    if (speed) { setJoinTempo(+speed.dataset.tempo); showSpeedMenu(false); return true; }
+    if (e.target.closest("#tlSpeed")) {
+      showSpeedMenu($("tlSpeed").getAttribute("aria-expanded") !== "true");
+      return true;
+    }
     if (e.target.closest("#tlJoinSwap")) { changeJoinVideo(); return true; }
     if (e.target.closest(".tl-head")) return true;
     const clip = e.target.closest(".tl-jclip");
@@ -1145,9 +1176,10 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // a listener on the document.
   // A tool pressed with the mouse does not keep the focus: a button that has it
   // takes the space bar for itself, and the next Space split the clip again
-  // instead of playing (user, 2026-09-30).
+  // instead of playing (user, 2026-09-30). The speed's button and steps were
+  // tools of the head and are pressed the same way beside the Audio name.
   $("timeline").addEventListener("mousedown", (e) => {
-    if (e.target.closest(".tl-head button")) e.preventDefault();
+    if (e.target.closest(".tl-head button, .tl-spd button")) e.preventDefault();
   });
   function onDoneKeydown(e) {
     const draftOn = mode === "draft" && $("timeline").offsetWidth > 0;
@@ -1484,6 +1516,12 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // only). The page calls this once.
   function attach() {
     document.addEventListener("keydown", onDoneKeydown);
+    // The speed menu shuts on a press anywhere but on its button or itself,
+    // and on Escape, as the page's other menus do.
+    document.addEventListener("click", (e) => {
+      if (!e.target || !e.target.closest || !e.target.closest(".tl-spd")) showSpeedMenu(false);
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") showSpeedMenu(false); });
     // The scale is measured from the track's width, so a window resized (or, later,
     // a pane dragged) has to be measured again -- otherwise the drawing keeps the
     // old width's scale.
