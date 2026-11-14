@@ -70,12 +70,6 @@ If `.venv` doesn't exist yet:
 `.venv\Scripts\pip install -r requirements.txt -r requirements-dev.txt`).
 `requirements-dev.txt` adds the pinned `ruff` that the lint check runs.
 
-### Docker (currently unverified)
-
-A `Dockerfile` and `docker-compose.yml` are in the repository, but they do not
-yet provision the subprocess interpreters the pipeline needs. The supported
-path is the local uvicorn setup above.
-
 ## Configuration (environment variables)
 
 Copy `env.server.example` to your own `.env` and fill in the values. Secrets
