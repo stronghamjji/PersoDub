@@ -44,6 +44,24 @@ def should_inject(argv, pip_version):
     return not (is_pip(argv) and pip_trusts_os_store(pip_version()))
 
 
+def tolerate_unreadable_store(context_class, platform):
+    """On Windows, a damaged certificate in the computer's store makes Python's
+    read of the whole store fail ("ASN1 bad tag value met", issue #236), and
+    with it every HTTPS download. truststore has Windows itself verify each
+    site, so that read is not what decides trust there and can be skipped."""
+    if platform != "win32":
+        return
+    load = context_class.load_default_certs
+
+    def load_default_certs(self, *args, **kwargs):
+        try:
+            return load(self, *args, **kwargs)
+        except OSError:
+            pass
+
+    context_class.load_default_certs = load_default_certs
+
+
 def _pip_version():
     from importlib.metadata import version
     return version("pip")
@@ -52,6 +70,7 @@ def _pip_version():
 try:
     if should_inject(getattr(sys, "orig_argv", []), _pip_version):
         import truststore
+        tolerate_unreadable_store(truststore.SSLContext, sys.platform)
         truststore.inject_into_ssl()
 except Exception:
     pass  # a hook that fails must never stop the interpreter
