@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 from app import media, media_preview, state
 from app.api._launch import check_space
-from app.api._shared import check_ranges_fit, parse_ranges, require_video, work_dir_of
+from app.api._shared import check_ranges_fit, parse_ranges, work_dir_of
 from app.api.results import _target_code
 from app.i18n import t
 from app.jobs import JobStatus
@@ -162,7 +162,10 @@ def join_video_bring(jid: str, video: UploadFile = File(...)):
     try:
         with open(part, "wb") as f:
             shutil.copyfileobj(video.file, f)
-        require_video(part)
+        # A sound file is refused in this route's own words: the tools' shared
+        # refusal speaks of "this tool", and bringing a video in is not one.
+        if media.media_kind(part) != "video":
+            raise HTTPException(status_code=422, detail=t("That file does not look like a video."))
         seconds = round(media_preview._duration(part), 3)
         if seconds <= 0:
             raise HTTPException(status_code=422, detail=t("That file does not look like a video."))

@@ -141,7 +141,7 @@ def test_an_audio_file_is_not_a_video_and_is_not_kept(lengths, monkeypatch):
     jid, work = _job()
     monkeypatch.setattr(media, "media_kind", lambda path: "audio")
     r = _bring(jid, "song.mp3", b"ID3")
-    assert r.status_code == 422 and r.json()["detail"] == "This tool takes video files only."
+    assert r.status_code == 422 and r.json()["detail"] == "That file does not look like a video."
     assert _files(work) == ["dubbed.wav"] and _state(jid) == {"video": None}
 
 
