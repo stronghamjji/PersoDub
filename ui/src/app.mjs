@@ -429,12 +429,11 @@ $("voiceSelect").addEventListener("change", () => applyEngineAvailabilityToForm(
 // the hint slots render these with pre-line whitespace. Getters, so each is
 // read in the language of the moment. The Perso API dubbing hint names the
 // free first minute (owner, 2026-10-21): it is what gets people to sign up.
-// And that the video leaves this computer (owner, 2026-10-22): the intro
-// page promises it stays, for the local path.
+// It stops there (owner, 2026-11-14): the line saying the video is uploaded
+// read wrong over a sound file, and docs/privacy.md is where that is said.
 const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
-             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that."),
-                                   t("The video is uploaded to Perso.")]; } },
+             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
   sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get roformer() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },

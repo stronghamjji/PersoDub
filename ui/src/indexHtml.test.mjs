@@ -1356,7 +1356,6 @@ test("a Perso dubbing's greyed stage rows read Perso, and say Perso handles them
   assert.match(html, /\$\("advancedBody"\)\.classList\.toggle\("by-perso", cloud\);/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["Perso handles this."], "Perso가 처리해요.");
-  assert.equal(ko["The video is uploaded to Perso."], "영상이 Perso로 올라가요.");
 });
 
 test("the confirms keep their corner X for its listeners, but hidden", () => {
