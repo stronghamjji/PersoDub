@@ -932,6 +932,9 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
             log(f"   Error: {msg}")
             raise shown_error(msg, f"{failed[1]} {where[1]}", reason[1]) from e
         auto_translated = True
+        # The voices come next: a local model is let go so the voice engine
+        # has the memory it needs (#241).
+        tr.release()
     else:
         _log_stage(log, "translate", "Using the provided translated subtitles")
         _record_provided_script(srt_path, source_cues, work_dir)

@@ -6,6 +6,7 @@ dubbing, each line is requested to have a spoken length similar to the original
 GeminiTranslator uses a consumer AI Studio API key (GEMINI_API_KEY), never shown on
 screen. VertexTranslator uses a service-account (OAuth) instead -- see its docstring.
 """
+import contextlib
 import hashlib
 import os
 import re
@@ -119,6 +120,10 @@ class TranslationEngine:
     def _ask(self, prompt: str) -> str:
         """One request to this translator's model: the prompt out, its answer back."""
         raise NotImplementedError
+
+    def release(self) -> None:
+        """Let go of whatever this translator holds in the computer's memory
+        once the script is translated. Nothing, for a translator in the cloud."""
 
     def translate(
         self,
@@ -648,6 +653,15 @@ class OllamaTranslator(TranslationEngine):
                 continue
             return r.json()["message"]["content"]
         raise last_err
+
+    def release(self) -> None:
+        """Ask Ollama to unload the model now. It otherwise keeps it in memory
+        for minutes after the last answer, and Gemma 12B held 13 GB of a 16 GB
+        Windows PC while the voice engine failed to load beside it (#241). A
+        server that does not answer is left as it is: this never fails a dub."""
+        with contextlib.suppress(requests.exceptions.RequestException):
+            requests.post(f"{self.url}/api/generate",
+                          json={"model": self.model, "keep_alive": 0}, timeout=30)
 
     def translate(
         self,
