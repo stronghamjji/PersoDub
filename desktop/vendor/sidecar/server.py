@@ -318,9 +318,35 @@ def _resolve_device(device):
         return device
     try:
         import torch
-        return "cuda:0" if torch.cuda.is_available() else "cpu"
+        if not torch.cuda.is_available():
+            return "cpu"
+        # A GPU older than every kernel in this torch build (a GTX 750 Ti,
+        # compute 5.0, under cu128) is visible but dies on its first kernel
+        # with "no kernel image is available" (issue #235): CPU instead.
+        return "cuda:0" if _build_runs_on(torch) else "cpu"
     except Exception:
         return "cpu"
+
+
+def _build_runs_on(torch):
+    """Whether this torch build has kernels for GPU 0: a sm_XY binary runs on
+    the same major version at minor Y or later, and compute_XY code is built
+    by the driver for any GPU at XY or later. A build that names no
+    architectures is taken at its word."""
+    major, minor = torch.cuda.get_device_capability(0)
+    arches = torch.cuda.get_arch_list()
+    if not arches:
+        return True
+    for arch in arches:
+        kind, _, number = arch.partition("_")
+        if not number.isdigit():
+            continue
+        n = int(number)
+        if kind == "sm" and n // 10 == major and n % 10 <= minor:
+            return True
+        if kind == "compute" and n <= major * 10 + minor:
+            return True
+    return False
 
 
 @app.on_event("startup")
