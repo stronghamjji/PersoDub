@@ -568,3 +568,23 @@ def test_a_machine_transcript_is_joined_by_pauses_but_a_users_script_is_kept(tmp
     script.write_text("1\n00:00:00,000 --> 00:00:02,000\nA.\n\n2\n00:00:02,100 --> 00:00:04,000\nB.\n",
                       encoding="utf-8")
     assert [c["text"] for c in pipeline._pick_source_cues(str(script), None, whisper)] == ["A.", "B."]
+
+
+def test_the_translator_is_let_go_before_the_voices_are_made(tmp_path, monkeypatch):
+    # #241: the local translation model was still holding 13 GB when synthesis
+    # began, and the voice engine failed to load ("paging file too small").
+    released = []
+    eng = FakeTranslator()
+    eng.release = lambda: released.append(True)
+
+    def fake_auto(cues, language, tr, work_dir, log=None):
+        out = tmp_path / "translated.srt"
+        out.write_text("1\n00:00:00,000 --> 00:00:01,000\nHallo.\n", encoding="utf-8")
+        return str(out)
+
+    monkeypatch.setattr(pipeline, "_auto_translate_srt", fake_auto)
+    segments, auto = pipeline._stage_translate(
+        None, [{"start": 0.0, "end": 1.0, "text": "Hello."}], "de", None, eng,
+        str(tmp_path), None, lambda m: None)
+    assert auto is True and len(segments) == 1
+    assert released == [True]
