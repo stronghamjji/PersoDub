@@ -1,13 +1,17 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "notes": [
-    "A second voice engine for local dubbing: pick OmniVoice under Text-to-speech. It is an optional download, and Qwen3-TTS stays the default.",
-    "With OmniVoice, a video can be dubbed on your computer into 646 languages, up from 10.",
-    "The OmniVoice model is licensed for personal, non-commercial use only."
+    "Audio files can be dubbed too. Add one the same way you add a video.",
+    "A dubbed audio file can be put on a video. Cut the video and the audio separately on the timeline, and pick the audio speed.",
+    "While the Dub Agent thinks, the mascot shows a thought bubble.",
+    "The three usage-data switches in Settings are now one. It is on, and you can turn it off in Settings.",
+    "Fixed installs, downloads and local dubs stopping on some computers."
   ],
   "notes_ko": [
-    "로컬 더빙에 목소리 엔진이 하나 더 생겼어요. 목소리 만들기에서 OmniVoice를 골라요. 따로 내려받는 선택 항목이고, 기본은 그대로 Qwen3-TTS예요.",
-    "OmniVoice를 쓰면 내 컴퓨터에서 더빙할 수 있는 언어가 10개에서 646개로 늘어요.",
-    "OmniVoice 모델은 개인·비상업 용도로만 쓸 수 있어요."
+    "오디오 파일도 더빙할 수 있어요. 영상처럼 파일을 넣으면 돼요.",
+    "더빙한 오디오에 영상을 입힐 수 있어요. 타임라인에서 영상과 오디오를 따로 자르고, 오디오 속도도 골라요.",
+    "더빙 에이전트가 생각하는 동안 방울이가 생각 풍선을 띄워요.",
+    "설정의 사용 정보 스위치 세 개가 하나로 합쳐졌어요. 켜져 있고, 설정에서 끌 수 있어요.",
+    "일부 컴퓨터에서 설치나 내려받기, 로컬 더빙이 멈추던 문제를 고쳤어요."
   ]
 }
