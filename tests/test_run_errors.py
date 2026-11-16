@@ -6,7 +6,7 @@ file that had nothing wrong with it.
 """
 import subprocess
 
-from app.run_errors import advice_for, describe_exit_failure, describe_start_failure
+from app.run_errors import advice_for, describe_exit_failure, describe_start_failure, stopped_by_quit
 
 
 class _Result:
@@ -74,3 +74,13 @@ def test_advice_follows_the_failure_not_the_stage():
     assert "memory" in advice_for("DefaultCPUAllocator: not enough memory", check)
     # A file that really is broken still gets the old sentence.
     assert advice_for("moov atom not found", check) == check
+
+
+def test_a_helper_stopped_by_sigterm_says_the_app_was_closing():
+    # macOS sends every process SIGTERM when the computer shuts down, before
+    # the app's own quit runs; "exited with code -15 and said nothing" made it
+    # a crash report (issue #237).
+    said = describe_exit_failure("local separation", _Result(returncode=-15))
+    assert stopped_by_quit(said)
+    assert "said nothing" not in said
+    assert not stopped_by_quit(describe_exit_failure("local separation", _Result(returncode=1)))

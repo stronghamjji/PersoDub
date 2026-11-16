@@ -685,3 +685,26 @@ def test_korean_examples_are_all_haeyo():
     from app.text import length_fit as lf
     for _, ko in lf._STYLE_PRIMER["ko"] + lf._COMPRESSION_EXAMPLES["ko"]:
         assert ko.rstrip(".?!").endswith(("요", "요, 네")), ko
+
+
+def test_a_local_model_is_let_go_from_memory_when_asked(monkeypatch):
+    # Gemma 12B stayed loaded (13 GB) after the translation on a 16 GB PC and
+    # the voice engine could not load beside it (#241): release() asks Ollama
+    # to unload the model at once.
+    calls = []
+
+    def fake_post(url, json=None, timeout=None):
+        calls.append((url, json))
+        return type("R", (), {"status_code": 200})()
+
+    monkeypatch.setattr(translate.requests, "post", fake_post)
+    OllamaTranslator(url="http://127.0.0.1:9/", model="gemma3:12b").release()
+    assert calls == [("http://127.0.0.1:9/api/generate", {"model": "gemma3:12b", "keep_alive": 0})]
+
+
+def test_letting_go_of_a_local_model_never_raises(monkeypatch):
+    def down(*a, **k):
+        raise translate.requests.exceptions.ConnectionError("refused")
+
+    monkeypatch.setattr(translate.requests, "post", down)
+    OllamaTranslator(url="http://127.0.0.1:9", model="gemma3:12b").release()
