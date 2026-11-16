@@ -51,3 +51,27 @@ def test_should_inject(hook):
     def never():
         raise AssertionError("pip's version is only asked for pip")
     assert hook.should_inject(["python", "-m", "uvicorn"], never) is True
+
+
+class _DamagedWindowsStore:
+    """A context whose read of the Windows store hits a damaged certificate,
+    as Python's ssl does on such a computer (issue #236)."""
+
+    def load_default_certs(self, purpose=None):
+        raise OSError("[WinError -2146881269] ASN1 bad tag value met")
+
+
+def test_a_damaged_windows_store_does_not_stop_downloads(hook):
+    class Context(_DamagedWindowsStore):
+        pass
+    hook.tolerate_unreadable_store(Context, "win32")
+    Context().load_default_certs()  # Windows still verifies every site itself
+
+
+def test_the_store_is_left_alone_off_windows(hook):
+    for platform in ("darwin", "linux"):
+        class Context(_DamagedWindowsStore):
+            pass
+        hook.tolerate_unreadable_store(Context, platform)
+        with pytest.raises(OSError):
+            Context().load_default_certs()
