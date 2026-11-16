@@ -25,6 +25,7 @@ from app.memline import mem_line
 from app.netlog import CUT as _CUT
 from app.netlog import described as _described
 from app.netlog import no_query as _no_query
+from app.run_errors import stopped_by_quit
 
 logger = logging.getLogger("persodub.jobs")
 
@@ -931,9 +932,16 @@ class JobStore:
                 trace("JOB FAILED at step %s (%.1fs): %s: %s" % (
                     _failed_step(e), time.monotonic() - began, type(e).__name__, error_text_for_ui(e)),
                     level="ERROR")
-                self.update(jid, status=JobStatus.ERROR, error=error_text_for_ui(e),
-                            error_shown=shown_text_for_ui(e), error_detail=getattr(e, "detail", None),
-                            **timing())
+                if any(stopped_by_quit(str(c)) for c in _chain(e)):
+                    # A helper stopped by the app or the computer closing: the
+                    # same ending a restart gives a job still running (restore
+                    # below), so the shell sends no report for a normal quit.
+                    self.update(jid, status=JobStatus.ERROR, error="interrupted",
+                                error_shown=None, error_detail=None, **timing())
+                else:
+                    self.update(jid, status=JobStatus.ERROR, error=error_text_for_ui(e),
+                                error_shown=shown_text_for_ui(e), error_detail=getattr(e, "detail", None),
+                                **timing())
             # However it ended, the file beside the video now says so -- this is
             # the only moment the final status exists to be written down.
             work_dir = (self.get(jid) or {}).get("work_dir")
