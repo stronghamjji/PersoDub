@@ -8,10 +8,10 @@ CAM++, key or no key. One step can still leave by default: translation sends the
 transcript text through your own ChatGPT account on a new install (a computer that
 already has the Hunyuan model translates locally). With **Whisper** and a local translator (Hunyuan or
 Gemma), nothing from the video leaves at all. Set **Choose a model** to
-**Perso API** and the video is uploaded to Perso, which makes the whole
-dub; that needs a Perso API key.
+**Perso API** and the video, or the audio file you added, is uploaded to Perso, which
+makes the whole dub; that needs a Perso API key.
 
-Perso is a service of ESTsoft Inc. What it does with an uploaded video is set out in
+Perso is a service of ESTsoft Inc. What it does with an uploaded file is set out in
 its own [privacy policy](https://perso.ai/privacy) and
 [terms of use](https://info.perso.ai/policy-perso-saas/policy/terms-of-service-en/docs/260526.html).
 
@@ -19,7 +19,7 @@ What each dubbing service receives, precisely:
 
 | If you add | What is sent | Where |
 |---|---|---|
-| **Perso API key** | **The video file itself** (the part you kept) is uploaded. With Perso API dubbing, Perso transcribes, translates and voices it and sends back the finished video; the project's name goes with it, as its title on your Perso workspace. Dubbing on this computer, the default, can set **Speech-to-text** and **Voice separation** to Perso; each of those uploads the video too, with the project's name, as does **Separate audio** on Perso. | Perso |
+| **Perso API key** | **The video or audio file itself** (the part you kept) is uploaded. With Perso API dubbing, Perso transcribes, translates and voices it and sends back the finished dub; the project's name goes with it, as its title on your Perso workspace. Dubbing on this computer, the default, can set **Speech-to-text** and **Voice separation** to Perso; each of those uploads the file too, with the project's name, as does **Separate audio** on Perso. | Perso |
 | **Google Gemini key** | **The transcript text only** — not the video, not the audio. | Google |
 | **ChatGPT sign-in** (the default translator) | **The transcript text**, with the translation instructions, sent through your own ChatGPT account, under that account's own data settings. The program that carries it (OpenAI's Codex) runs in a folder of PersoDub's own with every tool switched off, so it reads nothing else on your computer and none of your own Codex settings go along; OpenAI's program may send its own usage statistics. The sign-in is OpenAI's own flow and stays on your computer; PersoDub never sees the password or token. | OpenAI |
 
