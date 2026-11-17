@@ -33,6 +33,9 @@ function makeMedia() {
     paused: true, ended: false, seeking: false, slow: false, playbackRate: 1, defaultPlaybackRate: 1,
     moves: [], loads: 0,
     playTo(v) { at = v; },
+    // Played to its own end at v, as a browser says it: stopped first, "pause",
+    // then "ended".
+    playOut(v) { at = v; el.ended = true; el.paused = true; el.fire("pause"); el.fire("ended"); },
     land() { el.seeking = false; el.fire("seeked"); },
     play() {
       if (!el.paused) return Promise.resolve();
@@ -457,6 +460,70 @@ test("when the sound ends first the picture runs on as the clock, and both stop 
     assert.equal(h.picture.currentTime, 0);
     assert.equal(h.sound.paused, false);
     assert.equal(h.picture.paused, false);
+  } finally { h.restore(); }
+});
+
+// A browser stops a file that played to its end and says "pause" before any
+// frame has seen that it ended.
+test("a sound that plays to its own end does not stop the picture: the tail plays to the picture's end", async () => {
+  const h = await joined({ ...JOINED, video: { name: "long.mp4", seconds: 30 }, audio_seconds: 10,
+                           ranges: { video: [[0, 30]], audio: [[0, 10]] } });
+  try {
+    const join = h.player.getJoin();
+    h.player.play();
+    h.sound.playTo(5); h.picture.playTo(5);
+    h.frame();
+    h.picture.playTo(10);
+    h.sound.playOut(10);
+    assert.equal(h.picture.paused, false, "the sound's own end is not a pause");
+    assert.equal(join.paused(), false);
+    assert.equal(h.frames.length, 1, "the next frame is still asked for");
+    h.frame();
+    assert.equal(h.picture.paused, false);
+    assert.equal(join.paused(), false);
+    h.picture.playTo(20);
+    h.frame();
+    assert.equal(join.time(), 20, "the picture is the clock");
+    // Pause and play in the tail are the picture's alone, from where it stands.
+    h.player.pause();
+    assert.equal(h.picture.paused, true);
+    assert.equal(join.paused(), true);
+    h.player.play();
+    assert.equal(h.sound.paused, true);
+    assert.equal(h.picture.paused, false);
+    assert.equal(join.time(), 20);
+    // The picture's end: both stand still on it, and play starts from the top.
+    h.picture.playTo(30.01);
+    h.frame();
+    assert.equal(h.picture.paused, true);
+    assert.equal(join.paused(), true);
+    assert.equal(join.time(), 30);
+    assert.equal(h.frames.length, 0);
+    h.player.play();
+    assert.equal(h.sound.currentTime, 0);
+    assert.equal(h.picture.currentTime, 0);
+    assert.equal(h.sound.paused, false);
+    assert.equal(h.picture.paused, false);
+  } finally { h.restore(); }
+});
+
+test("a sound that plays to its own end where the joined video ends stops both there", async () => {
+  const h = await joined({ ...JOINED, video: { name: "same.mp4", seconds: 30 },
+                           ranges: { video: [[0, 30]], audio: [[0, 30]] } });
+  try {
+    const join = h.player.getJoin();
+    h.player.play();
+    h.picture.playTo(29.98);
+    h.sound.playOut(29.98);   // a file can end a hair before the length the app gave
+    h.frame();
+    assert.equal(h.picture.paused, true);
+    assert.equal(h.picture.currentTime, 30, "on its last kept frame");
+    assert.equal(join.paused(), true);
+    assert.equal(h.frames.length, 0);
+    h.player.play();
+    assert.equal(h.sound.currentTime, 0, "play there starts from the top");
+    assert.equal(h.picture.currentTime, 0);
+    assert.equal(join.paused(), false);
   } finally { h.restore(); }
 });
 

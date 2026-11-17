@@ -128,7 +128,8 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
     looping = false;
     if (!playing || !now) return;
     // A file opened on the sound element stops it with no "pause" signal.
-    if (!tail && sound.paused) { halt(); return; }
+    // Stopped at its own end is not that: the step below starts the tail.
+    if (!tail && sound.paused && !sound.ended) { halt(); return; }
     const s = step(now, { ...position(), soundEnded: sound.ended, pictureEnded: picture.ended || broken });
     if (s.done) { finish(); return; }
     if (s.tail && !tail) {
@@ -178,7 +179,9 @@ export function initJoinPlayer({ $, sound, picture, checkFile, onChange = () => 
     tail = false;
     start();
   });
-  sound.addEventListener("pause", () => { if (now && !tail) halt(); });
+  // A sound that played to its own end says "pause" too: the picture is not
+  // stopped for it, and the next frame starts the tail or finishes.
+  sound.addEventListener("pause", () => { if (now && !tail && !sound.ended) halt(); });
   sound.addEventListener("seeked", () => {
     if (!now) return;
     // The tail's own: the sound sits at its end while the picture runs on.
