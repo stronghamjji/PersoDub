@@ -20,6 +20,7 @@ import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, firstSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
 import { savedSettings, t } from "./i18n.mjs";
+import { isAudio } from "./mediaKind.mjs";
 import { gb } from "./modelsUi.mjs";
 
 function stripExt(name) {
@@ -101,7 +102,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     if (box) box.hidden = !script;
     if (!active) return;
     newProject.moveOptionsInto($("draftOptionsSlot"));
-    $("draftPartCard").innerHTML = videoCardHtml({ name: d.name, kept: keptSeconds(d), total: d.duration });
+    $("draftPartCard").innerHTML = videoCardHtml({ name: d.name, kept: keptSeconds(d), total: d.duration, media: d.media });
     // Over 30 minutes of kept video: not refused, but said plainly, with the
     // way out (cut into parts). The old New project dialog said it; this card
     // took its place and said nothing (Windows B11, 2026-10-07).
@@ -154,8 +155,9 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
       ...(cloud ? persoCost(sent) : first ? [t("{size} GB the first time", { size: gb(first) })] : []),
       ...(cloud && freePlan ? [cut ? t("A free-plan workspace dubs the first minute only. When it is done, see it in your Perso workspace.")
         : t("A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.")] : [])].join(" · ");
-    $("draftResultWhat").textContent = cut
-      ? t("The first minute, dubbed, in your Perso workspace") : t("Dubbed video, subtitles and audio files");
+    // An audio file has no video to come out as.
+    $("draftResultWhat").textContent = cut ? t("The first minute, dubbed, in your Perso workspace")
+      : isAudio(d) ? t("Dubbed audio, subtitles and script files") : t("Dubbed video, subtitles and audio files");
     // The way to top up, whenever a Perso dubbing is what is priced.
     const recharge = $("draftRechargeLink");
     recharge.hidden = !cloud;
@@ -241,7 +243,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
 
   // What the top bar's Export hands back before a dub: the kept parts as one
   // video, in the canvas of `ratio` when the Ratio button is on one, or their
-  // sound alone ({audio: "mp3" | "wav"}). Export is lit once there is a video
+  // sound alone ({audio: "mp3" | "wav" | "flac" | "m4a"}). Export is lit once there is a video
   // on the timeline. Resolves to the file written.
   const canExport = () => { const d = getDraft(); return !!d && !!d.downloadId; };
   async function saveDraft({ audio = "", ratio = null } = {}) {

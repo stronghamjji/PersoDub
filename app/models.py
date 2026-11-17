@@ -235,10 +235,6 @@ def status_rows():
     for m in load_catalog():
         if m["role"] == "always":
             continue
-        # A row the catalog keeps to one edition (OmniVoice: open-source only,
-        # see app/setup.py's voice stage) is not listed by the other.
-        if m.get("edition") == "production" or (m.get("edition") == "opensource" and os.environ.get("PERSODUB_EDITION") == "production"):
-            continue
         row = {"id": m["id"], "role": m["role"], "name": shown_words(m["name"]), "bytes": _pack_bytes(m),
                # A short note after "Ready" in Settings, only where the row's
                # group title does not say what it is for; "" when it does.

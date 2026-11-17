@@ -34,6 +34,9 @@ import { t } from "./i18n.mjs";
  *        "dubbed" or "original": the subtitles go over the dubbed one only
  * @param {(which: string) => Promise<void>} deps.showVideoSource  put the
  *        player on that file; answers once it is showing it
+ * @param {() => any} [deps.getPicture]  the element the picture is on: the
+ *        player itself, or a brought-in video's own (ui/src/joinPlayer.mjs).
+ *        Only where the subtitles sit follows it; when they show is the player's
  * @param {object} [deps.alone]  the Captions tab on its own, with no project
  *        open (ui/src/captionsTab.mjs initCaptionsTab's alone); its erased()
  *        is the erase screen's erased video, or null
@@ -45,7 +48,7 @@ import { t } from "./i18n.mjs";
  *   place; exportParams, what the Export dialog asks the subtitled video for.
  */
 export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, getDoneSource,
-                                      showVideoSource, alone = null }) {
+                                      showVideoSource, getPicture = () => doneVideo, alone = null }) {
   // Where the subtitles sit, every look alike (owner, 2026-10-23): the foot of
   // the picture, 7 % of its height up -- as pos, 0 top .. 100 bottom, which
   // the burn draws from too (app/subtitle_ass.py build_ass). Not dragged.
@@ -157,9 +160,10 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   // The overlay box follows the video's own box, so text sits on the picture
   // rather than on the dark around it.
   function syncSubOverlayBox() {
-    const pic = pictureRect({ left: doneVideo.offsetLeft, top: doneVideo.offsetTop,
-                              width: doneVideo.offsetWidth, height: doneVideo.offsetHeight,
-                              videoWidth: doneVideo.videoWidth, videoHeight: doneVideo.videoHeight });
+    const on = getPicture();
+    const pic = pictureRect({ left: on.offsetLeft, top: on.offsetTop,
+                              width: on.offsetWidth, height: on.offsetHeight,
+                              videoWidth: on.videoWidth, videoHeight: on.videoHeight });
     subOverlay.style.left = pic.left + "px";
     subOverlay.style.top = pic.top + "px";
     subOverlay.style.width = pic.width + "px";

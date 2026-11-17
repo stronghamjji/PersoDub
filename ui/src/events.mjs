@@ -14,6 +14,7 @@
 // and true-or-false values the app chose, never text; the relay keeps only
 // the ones it lists for that step (relay/events-logic.js STEPS). A file
 // picked or dropped is a step too, by its kind (video or audio), never its name.
+import { fileKind } from "./mediaKind.mjs";
 
 export const SCREEN_EVENT = "app_screen";
 const PRESSABLE = "button, a, summary, input[type=checkbox], input[type=radio], [role=tab], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox]";
@@ -50,9 +51,11 @@ export function cleanProps(props) {
 }
 
 /** "video" or "audio" for a file by its type, or "" for anything else (a
- *  subtitle file, an image). Never its name. */
+ *  subtitle file, an image). A file that came with no type (.flac and .m4a on
+ *  Windows) is told by the end of its name, which is read and never kept. */
 export function mediaKind(file) {
   const type = String((file && file.type) || "");
+  if (!type) return fileKind(file && file.name);
   return type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : "";
 }
 

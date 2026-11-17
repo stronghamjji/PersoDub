@@ -1,13 +1,13 @@
 // Electron preload (CommonJS — sandboxed preloads cannot use ESM).
 const { contextBridge, ipcRenderer } = require("electron");
 
-// The window passes the repository the build's edition points at on its
+// The window passes the repository the app points at on its
 // command line (src/windowFactory.js additionalArguments): a value fixed for
 // the whole run needs no channel.
 const REPO_ARG = "--persodub-repo=";
 // The computer's language the same way (src/i18n.js): what Auto means.
 const LOCALE_ARG = "--persodub-locale=";
-// The name this edition shows the user (src/edition.js displayName).
+// The name the app shows the user (src/edition.js PRODUCT).
 const NAME_ARG = "--persodub-name=";
 // And which system the window is on ("win32", "darwin"), the same way. Stamped
 // on the page as data-platform before its stylesheet is read, so Windows gets
@@ -16,17 +16,10 @@ const NAME_ARG = "--persodub-name=";
 // The preload runs before the page has an element to stamp when
 // the document is still empty; then it waits for one.
 const PLATFORM_ARG = "--persodub-platform=";
-// And the build's edition ("opensource", "production"), the same way: the
-// page shows the production edition's names and links from it (ui/src/edition.mjs).
-const EDITION_ARG = "--persodub-edition=";
 const platform = process.argv.find((a) => a.startsWith(PLATFORM_ARG))?.slice(PLATFORM_ARG.length) || "";
-// The edition is stamped the same way, as data-edition, so the production
-// edition's palette and type are there from the first paint (static/css/app.css).
-const edition = process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "";
-if (platform || edition) {
+if (platform) {
   const stamp = () => {
-    if (platform) document.documentElement.dataset.platform = platform;
-    if (edition) document.documentElement.dataset.edition = edition;
+    document.documentElement.dataset.platform = platform;
   };
   if (document.documentElement) stamp(); else document.addEventListener("DOMContentLoaded", stamp);
 }
@@ -100,46 +93,21 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // rather than promising a report nobody will receive.
   onReportSent: (cb) => ipcRenderer.on("shell:report-sent", (_e, sent) => cb(sent)),
   getLastReport: () => ipcRenderer.invoke("shell:last-report"),
-  // The production edition's Service inquiry (ui/src/feedbackSheet.mjs): the
+  // Send feedback's inquiry (ui/src/feedbackSheet.mjs): the
   // form's {type, subject, details, replyTo, locale}, which the shell sends to
   // the support web app with the app's version and this computer (src/reporting.js).
   // Resolves to {id} once it landed, {queued: true} when it waits for the next
-  // launch, {needReplyTo: true} when there is no Reply-to and the account has
-  // no e-mail (nothing sent), and null when it could not be sent at all.
+  // launch, {needReplyTo: true} when there is no Reply-to (nothing sent), and
+  // null when it could not be sent at all.
   sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),
-  // Perso sign-in in a window of the app's (src/auth.js), the production edition's.
-  // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting, where}:
-  // `required` is the production edition signed out, when the page shows its
-  // sign-in screen; `account` is the account's full e-mail (its name without
-  // one), shown on Home and in Settings, and `accountId` Perso's number
-  // for the account; the events key it by a hash of it (src/events.js eventsUserId). `where` is where a
-  // waiting sign-in goes on: "window", or "browser" once Google or Microsoft
-  // took it to the computer's browser ("" with none waiting). authLogin opens the sign-in window
-  // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
-  // (outcomes and key answers are listed at createAuth); authShow brings that
-  // window forward again, or, after a hand-off, runs Perso's Google or Microsoft
-  // start again in the browser (Continue). authCheckKey looks for
-  // the account's API key again, after authOpenKeyPage let the user make one.
-  // onAuthState hears the status whenever it changes. In the open-source
-  // edition every answer is {outcome: "disabled"} and authStatus's enabled is false.
-  authStatus: () => ipcRenderer.invoke("shell:auth-status"),
-  authLogin: () => ipcRenderer.invoke("shell:auth-login"),
-  authCancel: () => ipcRenderer.invoke("shell:auth-cancel"),
-  authShow: () => ipcRenderer.invoke("shell:auth-show"),
-  authLogout: () => ipcRenderer.invoke("shell:auth-logout"),
-  authCheckKey: () => ipcRenderer.invoke("shell:auth-check-key"),
-  authOpenKeyPage: () => ipcRenderer.invoke("shell:auth-open-key-page"),
-  onAuthState: (cb) => ipcRenderer.on("shell:auth-state", (_e, state) => cb(state)),
   // "owner/repo" for the page's GitHub links (src/edition.js); "" when the
   // window passed none.
   repo: process.argv.find((a) => a.startsWith(REPO_ARG))?.slice(REPO_ARG.length) || "",
   // "ko" or "en" (ui/src/i18n.mjs); "" when the window passed none.
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
-  // "" when the window passed none: the page is the open-source one.
-  edition: process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "",
   // Whether the build has somewhere to send an inquiry (src/windowFactory.js):
   // the page opens its form when it has, the issues page when not.
   inquiry: process.argv.includes("--persodub-inquiry=1"),
-  // What the app is called on screen: "PersoDub", or "PersoDubbing" in the production edition.
+  // What the app is called on screen.
   name: process.argv.find((a) => a.startsWith(NAME_ARG))?.slice(NAME_ARG.length) || "PersoDub",
 });

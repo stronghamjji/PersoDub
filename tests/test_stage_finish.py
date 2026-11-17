@@ -128,3 +128,43 @@ def test_a_length_check_that_fails_keeps_the_takes(finish):
         ("_mux", f.video, f.audio, f.out, 12.5),
         ("ensure_video_length", f.video, f.out, True),
     ]
+
+
+# --- an audio project: the result is dubbed.wav, and there is no picture ------
+
+@pytest.fixture
+def audio_finish(finish, monkeypatch, tmp_path):
+    """The same stage for a job whose result is dubbed.wav. The mux and the
+    video length check stay recorders, so a call to either shows in the
+    timeline; media.build_result is one too, answering audio_finish.built."""
+    f = finish
+    f.out = str(tmp_path / "dubbed.wav")
+    f.built = SimpleNamespace(returncode=0, stderr="")
+
+    def build_result(source, mix, out):
+        f.timeline.append(("build_result", source, mix, out))
+        return f.built
+
+    monkeypatch.setattr(pipeline.media, "build_result", build_result)
+    return f
+
+
+def test_an_audio_project_is_built_without_a_mux_then_its_takes_are_dropped(audio_finish):
+    f = audio_finish
+    assert f.run() is None
+    assert f.timeline == [
+        "log: " + BUILDING,
+        ("build_result", f.video, f.audio, f.out),
+        ("cleanup_takes", f.work, True),
+        "log: " + KEEPING,
+    ]
+
+
+def test_an_audio_build_that_fails_ends_the_job_with_these_words_and_keeps_the_takes(audio_finish):
+    f = audio_finish
+    f.built = SimpleNamespace(returncode=1, stderr=f.out + ": Permission denied\n")
+    with pytest.raises(RuntimeError) as caught:
+        f.run()
+    assert type(caught.value) is RuntimeError
+    assert str(caught.value) == "Could not build the finished audio: dubbed.wav: Permission denied"
+    assert f.timeline == ["log: " + BUILDING, ("build_result", f.video, f.audio, f.out)]

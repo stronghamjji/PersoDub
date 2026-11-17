@@ -201,6 +201,18 @@ test("a video or a sound picked or dropped is media_added by its kind alone; a s
   assert.equal(mediaKind({ type: "image/png" }), "");
 });
 
+// Windows hands over .flac and .m4a with no type at all.
+test("a file that came with no type is a video or a sound by the end of its name, which is still never recorded", async () => {
+  const page = shellPage();
+  page.on("drop", { dataTransfer: { files: [{ name: "My wedding.flac", type: "" }, { name: "talk.M4A", type: "" },
+                                            { name: "clip.mov", type: "" }, { name: "notes.txt", type: "" }] } });
+  const out = await page.out();
+  assert.deepEqual(steps(out).map(([, props]) => props.kind), ["audio", "audio", "video"]);
+  assert.ok(!JSON.stringify(out).includes("wedding"), "never the file's name");
+  // A type that says something else is believed over the name.
+  assert.equal(mediaKind({ name: "cover.mp3", type: "image/png" }), "");
+});
+
 test("a recharge or key link pressed is its own step beside the press", async () => {
   const page = shellPage();
   page.on("click", { target: el({ tag: "a", id: "draftRechargeLink" }) });

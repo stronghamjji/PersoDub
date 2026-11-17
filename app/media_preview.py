@@ -116,11 +116,15 @@ def _write_atomic(path: str, data: bytes) -> None:
 
 
 def filmstrip(video: str) -> str:
-    """The film strip's path, made first when there is none (or an old one)."""
+    """The film strip's path, made first when there is none (or an old one).
+    An audio file has none, said the way an unreadable video is: ffmpeg would
+    otherwise tile an album cover into one."""
     out = video + ".filmstrip.jpg"
     with _lock_for(out):
         if _fresh(out, video):
             return out
+        if media.media_kind(video) == "audio":
+            raise RuntimeError(t("Could not read frames from this video."))
         duration = _duration(video)
         tmp = f"{out}.{os.getpid()}.tmp.jpg"
         try:

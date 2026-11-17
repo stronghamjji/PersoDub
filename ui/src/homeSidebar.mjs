@@ -3,7 +3,7 @@
 //
 // Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
 // #homeNavErase, #homeNavCaptions, #homeNavSave, #homeNavSettings,
-// #homeHelp, #homeFeedback/#homeFeedbackLabel, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
+// #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
 // #homeEraseCard, #homeCaptionsCard, #homeSaveCard). Every one of them opens something the page
 // already has; this file only decides which.
@@ -71,32 +71,18 @@ export function whatsNewTitle(version) {
  * @param {() => void} deps.onSettings
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
- * @param {boolean} [deps.production]     the production edition (ui/src/edition.mjs)
- * @param {(() => void) | null} [deps.onFeedback]  the inquiry form (Customer support, or Send feedback in open source); null when the build has no address
+ * @param {(() => void) | null} [deps.onFeedback]  Send feedback's inquiry form; null when the build has no address
  */
 export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
                                   onCaptions, onSaveVideo, onSettings, onHelp, loadWhatsNew,
-                                  production = false, onFeedback = null }) {
+                                  onFeedback = null }) {
   const on = (id, fn) => $(id).addEventListener("click", fn);
 
-  // The production edition has no repository button: the Perso logo alone
-  // heads the sidebar, bigger, and Send feedback is a mail, or not there at
-  // all when the build has no address to send it to (owner, 2026-10-23).
-  if (production) {
-    $("homeGhName").hidden = true;
-    $("homePerso").classList.add("big");
-    // ...and Send feedback is Customer support, an inquiry form (owner, 2026-10-27).
-    $("homeFeedbackLabel").dataset.i18n = "Customer support";
-    $("homeFeedbackLabel").textContent = t("Customer support");
-    if (onFeedback) on("homeFeedback", onFeedback);
-    else $("homeFeedback").hidden = true;
-  } else {
-    on("homeGhName", () => openUrl(repoUrl));
-    // Send feedback is the same inquiry form, so a person without a GitHub
-    // account can write too (owner, 2026-11-03); a build with no address to
-    // send it to opens the issues page instead.
-    on("homeFeedback", onFeedback || (() => openUrl(`${repoUrl}/issues`)));
-  }
+  on("homeGhName", () => openUrl(repoUrl));
+  // Send feedback is an inquiry form, so a person without a GitHub
+  // account can write too (owner, 2026-11-03); a build with no address to
+  // send it to opens the issues page instead.
+  on("homeFeedback", onFeedback || (() => openUrl(`${repoUrl}/issues`)));
   on("homePerso", () => openUrl(persoUrl()));
   on("homeNavDub", onDubbing);
   on("homeNavErase", onErase);

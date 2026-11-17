@@ -8,6 +8,7 @@ One record per download, in memory: the app restarts rarely and a download
 that did not finish is not worth resuming (the link is still in the box)."""
 import os
 import re
+import shutil
 import threading
 import uuid
 from typing import Callable, Dict, Optional
@@ -74,6 +75,9 @@ class Download:
         self.path = ""
         self.error = ""
         self.reason = ""
+        # "audio" for a file that has sound and no picture, as a job's record
+        # says it (app/jobs.py); None for a video.
+        self.media = None
 
     def as_dict(self) -> dict:
         return {
@@ -81,7 +85,7 @@ class Download:
             "percent": self.percent, "title": self.title,
             "duration_sec": self.duration_sec, "thumbnail_url": self.thumbnail_url,
             "site": self.site, "path": self.path, "error": self.error,
-            "reason": self.reason,
+            "reason": self.reason, "media": self.media,
         }
 
 
@@ -101,16 +105,19 @@ class DownloadStore:
         with self._lock:
             return list(self._items.values())
 
-    def add_file(self, root: str, title: str, duration_sec: float, write: Callable[[str], None]) -> Download:
+    def add_file(self, root: str, title: str, duration_sec: float, write: Callable[[str], None],
+                 media: Optional[str] = None) -> Download:
         """A file the user already has (dropped on the screen), held the same
         way a fetched link is, so Save clip and Start dubbing read one record
-        whichever way the video arrived. `write(dest)` puts the bytes at dest."""
+        whichever way the video arrived. `write(dest)` puts the bytes at dest.
+        `media` is "audio" when the caller knows the file is sound only."""
         did = uuid.uuid4().hex[:8]
         folder = os.path.join(root, "downloads", did)
         os.makedirs(folder, exist_ok=True)
         d = Download(did, "", folder)
         d.title = title or "video"
         d.duration_sec = duration_sec or 0
+        d.media = media
         dest = os.path.join(folder, "source.mp4")
         write(dest)
         d.path = dest
@@ -120,12 +127,24 @@ class DownloadStore:
             self._items[did] = d
         return d
 
-    def hold_again(self, did: str, path: str, title: str, duration_sec: float) -> Download:
+    def drop(self, did: str) -> None:
+        """Stop holding a file and delete its folder: a dropped file that
+        turned out to be nothing the app takes."""
+        with self._lock:
+            d = self._items.pop(did, None)
+        if d is not None:
+            shutil.rmtree(d.folder, ignore_errors=True)
+
+    def hold_again(self, did: str, path: str, title: str, duration_sec: float,
+                   media: Optional[str] = None) -> Download:
         """A file this store held before the app restarted -- the records live in
-        memory only, the files stay on disk -- held again under the same id."""
+        memory only, the files stay on disk -- held again under the same id.
+        `media` as for add_file: the record that said it is gone, so the
+        caller asks the file again."""
         d = Download(did, "", os.path.dirname(path))
         d.title = title or "video"
         d.duration_sec = duration_sec or 0
+        d.media = media
         d.path = path
         d.percent = 100
         d.status = "ready"

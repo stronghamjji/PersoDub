@@ -36,14 +36,6 @@ def test_local_list_without_a_voice_named_is_the_default_voices(monkeypatch):
     assert len(languages.languages_for("local", "OmniVoice ")) == 646   # as a form may send it
 
 
-def test_an_edition_without_omnivoice_offers_the_ten_whatever_is_asked(monkeypatch):
-    # The production edition has no OmniVoice (app/setup.py STAGES).
-    key, _, fallback = languages.setup.STAGES["voice"]
-    monkeypatch.setitem(languages.setup.STAGES, "voice", (key, ("qwen3",), fallback))
-    assert len(languages.local_languages("omnivoice")) == 10
-    assert languages.lookup("local", "yue", "omnivoice") is None
-
-
 def test_lookup_judges_a_local_code_by_the_voice_engine():
     assert languages.lookup("local", "yue", "omnivoice")["name"] == "Cantonese"
     assert languages.lookup("local", "yue", "qwen3") is None

@@ -329,6 +329,15 @@ def test_the_instructions_ask_about_a_dubbing_with_the_tools_own_plan():
     assert "call queue_dub without confirm first" in SYSTEM_PROMPT
 
 
+def test_the_instructions_say_a_dubbing_takes_audio_files_too():
+    # A dubbing takes WAV, FLAC, MP3 and M4A audio. An assistant told that
+    # queue_dub is for a video file would turn a song away. Both agents read
+    # this prompt.
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "a whole new dub of a video or an audio file" in SYSTEM_PROMPT
+    assert "a folder's videos and audio files" in SYSTEM_PROMPT
+
+
 def test_the_instructions_take_read_it_again_as_the_voices():
     # "Read all the lines again" was taken for a new translation, and the
     # video was not made again (Windows test F18, 2026-10-10). Both agents
@@ -361,3 +370,12 @@ def test_the_instructions_take_a_short_stop_for_the_running_work():
     from app.agents.claude import SYSTEM_PROMPT
     assert "whatever the talk was about before" in SYSTEM_PROMPT
     assert "call list_jobs and cancel the running job straight away" in SYSTEM_PROMPT
+
+
+def test_the_instructions_keep_tables_out_of_the_reply():
+    # The panel draws bold, italics and code and nothing else of markdown
+    # (ui/src/agentStrip.mjs replyHtml): a table of the script's lines came
+    # out as rows of raw pipes (Mac, 2026-11-13). Both agents read this prompt.
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "Never write a table" in SYSTEM_PROMPT
+    assert "one short line each" in SYSTEM_PROMPT

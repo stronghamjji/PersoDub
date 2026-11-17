@@ -328,8 +328,7 @@ def test_dub_start_stt_engine_stays_local_with_key(monkeypatch):
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
-        # Dubbing goes to Perso by default in the production edition
-        # (app/setup.py), so the local path this test watches is asked for.
+        # The local path, which this test watches, is asked for by name.
         data={"language": "Korean", "language_code": "ko", "dub_mode": "local"},
     )
     assert r.status_code == 200

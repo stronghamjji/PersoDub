@@ -989,18 +989,28 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
 
 
 def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
-    """Stage 6/6 -- mux the dub onto the video, then the length gate. -> None"""
+    """Stage 6/6 -- mux the dub onto the video, then the length gate. -> None
+
+    An audio project (its result is named dubbed.wav, app/dub_launch.py) has
+    no picture to mux onto: its finished file is the dub itself, made the
+    source's length in the one step (media.build_result), so there is no
+    length left to check."""
     _log_stage(log, "build", "Building the finished file…")
-    d_vid = _video_duration(video_path)
-    r = _mux(video_path, audio_wav, out_path, d_vid)
+    audio = out_path.endswith(".wav")
+    if audio:
+        r = media.build_result(video_path, audio_wav, out_path)
+    else:
+        d_vid = _video_duration(video_path)
+        r = _mux(video_path, audio_wav, out_path, d_vid)
     if r.returncode != 0:
         # ffmpeg could not put the sound on the picture: not the voice
         # engine's failure, whichever engine made the voices. Only its last
         # line, with the folders cut off (media._failure), reaches the screen.
         paths = (video_path, audio_wav, out_path)
-        what = both("Could not build the finished video")
+        what = both("Could not build the finished audio") if audio else both("Could not build the finished video")
         raise shown_error(media._failure(what[0], r.stderr, paths), media._failure(what[1], r.stderr, paths))
-    ensure_video_length(video_path, out_path, log)
+    if not audio:
+        ensure_video_length(video_path, out_path, log)
     # Final assembly + length gate passed -- only now drop the losing take
     # candidates that were kept for a possible reassembly pass (see
     # qwen_pipeline.synth_lines / cleanup_takes).

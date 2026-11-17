@@ -26,6 +26,10 @@ import { lucide } from "./icons.mjs";
 import { isErase, isSeparate, doingWord, projectMeta, shownName } from "./projects.mjs";
 import { groupProjects, projectKey, projectLanguages, languageLabel } from "./languageRow.mjs";
 import { t } from "./i18n.mjs";
+import { isAudio } from "./mediaKind.mjs";
+
+// Bars of sound: the mark on a separation's card, and an audio draft's tile.
+const SOUND_BARS = '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>';
 
 // Where Collapse is remembered: "1" while the grid is folded away.
 export const FOLD_KEY = "persodub.home.projectsFolded";
@@ -116,7 +120,7 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
       <div class="proj-thumb">
         ${thumbImg(job)}
         ${isErase(job) ? eraseKind() : ""}
-        ${isSeparate(job) ? `<span class="proj-kind" title="${t("Separate audio")}"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span>` : ""}
+        ${isSeparate(job) ? `<span class="proj-kind" title="${t("Separate audio")}"><svg viewBox="0 0 24 24" width="12" height="12">${SOUND_BARS}</svg></span>` : ""}
         ${chip ? `<span id="projChip-${escapeHtml(job.id)}" class="proj-chip proj-chip-${chip[1]}">${escapeHtml(chip[0])}</span>` : ""}
         ${dur ? `<span class="proj-dur">${escapeHtml(dur)}</span>` : ""}
       </div>
@@ -139,14 +143,18 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
 
   // A kept draft: a frame of its video (the held file itself, stopped near
   // its start -- a draft has no thumbnail made for it), how much of it the
-  // cuts kept, and "Draft" where a project says what state it is in.
+  // cuts kept, and "Draft" where a project says what state it is in. An audio
+  // draft has no frame: its tile is the bars of sound.
+  const draftPicture = (d) => (isAudio(d)
+    ? `<div class="proj-img proj-wave"><svg class="lu" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">${SOUND_BARS}</svg></div>`
+    : `<video class="proj-img" src="/api/downloads/${encodeURIComponent(d.downloadId)}/video#t=0.5" preload="metadata"
+               muted playsinline tabindex="-1" onerror="this.remove()"></video>`);
   function draftCardHtml(d) {
     const name = d.name || t("Draft");
     const kept = keptOf(d);
     return `<div class="proj-card" data-draft="${escapeHtml(d.downloadId)}" tabindex="0" role="button" aria-label="${t("Open the draft {name}", { name: escapeHtml(name) })}">
       <div class="proj-thumb">
-        <video class="proj-img" src="/api/downloads/${encodeURIComponent(d.downloadId)}/video#t=0.5" preload="metadata"
-               muted playsinline tabindex="-1" onerror="this.remove()"></video>
+        ${draftPicture(d)}
         ${d.tab === "erase" ? eraseKind() : ""}
         <span class="proj-chip proj-chip-muted">${t("Draft")}</span>
         <span class="proj-dur">${escapeHtml(fmtLength(kept))}</span>

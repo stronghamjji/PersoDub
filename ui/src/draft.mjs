@@ -1,6 +1,7 @@
 // The video a new project starts from, before it is dubbed: what was
 // imported (ui/src/draftImport.mjs), and which parts of it the timeline's cut tools kept. One
 // draft at a time; nothing here talks to the network.
+import { isAudio } from "./mediaKind.mjs";
 
 let draft = null;
 const listeners = new Set();
@@ -9,7 +10,7 @@ function tell() {
   for (const fn of listeners) fn(draft);
 }
 
-/** @returns {{downloadId: string, name: string, duration: number, videoUrl: string, onTimeline: boolean, ranges: number[][], ratio: string, speech: number[][]|null}|null} */
+/** @returns {{downloadId: string, name: string, duration: number, videoUrl: string, onTimeline: boolean, ranges: number[][], ratio: string, speech: number[][]|null, media?: "audio"}|null} */
 export function getDraft() {
   return draft;
 }
@@ -20,10 +21,12 @@ export function getDraft() {
     "add to timeline" step, so onTimeline is always true. `ratio` is the
     canvas a kept draft was left on (ui/src/keptDrafts.mjs). `speech` is
     where the video is spoken, [[start, end], ...] in its seconds, when a
-    dubbing of it has a script (Add language); null when none has. */
-export function setDraft({ downloadId, name, duration, videoUrl, ratio = "original", speech = null }) {
+    dubbing of it has a script (Add language); null when none has. `media`
+    is the held file's own mark: "audio" stays on the draft, and a video has
+    none (ui/src/mediaKind.mjs). */
+export function setDraft({ downloadId, name, duration, videoUrl, ratio = "original", speech = null, media }) {
   draft = { downloadId, name, duration, videoUrl, onTimeline: true, ranges: [[0, duration]],
-            ratio, speech };
+            ratio, speech, ...(isAudio({ media }) ? { media: "audio" } : {}) };
   tell();
   return draft;
 }

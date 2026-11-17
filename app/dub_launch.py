@@ -177,7 +177,10 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
     jid = job["id"]
     work = job["work_dir"]
     video_path = os.path.join(work, "input.mp4")
-    out_path = os.path.join(work, "dubbed.mp4")
+    # An audio project has no picture to carry the dub, so its result is the
+    # sound alone. input.mp4 keeps its name either way: it holds the bytes
+    # the user gave, and everything that reads it goes by what is inside.
+    out_path = os.path.join(work, "dubbed.wav" if job.get("media") == "audio" else "dubbed.mp4")
     language_code = job.get("language_code") or "en"
     language = job.get("language") or language_name(language_code, job.get("dub_mode") or "local", job.get("tts"))
     srt_path = _in_folder(work, "sub.srt")

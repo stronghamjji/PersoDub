@@ -1,9 +1,10 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { release } from "node:os";
 import { join } from "node:path";
 import { analyticsFile, savedDevice } from "./analytics.js";
 import { envWithKit } from "./kitEnv.js";
+import { EDITION } from "./edition.js";
 import { REPORT_ENDPOINT } from "./reporting.js";
 import { REPORT_EXT, partitionQueue, queueBase } from "./reportQueue.js";
 
@@ -19,15 +20,15 @@ import { REPORT_EXT, partitionQueue, queueBase } from "./reportQueue.js";
 // names are checked again here against the shape the relay accepts.
 //
 // A step of a person's way through the app (relay/events-logic.js STEPS: the
-// launch, the sign-in, a dubbing's stages, the quit) also carries `props`, a
+// launch, a dubbing's stages, the quit) also carries `props`, a
 // few words, numbers and true-or-false values, never text. The shell's own
-// steps (track: the launch, the sign-in, the quit) wait in memory for the
+// steps (track: the launch, the quit) wait in memory for the
 // page's next batch, or the quit, and go with it.
 //
 // The switch is PERSODUB_EVENTS in kit.env (Settings > Privacy writes it).
-// With no line, both editions record (owner, 2026-11-02; until 1.0.1 only the
-// production build did), and each batch names the build's own edition, so the
-// two are told apart in GA4 and Amplitude.
+// With no line, the app records (owner, 2026-11-02), and each batch names the
+// build's edition (edition.js EDITION), which GA4 and Amplitude tell builds
+// apart by.
 export const EVENTS_ENDPOINT = `${REPORT_ENDPOINT}/events`;
 export const EVENTS_KEY = "PERSODUB_EVENTS";
 export const MAX_PER_POST = 500;
@@ -91,13 +92,6 @@ export function cleanEvents(list) {
     });
 }
 
-/** The signed-in account as analytics know it: a one-way hash of Perso's
- *  number for it, which nobody can read back to the account, or "" signed
- *  out. Never the number itself or the e-mail (owner, 2026-10-25). */
-export function eventsUserId(accountId) {
-  return accountId ? createHash("sha256").update(`persodub:${accountId}`).digest("hex").slice(0, 32) : "";
-}
-
 /** "mac", "windows" or "linux", as the relay names them. */
 export const osName = (platform = process.platform) =>
   (platform === "win32" ? "windows" : platform === "darwin" ? "mac" : "linux");
@@ -107,11 +101,9 @@ export const osName = (platform = process.platform) =>
  * persodubShell.sendEvents -- {on, kept, sent, recent} -- and an empty list
  * only asks. track(name, props) is a step of the shell's own, kept for the
  * next batch; quit(props) records app_quit and sends what is waiting before
- * the app goes, QUIT_WAIT_MS at most, once. `ctx.userId` is the signed-in
- * account's eventsUserId, empty until the production edition signs in
- * (authIpc.js keeps it).
+ * the app goes, QUIT_WAIT_MS at most, once.
  */
-export function createEvents({ app, ctx, edition, shellLog, fetchImpl = fetch, now = Date.now }) {
+export function createEvents({ app, ctx, shellLog, fetchImpl = fetch, now = Date.now }) {
   const dir = () => join(app.getPath("userData"), "events");
   const sessionId = now();
   const osVersion = (process.getSystemVersion ? process.getSystemVersion() : release()).slice(0, 32);
@@ -141,7 +133,8 @@ export function createEvents({ app, ctx, edition, shellLog, fetchImpl = fetch, n
       mkdirSync(dir(), { recursive: true });
       for (let i = 0; i < events.length; i += MAX_PER_POST) {
         const batch = {
-          installId: device, userId: ctx.userId || "", version: app.getVersion(), edition,
+          // No account in this app: userId is always empty.
+          installId: device, userId: "", version: app.getVersion(), edition: EDITION,
           os: osName(), osVersion, sessionId, events: events.slice(i, i + MAX_PER_POST),
         };
         writeFileSync(join(dir(), `${queueBase(randomBytes(6).toString("hex"), now())}${REPORT_EXT}`), JSON.stringify(batch));

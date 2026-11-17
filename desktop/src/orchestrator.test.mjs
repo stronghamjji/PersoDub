@@ -56,7 +56,7 @@ test("starts fakes, reports url, stopAll kills everything", async () => {
   assert.ok((await res.text()).includes("PersoDub"));
   // shell.log's account of the start: the voice engine, then the backend,
   // each under a banner, numbered and timed.
-  assert.match(lines[0], /^ENGINES START: kit=.+ packs=engine$/);
+  assert.match(lines[0], /^ENGINES START: kit=.+ edition=opensource locale=.+ packs=engine$/);
   assert.equal(lines.filter((l) => l === "#".repeat(30)).length, 2);
   const engineLines = lines.filter((l) => l.startsWith("[Engine"));
   assert.equal(engineLines.length, 4, lines.join("\n"));
@@ -279,35 +279,30 @@ test("hands the backend its desktop identity, overriding a stale kit.env", async
   // (app/perso_client.py). Without them it reports as a plain server run, so a desktop
   // release would silently stop counting -- with nothing failing. Hence an end-to-end
   // assertion on what the spawned process actually received, not on how it was built.
-  // The edition rides along: it decides where a dub runs by default (app/setup.py), so an
-  // open-source build told "production" would send a new user's dubs to Perso.
   const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
   // Inherited from the environment here, the way a stale value in the kit's kit.env would
   // reach the same merge -- what this build is must win over what it once was told.
-  const prior = { client: process.env.PERSODUB_CLIENT, edition: process.env.PERSODUB_EDITION, logs: process.env.PERSODUB_LOG_DIR };
+  const prior = { client: process.env.PERSODUB_CLIENT, name: process.env.PERSODUB_APP_NAME, logs: process.env.PERSODUB_LOG_DIR };
   process.env.PERSODUB_CLIENT = "server";
-  process.env.PERSODUB_EDITION = "production";
+  process.env.PERSODUB_APP_NAME = "Stale";
   process.env.PERSODUB_LOG_DIR = "/stale/logs";
   let stop = () => {};
   try {
-    const { url, stopAll } = await startEngines(fakeCfg(), { logDir, appVersion: "1.2.3", locale: "ko", edition: "opensource",
-                                                     buildEdition: "production" });
+    const { url, stopAll } = await startEngines(fakeCfg(), { logDir, appVersion: "1.2.3", locale: "ko", appName: "PersoDub" });
     stop = stopAll;
     assert.deepEqual(await (await fetch(`${url}/env`)).json(), {
       PERSODUB_CLIENT: "desktop",
       PERSODUB_APP_VERSION: "1.2.3",
       // What "auto" means to the backend's language (app/i18n.py).
       PERSODUB_LOCALE: "ko",
-      PERSODUB_EDITION: "opensource",
-      // The app file's own edition, which the links into Perso and the API's
-      // User-Agent name (app/perso_client.py), whatever the kit remembers.
-      PERSODUB_BUILD_EDITION: "production",
+      // The name the backend's sentences call the app (app/i18n.py).
+      PERSODUB_APP_NAME: "PersoDub",
       // The engine's own logs go in the shell's log folder, beside shell.log.
       PERSODUB_LOG_DIR: logDir,
     });
   } finally {
     stop();
-    for (const [name, value] of [["PERSODUB_CLIENT", prior.client], ["PERSODUB_EDITION", prior.edition], ["PERSODUB_LOG_DIR", prior.logs]]) {
+    for (const [name, value] of [["PERSODUB_CLIENT", prior.client], ["PERSODUB_APP_NAME", prior.name], ["PERSODUB_LOG_DIR", prior.logs]]) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }

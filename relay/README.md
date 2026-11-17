@@ -99,7 +99,7 @@ For `POST /events` (all optional: without them the route answers 204 and passes 
 | Variable | `GA4_DEBUG` | `1` marks every event for GA4 **DebugView**; remove it once checked |
 | Secret | `AMPLITUDE_API_KEY` | the Amplitude project's API key; set it and the same events go there too |
 | Secret | `EXCLUDED_DEVICES` | the owner's computers, the same value the dashboard has: install ids or their first 12 characters, comma separated |
-| Secret | `EVENTS_USER_KEY` | a long string nobody knows (`openssl rand -hex 32`): the key the signed-in account's id is hashed with before it leaves; without it no user id is sent |
+| Secret | `EVENTS_USER_KEY` | a long string nobody knows (`openssl rand -hex 32`): the key a user id is hashed with before it leaves; without it no user id is sent |
 
 Changing `LOG_SIGNING_KEY` breaks every log link handed out before it (including the
 links left in issues). Keep that in mind if it ever has to change.
@@ -146,7 +146,7 @@ Close the test issue once you have checked it.
 What one request carries (`desktop/src/events.js` builds it, at most 500 events):
 
 ```json
-{"installId":"<32 hex>","userId":"","version":"0.9.2","edition":"production","os":"mac",
+{"installId":"<32 hex>","userId":"","version":"0.9.2","edition":"opensource","os":"mac",
  "osVersion":"15.5","sessionId":1793000000000,
  "events":[{"name":"app_screen","screen":"home","t":1793000001000},
            {"name":"home_nav_settings","screen":"home","t":1793000002000}]}
@@ -155,16 +155,14 @@ What one request carries (`desktop/src/events.js` builds it, at most 500 events)
 `name` is an element's id (or its English label key) in snake case, never what a person
 typed; `app_screen` means the screen changed to `screen`. GA4 and Amplitude get a press as
 `button_press` with the button in the `button` parameter, so a button never costs an event
-name. `installId` is the client id (GA4) and device id (Amplitude); `userId` becomes `user_id`
-once the production edition signs in. Register `button`, `screen`, `edition` and
+name. `installId` is the client id (GA4) and device id (Amplitude). The app has no account,
+so its `userId` is always empty. Register `button`, `screen`, `edition` and
 `app_version` as custom dimensions in GA4 to chart them.
 
-The app's `userId` is the sha256 of the Perso member number, and member numbers count up
-from 1, so anyone could get them back by hashing 1, 2, 3 and so on. The relay therefore never
-passes it on as it came: GA4 and Amplitude get the first 32 hex characters of its
-HMAC-SHA256 under `EVENTS_USER_KEY` (`keyedUserId` in `events-logic.js`), a secret only the
-relay holds. Without that secret no user id is sent at all, and the install id still counts
-the computer. Changing the key starts every account over as a new user in both.
+A `userId` that does arrive is never passed on as it came: GA4 and Amplitude get the first
+32 hex characters of its HMAC-SHA256 under `EVENTS_USER_KEY` (`keyedUserId` in
+`events-logic.js`), a secret only the relay holds. Without that secret no user id is sent
+at all, and the install id still counts the computer.
 
 ### Steps (0.9.2)
 
@@ -188,15 +186,6 @@ Where: **shell** is the desktop shell (`desktop/src`), **page** the app's page (
 | `kit_install_started` | `mode` install/update, `gigabytes` | shell, the install screen |
 | `kit_install_finished` | `outcome`, `reason`, `seconds` | shell, the install's end |
 | `error_shown` | `code`, `where` install/start | shell, the error screen the app could not start past |
-| `sign_in_shown` | `face` start/wait/nokey | page, the sign-in screen's face changing |
-| `sign_in_started` | `method` window | shell, the sign-in window opened |
-| `sign_in_handoff` | `provider` google/microsoft/other | shell, the window handing the sign-in to the browser |
-| `sign_in_succeeded` | `method`, `new_account`, `has_key` | shell; `new_account`: the account was made in the last 10 minutes |
-| `sign_in_cancelled` | `method` | shell |
-| `sign_in_failed` | `method`, `reason` timeout/window/port/denied/token/network | shell |
-| `sign_out` | `reason` user/refresh_refused | shell |
-| `key_fetched` | `present`, `ok` | shell, the account's API key looked up (when the answer changes) |
-| `key_page_opened` | | shell, Perso's key page opened from the sign-in screen |
 | `key_saved` | `ok`, `kind` perso/gemini | page, the key window's Save |
 | `media_added` | `source` file/link/drop, `kind` video/audio | page, a file picked or dropped, a link taken |
 | `draft_opened` | | page, a video on the draft screen |
@@ -228,7 +217,7 @@ wrangler secret put GA4_API_SECRET
 wrangler deploy
 curl -s -o /dev/null -w '%{http_code}\n' -X POST https://persodub-report.persodub.workers.dev/events \
   -H 'content-type: application/json' \
-  -d "{\"installId\":\"00000000000000000000000000000001\",\"version\":\"0.9.2\",\"edition\":\"production\",
+  -d "{\"installId\":\"00000000000000000000000000000001\",\"version\":\"0.9.2\",\"edition\":\"opensource\",
        \"os\":\"mac\",\"sessionId\":$(date +%s)000,
        \"events\":[{\"name\":\"relay_check\",\"screen\":\"home\",\"t\":$(date +%s)000}]}"
 # -> 204; GA4 → Admin → DebugView shows button_press with button=relay_check within a minute

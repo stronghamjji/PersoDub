@@ -221,8 +221,8 @@ test("the device line names Windows by its build, a Mac by its product version a
     "Windows 11 22H2 (build 22621)", "Windows 11 21H2 (build 22000)", "Windows 10 22H2 (build 19045)", "Windows 10 21H2 (build 19044)",
     "Windows 10/11 (build 19041)",
   ]);
-  assert.equal(describeDevice({ sys: { ...WIN, release: "10.0.26200" }, installed: true, edition: "production" }),
-    "Windows 11 25H2 (build 26200) · Intel i7 (8 cores) · 32 GB RAM · installed · production");
+  assert.equal(describeDevice({ sys: { ...WIN, release: "10.0.26200" }, installed: true, edition: "opensource" }),
+    "Windows 11 25H2 (build 26200) · Intel i7 (8 cores) · 32 GB RAM · installed · opensource");
   const mac = (product, arch = "arm64") => describeDevice({ sys: { ...MAC, product, arch }, edition: "opensource" });
   assert.equal(mac("26.5.2"), "macOS 26.5.2 (Tahoe) · Apple Silicon · Apple M4 (10 cores) · 24 GB RAM · from source · opensource");
   assert.deepEqual(["15.1", "14.7.2", "13.0", "12.7", "11.2", "27.0"].map((v) => mac(v).split(" · ")[0]),
@@ -230,8 +230,8 @@ test("the device line names Windows by its build, a Mac by its product version a
   assert.equal(mac("14.7.2", "x64").split(" · ")[1], "Intel");
   assert.equal(describeDevice({ sys: MAC }).split(" · ")[0], "macOS (Darwin 24.6.0)", "sw_vers unread");
   assert.equal(describeDevice({ sys: { ...MAC, platform: "linux", product: "Ubuntu 24.04 LTS", arch: "x64" } }).split(" · ")[0], "Linux Ubuntu 24.04 LTS");
-  const env = collectEnvironment({ sys: { ...WIN, release: "10.0.26200" }, installed: true, edition: "production" });
-  assert.equal(env.device, "Windows 11 25H2 (build 26200) · Intel i7 (8 cores) · 32 GB RAM · installed · production");
+  const env = collectEnvironment({ sys: { ...WIN, release: "10.0.26200" }, installed: true, edition: "opensource" });
+  assert.equal(env.device, "Windows 11 25H2 (build 26200) · Intel i7 (8 cores) · 32 GB RAM · installed · opensource");
   assert.equal(env.os, "windows 10.0.26200", "the old field as it was");
 });
 
@@ -622,7 +622,7 @@ test("a Windows path logged as a Python list is masked", () => {
   assert.ok(out.includes("input.mp4"), out);
 });
 
-test("the environment names the edition the kit runs as, and nothing when unknown", () => {
-  assert.equal(collectEnvironment({ sys: MAC, edition: "production" }).edition, "production");
+test("the environment names the build's edition, and nothing when not given", () => {
+  assert.equal(collectEnvironment({ sys: MAC, edition: "opensource" }).edition, "opensource");
   assert.equal(collectEnvironment({ sys: MAC }).edition, "");
 });

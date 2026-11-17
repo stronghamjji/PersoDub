@@ -83,6 +83,19 @@ def no_codex_prefetch(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_kit_of_this_machine(monkeypatch):
+    """A test that enters the lifespan must not settle the privacy lines in the
+    kit.env of the computer it runs on (app/settings_env.py settle_share_usage).
+    A test about a kit points PERSODUB_KIT_DIR at one of its own.
+
+    Nor does a test take its dub mode from the shell it was started in: with no
+    kit the stage defaults are read from the environment (app/setup.py), and
+    DUB_MODE=perso there sent every dub that chose nothing to Perso."""
+    monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
+    monkeypatch.delenv("DUB_MODE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolate_workspace(tmp_path, monkeypatch):
     """Point the upload workspace at a per-test temp directory.
 
@@ -107,13 +120,15 @@ def chatgpt_signed_in(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def dub_on_this_computer(monkeypatch):
-    """Dubbing goes to Perso by default in the production edition (app/setup.py),
-    which a dub start without a key refuses. The tests that start one watch the
-    local path unless they choose a mode themselves, whatever edition the
-    machine running them names; tests/test_setup_api.py tests the default
-    itself and clears this."""
-    monkeypatch.setenv("DUB_MODE", "local")
+def every_file_is_a_video(monkeypatch):
+    """Every file a test brings is a video unless the test says otherwise.
+
+    A file is asked what it is when it comes in (app/media.py media_kind), and
+    the answer comes from ffprobe. The tests bring a few made-up bytes named
+    v.mp4, which ffprobe would refuse, and CI has no ffprobe at all.
+    tests/test_media_kind.py keeps the real probe."""
+    from app import media
+    monkeypatch.setattr(media, "media_kind", lambda path: "video")
 
 
 @pytest.fixture(autouse=True)
@@ -220,3 +235,38 @@ def after_a_restart(monkeypatch):
         return jid
 
     return run
+
+
+@pytest.fixture
+def hold(monkeypatch):
+    """hold(name, times) -> the list every refusal is added to.
+
+    Windows will not replace or delete a file something still has open (the
+    page's player, a download, a virus scanner): os.replace and os.remove
+    raise PermissionError. The tests run on macOS and Linux too, where both
+    go through, so this makes the file called `name` refuse the next `times`
+    asks, or every ask when no number is given. The wait between asks
+    (app/media.py when_free) takes no time."""
+    import os
+
+    from app import media
+    monkeypatch.setattr(media, "HOLD_STEP", 0)
+    real = {"replace": os.replace, "remove": os.remove}
+
+    def hold(name, times=None):
+        refused = []
+
+        def stand_in(which):
+            def act(*paths):
+                if os.path.basename(paths[-1]) == name and (times is None or len(refused) < times):
+                    refused.append(which)
+                    raise PermissionError(13, "The process cannot access the file because it is being "
+                                              "used by another process", paths[-1])
+                return real[which](*paths)
+            return act
+
+        monkeypatch.setattr(os, "replace", stand_in("replace"))
+        monkeypatch.setattr(os, "remove", stand_in("remove"))
+        return refused
+
+    return hold

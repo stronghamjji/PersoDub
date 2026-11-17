@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildKitVersion, editionFromArgs, resolveCampplusSrc, shipped } from "../scripts/collect-payload.mjs";
+import { buildKitVersion, resolveCampplusSrc, shipped } from "../scripts/collect-payload.mjs";
 
 test("buildKitVersion combines the package version and git short sha", () => {
   assert.equal(buildKitVersion("0.1.0", "abc1234"), "0.1.0+abc1234");
@@ -16,15 +16,6 @@ test("resolveCampplusSrc returns the env var value when set", () => {
 
 test("resolveCampplusSrc throws when CAMPPLUS_SRC is not set", () => {
   assert.throws(() => resolveCampplusSrc({}), /CAMPPLUS_SRC is not set/);
-});
-
-test("--edition on the command line names the edition, in either spelling, and a bare flag stops the build", () => {
-  assert.equal(editionFromArgs([]), undefined, "not given: the environment's PERSODUB_EDITION");
-  assert.equal(editionFromArgs(["--edition", "production"]), "production");
-  assert.equal(editionFromArgs(["--edition=opensource"]), "opensource");
-  for (const bare of [["--edition"], ["--edition", "--other"], ["--edition="]]) {
-    assert.throws(() => editionFromArgs(bare), /--edition needs a name/, JSON.stringify(bare));
-  }
 });
 
 test("the payload leaves out the tests and their helpers, in either slash, and keeps the app", () => {

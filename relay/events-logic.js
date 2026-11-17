@@ -99,8 +99,7 @@ const SCREEN = /^[a-z0-9_]{0,32}$/;
 const INSTALL = /^[0-9a-f]{32}$/;
 const VERSION = /^\d+\.\d+\.\d+[\w.-]{0,16}$/;
 const OS_VERSION = /^[\w. -]{0,32}$/;
-// The signed-in account's id, filled once the production edition signs in;
-// empty until then.
+// An account's id. The app has no account and sends it empty.
 const USER = /^[\w.-]{0,64}$/;
 const LANG = /^[a-z]{2}$/;
 

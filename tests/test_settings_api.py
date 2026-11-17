@@ -8,6 +8,10 @@ app/api/settings.py): this is a single-user desktop app bound to 127.0.0.1, and 
 a saved key behind a set/unset boolean only made it look like an empty field.
 """
 
+import os
+import stat
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -54,7 +58,6 @@ def test_update_appends_when_the_key_is_absent():
 
 def test_get_reports_unset_keys(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, BASE)
-    monkeypatch.delenv("PERSODUB_EDITION", raising=False)
     r = client.get("/api/settings")
     assert r.status_code == 200
     body = r.json()
@@ -69,8 +72,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body.pop("workspace") == state.WORKSPACE
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
-                    "perso_space_seq": None, "analytics_off": False,
-                    "reports_off": False, "events_enabled": True, "ui_language": "auto"}
+                    "perso_space_seq": None, "share_usage": True, "ui_language": "auto"}
 
 
 def test_get_carries_the_utm_tagged_signup_link(tmp_path, monkeypatch):
@@ -278,76 +280,379 @@ def test_update_replaces_every_matching_line():
     assert out.count("GEMINI_API_KEY=new") == 2
 
 
-# --- the usage-counts switch -----------------------------------------------
+# --- the Share usage data switch --------------------------------------------
+# One switch on the screen, three lines in kit.env: the desktop shell reads
+# PERSODUB_NO_ANALYTICS, PERSODUB_NO_REPORTS and PERSODUB_EVENTS, each before
+# its own send, and it is not changing.
 
-def test_get_reports_counts_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE)
-    assert client.get("/api/settings").json()["analytics_off"] is False
-
-
-def test_get_reflects_a_switch_that_was_turned_off(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
-    assert client.get("/api/settings").json()["analytics_off"] is True
+ALL_ON = "PERSODUB_NO_ANALYTICS=0\nPERSODUB_NO_REPORTS=0\nPERSODUB_EVENTS=1\n"
+ALL_OFF = "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=0\n"
 
 
-def test_the_switch_writes_the_line_the_desktop_shell_already_reads(tmp_path, monkeypatch):
-    # The Settings switch and PERSODUB_NO_ANALYTICS are not two switches. The
-    # shell reads this one line out of kit.env before every count, so writing
-    # it here is what turns reporting off -- there is no second place that
-    # could disagree with it.
+@pytest.mark.parametrize("counts, reports, shared", [
+    ("0", "0", True),
+    ("1", "0", True),
+    ("0", "1", True),
+    ("1", "1", False),
+])
+def test_sharing_is_off_only_when_counts_and_reports_are_both_off(tmp_path, monkeypatch, counts, reports, shared):
+    _kit(tmp_path, monkeypatch, BASE + f"PERSODUB_NO_ANALYTICS={counts}\nPERSODUB_NO_REPORTS={reports}\n")
+    assert settings_env.read_share_usage() is shared
+    assert client.get("/api/settings").json()["share_usage"] is shared
+
+
+@pytest.mark.parametrize("events_line", ["", "PERSODUB_EVENTS=1\n", "PERSODUB_EVENTS=0\n"])
+def test_the_events_line_does_not_decide_the_switch(tmp_path, monkeypatch, events_line):
+    # The shell holds the button events back whenever the counts are off
+    # (desktop/src/events.js), so counts and reports off is everything off
+    # whatever the events line says -- and events off alone is not.
+    kit = _kit(tmp_path, monkeypatch,
+               BASE + "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n" + events_line)
+    assert settings_env.read_share_usage() is False
+    (kit / "kit.env").write_text(BASE + events_line, encoding="utf-8")
+    assert settings_env.read_share_usage() is True
+
+
+def test_turning_the_switch_off_writes_all_three_lines(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch, BASE)
-    r = client.post("/api/settings", json={"analytics_off": True})
-    assert r.status_code == 200
-    assert "PERSODUB_NO_ANALYTICS=1" in (kit / "kit.env").read_text(encoding="utf-8")
+    assert client.post("/api/settings", json={"share_usage": False}).status_code == 200
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
+    assert client.get("/api/settings").json()["share_usage"] is False
 
 
-def test_the_switch_can_be_turned_back_on(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
-    client.post("/api/settings", json={"analytics_off": False})
-    assert client.get("/api/settings").json()["analytics_off"] is False
+def test_turning_the_switch_on_writes_all_three_lines(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + ALL_OFF)
+    assert client.post("/api/settings", json={"share_usage": True}).status_code == 200
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_ON
+    assert client.get("/api/settings").json()["share_usage"] is True
+
+
+def test_a_save_without_the_switch_leaves_its_lines_alone(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + ALL_OFF)
+    client.post("/api/settings", json={"gemini_api_key": "gvalue"})
+    assert ALL_OFF in (kit / "kit.env").read_text(encoding="utf-8")
 
 
 def test_saving_only_the_switch_leaves_the_saved_keys_alone(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
-    client.post("/api/settings", json={"analytics_off": True})
+    client.post("/api/settings", json={"share_usage": False})
     assert "GEMINI_API_KEY=gvalue" in (kit / "kit.env").read_text(encoding="utf-8")
 
 
-# --- the failure-reports switch --------------------------------------------
+# --- settling a kit.env from the three-switch versions -----------------------
 
-def test_get_reports_failure_reports_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE)
-    assert client.get("/api/settings").json()["reports_off"] is False
-
-
-def test_get_reflects_failure_reports_turned_off(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
-    assert client.get("/api/settings").json()["reports_off"] is True
-
-
-def test_the_reports_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):
-    # Same arrangement as the counts: one line in kit.env, re-read by the
-    # desktop shell before every report, so there is no second place to disagree.
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    assert client.post("/api/settings", json={"reports_off": True}).status_code == 200
-    assert "PERSODUB_NO_REPORTS=1" in (kit / "kit.env").read_text(encoding="utf-8")
-
-
-def test_the_reports_switch_can_be_turned_back_on(tmp_path, monkeypatch):
-    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
-    client.post("/api/settings", json={"reports_off": False})
-    assert client.get("/api/settings").json()["reports_off"] is False
-
-
-def test_the_two_switches_are_independent(tmp_path, monkeypatch):
-    # Turning the counts off must not silence the crash reports, and the other
-    # way round: they are separate promises to the user.
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    client.post("/api/settings", json={"analytics_off": True})
+@pytest.mark.parametrize("lines", [
+    "PERSODUB_NO_ANALYTICS=1\n",
+    "PERSODUB_NO_REPORTS=1\n",
+    "PERSODUB_EVENTS=0\n",
+    "PERSODUB_NO_ANALYTICS=1\nPERSODUB_EVENTS=0\n",
+    "PERSODUB_NO_ANALYTICS=0\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=0\n",
+])
+def test_a_partly_off_computer_is_settled_as_all_on(tmp_path, monkeypatch, lines):
+    kit = _kit(tmp_path, monkeypatch, BASE + lines)
+    settings_env.settle_share_usage()
     text = (kit / "kit.env").read_text(encoding="utf-8")
-    assert "PERSODUB_NO_ANALYTICS=1" in text
-    assert "PERSODUB_NO_REPORTS=1" not in text
-    assert client.get("/api/settings").json()["reports_off"] is False
+    assert text.startswith(BASE)
+    assert sorted(text[len(BASE):].splitlines()) == sorted(ALL_ON.splitlines())
+    assert settings_env.read_share_usage() is True
+
+
+@pytest.mark.parametrize("lines", [
+    "",                                                     # a new install: no line at all
+    ALL_ON,
+    ALL_OFF,
+    "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n",     # everything off, no events line
+    "PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\nPERSODUB_EVENTS=1\n",
+])
+def test_all_on_and_all_off_are_left_untouched(tmp_path, monkeypatch, lines):
+    kit = _kit(tmp_path, monkeypatch, BASE + lines)
+    shared = settings_env.read_share_usage()
+    settings_env.settle_share_usage()
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + lines
+    # Not rewritten with the same text either: a write leaves a backup behind.
+    assert not (kit / "kit.env.bak").exists()
+    assert settings_env.read_share_usage() is shared
+
+
+def test_settling_without_a_kit_does_nothing(tmp_path, monkeypatch):
+    # A run from source has no kit at all (tests/conftest.py)...
+    settings_env.settle_share_usage()
+    # ...and a kit folder whose kit.env is not there yet is no different.
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    settings_env.settle_share_usage()
+    assert list(kit.iterdir()) == []
+
+
+def test_startup_settles_a_partly_off_computer(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/api/settings").json()["share_usage"] is True
+    assert "PERSODUB_NO_ANALYTICS=0" in (kit / "kit.env").read_text(encoding="utf-8")
+
+
+def test_the_app_still_starts_when_kit_env_cannot_be_written(tmp_path, monkeypatch):
+    # A window that never opens is a worse failure than three lines not merged.
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+
+    def refuse(_values):
+        raise PermissionError("kit.env is read-only")
+    monkeypatch.setattr(settings_env, "_write_env", refuse)
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/health").json() == {"status": "ok"}
+
+
+def test_the_app_still_starts_whatever_goes_wrong_settling(tmp_path, monkeypatch):
+    # Not only an OSError: a kit.env that was not UTF-8 raised
+    # UnicodeDecodeError here, a ValueError, and the backend did not start.
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+
+    def broken():
+        raise ValueError("anything at all")
+    monkeypatch.setattr(settings_env, "settle_share_usage", broken)
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/health").json() == {"status": "ok"}
+
+
+# --- a kit.env that is not UTF-8 ----------------------------------------------
+# Saved in the computer's own encoding (Notepad's ANSI, PowerShell's
+# Set-Content): cp949 on a Korean Windows, with a Korean note and a Korean
+# folder name in it. The desktop shell reads such a file without complaint
+# (U+FFFD where the bytes are no UTF-8), so its ASCII lines decide what is
+# sent, and the engine has to read the same lines the same way.
+
+CP949_NOTE = "# 메모: 이 컴퓨터의 킷 설정\n".encode("cp949")
+CP949_DIR = "PERSODUB_MEMO=한글 폴더\n".encode("cp949")
+CP949_HEAD = b"# Generated by the PersoDub desktop installer.\n" + CP949_NOTE + CP949_DIR + b"PERSODUB_KIT_DIR=/x\n"
+
+
+def _cp949_kit(tmp_path, monkeypatch, lines):
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "kit.env").write_bytes(CP949_HEAD + lines)
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    with pytest.raises(UnicodeDecodeError):
+        (kit / "kit.env").read_text(encoding="utf-8")
+    return kit
+
+
+def _lines(path):
+    """The file's lines as bytes, whichever line ends it was written with."""
+    return path.read_bytes().replace(b"\r\n", b"\n").split(b"\n")
+
+
+def test_a_kit_env_that_is_not_utf8_reads_line_by_line(tmp_path, monkeypatch):
+    _cp949_kit(tmp_path, monkeypatch, b"PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\nGEMINI_API_KEY=gvalue\n")
+    assert settings_env.read_value("PERSODUB_NO_ANALYTICS") == "1"
+    assert settings_env.read_value("GEMINI_API_KEY") == "gvalue"
+    assert settings_env.current_value("PERSODUB_KIT_DIR") == "/x"
+    assert settings_env.read_key_status() == {"GEMINI_API_KEY": True, "PERSO_API_KEY": False, "PERSO_SPACE_SEQ": False}
+    assert settings_env.read_share_usage() is False
+    # The line that is not UTF-8 is a line too: its key reads, its value with
+    # U+FFFD for the bytes, as the shell's readFileSync(path, "utf8") gives it.
+    memo = settings_env.read_value("PERSODUB_MEMO")
+    assert memo and "\ufffd" in memo and "한글" not in memo
+
+
+@pytest.mark.parametrize("route", ["/api/settings", "/api/setup", "/api/engines", "/api/models"])
+def test_the_routes_that_read_a_setting_answer_on_a_kit_env_that_is_not_utf8(tmp_path, monkeypatch, route):
+    _cp949_kit(tmp_path, monkeypatch, b"PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n")
+    assert client.get(route).status_code == 200
+
+
+def test_everything_off_reads_as_off_on_a_kit_env_that_is_not_utf8_and_startup_leaves_it(tmp_path, monkeypatch):
+    kit = _cp949_kit(tmp_path, monkeypatch, b"PERSODUB_NO_ANALYTICS=1\r\nPERSODUB_NO_REPORTS=1\r\n")
+    saved = (kit / "kit.env").read_bytes()
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/api/settings").json()["share_usage"] is False
+    assert (kit / "kit.env").read_bytes() == saved
+    assert not (kit / "kit.env.bak").exists()
+
+
+def test_a_write_keeps_the_bytes_that_are_not_utf8(tmp_path, monkeypatch):
+    kit = _cp949_kit(tmp_path, monkeypatch, b"PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n")
+    # The switch, a key and a dub default: the three kinds of write there are.
+    assert client.post("/api/settings", json={"share_usage": True, "gemini_api_key": "gvalue"}).status_code == 200
+    dub_setup.set_defaults({"voice_quality": "high"})
+    assert _lines(kit / "kit.env") == (CP949_HEAD.split(b"\n")[:-1] + [
+        b"PERSODUB_NO_ANALYTICS=0", b"PERSODUB_NO_REPORTS=0", b"GEMINI_API_KEY=gvalue",
+        b"PERSODUB_EVENTS=1", b"VOICE_QUALITY=high", b""])
+    # Still the Korean its owner wrote, read in the encoding it was saved in.
+    assert "# 메모: 이 컴퓨터의 킷 설정" in (kit / "kit.env").read_bytes().decode("cp949")
+    assert "PERSODUB_MEMO=한글 폴더" in (kit / "kit.env").read_bytes().decode("cp949")
+    assert client.get("/api/settings").json()["share_usage"] is True
+    assert settings_env.read_value("GEMINI_API_KEY") == "gvalue"
+    # The backup is the file before the last of those writes, its bytes kept too.
+    assert _lines(kit / "kit.env.bak")[:4] == CP949_HEAD.split(b"\n")[:-1]
+
+
+def test_startup_settles_a_partly_off_kit_env_that_is_not_utf8_and_keeps_its_bytes(tmp_path, monkeypatch):
+    kit = _cp949_kit(tmp_path, monkeypatch, b"PERSODUB_NO_ANALYTICS=1\n")
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        assert c.get("/api/settings").json()["share_usage"] is True
+    assert _lines(kit / "kit.env") == (CP949_HEAD.split(b"\n")[:-1] + [
+        b"PERSODUB_NO_ANALYTICS=0", b"PERSODUB_NO_REPORTS=0", b"PERSODUB_EVENTS=1", b""])
+    assert (kit / "kit.env.bak").read_bytes() == CP949_HEAD + b"PERSODUB_NO_ANALYTICS=1\n"
+
+
+# --- kit.env read the way the desktop shell reads it -------------------------
+# desktop/src/kitEnv.js parseEnvFile is what decides whether anything is sent:
+# a byte-order mark before the first key, `export ` before a key and quotes
+# round a value all still say "off" there, so they must say it here too.
+
+BOM = b"\xef\xbb\xbf"
+
+
+@pytest.mark.parametrize("saved", [
+    b"PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n",
+    BOM + b"PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n",
+    BOM + b"PERSODUB_NO_ANALYTICS=1\r\nPERSODUB_NO_REPORTS=1\r\nPERSODUB_EVENTS=0\r\n",
+    b"PERSODUB_NO_ANALYTICS=\"1\"\nPERSODUB_NO_REPORTS='1'\n",
+    b"export PERSODUB_NO_ANALYTICS=1\nexport PERSODUB_NO_REPORTS=1\n",
+    BOM + b"export PERSODUB_NO_ANALYTICS=\"1\"\n  export  PERSODUB_NO_REPORTS = '1' \n",
+])
+def test_everything_off_is_still_off_with_a_mark_quotes_or_export(tmp_path, monkeypatch, saved):
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "kit.env").write_bytes(saved)
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    assert settings_env.read_share_usage() is False
+    settings_env.settle_share_usage()
+    # Not turned on, and not written at all.
+    assert (kit / "kit.env").read_bytes() == saved
+    assert not (kit / "kit.env.bak").exists()
+    assert client.get("/api/settings").json()["share_usage"] is False
+
+
+@pytest.mark.parametrize("line, value", [
+    ("GEMINI_API_KEY=abc", "abc"),
+    ('GEMINI_API_KEY="abc"', "abc"),
+    ("GEMINI_API_KEY='abc'", "abc"),
+    ("export GEMINI_API_KEY=abc", "abc"),
+    ("  export   GEMINI_API_KEY = \"a b\"  ", "a b"),
+    # One pair of quotes comes off, and only a matching pair.
+    ("GEMINI_API_KEY=\"'abc'\"", "'abc'"),
+    ("GEMINI_API_KEY=\"abc'", "\"abc'"),
+    ("GEMINI_API_KEY=\"", "\""),
+    # Empty, quoted or not, is no value.
+    ("GEMINI_API_KEY=", None),
+    ('GEMINI_API_KEY=""', None),
+    ("# GEMINI_API_KEY=abc", None),
+])
+def test_a_line_reads_as_the_shell_reads_it(tmp_path, monkeypatch, line, value):
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "kit.env").write_bytes(BOM + line.encode("utf-8") + b"\n")
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    assert settings_env.read_value("GEMINI_API_KEY") == value
+    assert settings_env.read_key_status()["GEMINI_API_KEY"] is bool(value)
+    # An empty line is still a line: it outranks the process environment.
+    monkeypatch.setenv("GEMINI_API_KEY", "from-the-environment")
+    commented = line.startswith("#")
+    assert settings_env.current_value("GEMINI_API_KEY") == ("from-the-environment" if commented else value or "")
+
+
+# --- kit.env is written beside itself and moved into place -------------------
+
+def test_a_write_goes_to_a_file_beside_kit_env_and_is_moved_over_it(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE)
+    moves = []
+    real_replace = settings_env.os.replace
+
+    def replace(src, dst):
+        # At the move the new text is whole in the other file and kit.env is
+        # still the old one, whole.
+        moves.append((src, dst, open(src, encoding="utf-8").read(), open(dst, encoding="utf-8").read()))
+        real_replace(src, dst)
+    monkeypatch.setattr(settings_env.os, "replace", replace)
+    settings_env.write_share_usage(False)
+    assert moves == [(str(kit / "kit.env.tmp"), str(kit / "kit.env"), BASE + ALL_OFF, BASE)]
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
+    assert (kit / "kit.env.bak").read_text(encoding="utf-8") == BASE
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
+def test_a_write_that_stops_part_way_leaves_kit_env_as_it_was(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
+
+    class HalfWritten:
+        def __init__(self, f):
+            self.f = f
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.f.close()
+
+        def write(self, text):
+            self.f.write(text[:len(text) // 2])
+            raise OSError(28, "No space left on device")
+
+    def full_disk(path, mode="r", **kw):
+        f = open(path, mode, **kw)
+        return HalfWritten(f) if "w" in mode else f
+    monkeypatch.setattr(settings_env, "open", full_disk, raising=False)
+    with pytest.raises(OSError):
+        settings_env.write_share_usage(False)
+    monkeypatch.undo()
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + "GEMINI_API_KEY=gvalue\n"
+    # The half-written copy, which has the keys in it, is not left behind.
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
+def test_a_kit_env_that_cannot_be_replaced_is_written_in_place(tmp_path, monkeypatch):
+    # Windows refuses the move while another program has kit.env open.
+    kit = _kit(tmp_path, monkeypatch, BASE)
+
+    def refuse(_src, _dst):
+        raise PermissionError(13, "The process cannot access the file")
+    monkeypatch.setattr(settings_env.os, "replace", refuse)
+    settings_env.write_share_usage(False)
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
+    assert (kit / "kit.env.bak").read_text(encoding="utf-8") == BASE
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no owner-only file mode")
+@pytest.mark.parametrize("leftover", [False, True],
+                         ids=["nothing there before", "one a crashed run left readable by all"])
+def test_the_file_beside_kit_env_is_owner_only_from_the_moment_it_exists(tmp_path, monkeypatch, leftover):
+    kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
+    tmp = kit / "kit.env.tmp"
+    if leftover:
+        tmp.write_text("GEMINI_API_KEY=an-older-key\n" * 20, encoding="utf-8")
+        tmp.chmod(0o666)
+    seen = []
+
+    def mode_of(path):
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    def watched(path, mode="r", **kw):
+        f = open(path, mode, **kw)
+        if "w" in mode:
+            # Just opened and still empty: the keys are not in it yet.
+            seen.append(("opened", path, os.path.getsize(path), mode_of(path)))
+        return f
+    real_replace = settings_env.os.replace
+
+    def replace(src, dst):
+        # The new text is whole in it now, keys and all.
+        seen.append(("moved", src, mode_of(src)))
+        real_replace(src, dst)
+    monkeypatch.setattr(settings_env, "open", watched, raising=False)
+    monkeypatch.setattr(settings_env.os, "replace", replace)
+    # With no umask a file made without a mode of its own is readable by all,
+    # so what is seen is the writer's doing and not this computer's umask.
+    umask = os.umask(0)
+    try:
+        settings_env.write_share_usage(False)
+    finally:
+        os.umask(umask)
+    assert seen == [("opened", str(tmp), 0, 0o600), ("moved", str(tmp), 0o600)]
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + "GEMINI_API_KEY=gvalue\n" + ALL_OFF
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
 
 
 # --- POST /api/perso/spaces/preview (workspaces for a TYPED, unsaved key) ---
@@ -531,25 +836,3 @@ def test_cleared_workspace_pin_does_not_fall_back_to_the_process_env(tmp_path, m
     monkeypatch.setenv("PERSO_SPACE_SEQ", "999")
     monkeypatch.setattr(perso_client, "_resolve_space_seq", lambda key, base: 42)
     assert perso_client.PersoClient().space_seq == 42
-
-
-# --- the button events switch ----------------------------------------------
-
-def test_events_are_on_in_both_editions_until_the_switch_is_saved(tmp_path, monkeypatch):
-    # The shell decides the same way (desktop/src/events.js eventsOn): no line
-    # in kit.env means on, whichever edition the build is.
-    _kit(tmp_path, monkeypatch, BASE)
-    for edition in ("production", "opensource"):
-        monkeypatch.setenv("PERSODUB_BUILD_EDITION", edition)
-        assert client.get("/api/settings").json()["events_enabled"] is True
-
-
-def test_the_events_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):
-    kit = _kit(tmp_path, monkeypatch, BASE)
-    monkeypatch.setenv("PERSODUB_BUILD_EDITION", "production")
-    assert client.post("/api/settings", json={"events_enabled": False}).status_code == 200
-    assert "PERSODUB_EVENTS=0" in (kit / "kit.env").read_text(encoding="utf-8")
-    assert client.get("/api/settings").json()["events_enabled"] is False
-    client.post("/api/settings", json={"events_enabled": True})
-    assert "PERSODUB_EVENTS=1" in (kit / "kit.env").read_text(encoding="utf-8")
-    assert client.get("/api/settings").json()["events_enabled"] is True

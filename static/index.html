@@ -152,9 +152,6 @@
             <button class="home-perso" id="homePerso" type="button" aria-label="Perso Dubbing"><img src="/perso-dubbing.svg" alt="Perso Dubbing"></button>
             <button class="home-gh-name" id="homeGhName" type="button">
               <span class="home-gh-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.4 1.1 2.9.8.1-.6.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.5 9.5 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.8V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg></span><span data-i18n>PersoDub on GitHub</span></button>
-            <!-- The signed-in account, production edition only (ui/src/signIn.mjs paints it): the
-                 full e-mail under the brand, which opens Settings > Account and keys. -->
-            <button class="home-account" id="homeAccount" type="button" hidden><span class="home-account-dot"></span><span class="home-account-name" id="homeAccountName"></span></button>
           </div>
           <div data-i18n class="home-grp">Tools</div>
           <button class="home-nav" id="homeNavDub" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20"/><path d="M19.8 17.8a7.5 7.5 0 0 0 .003-10.603"/><path d="M17 15a3.5 3.5 0 0 0-.025-4.975"/></svg><span data-i18n>Dubbing</span></button>
@@ -166,7 +163,7 @@
           <button class="home-nav" id="homeNavSettings" type="button"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg><span data-i18n>Settings</span></button>
           <div class="home-grow"></div>
           <button class="home-fb" id="homeHelp" type="button"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Help</button>
-          <button class="home-fb" id="homeFeedback" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span data-i18n id="homeFeedbackLabel">Send feedback</span></button>
+          <button class="home-fb" id="homeFeedback" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span data-i18n>Send feedback</span></button>
           <button class="home-promo" id="homeWhatsNew" type="button"><b id="homeWhatsNewTitle">What&#8217;s new</b></button>
         </aside>
         <div class="home2">
@@ -183,14 +180,15 @@
               <span data-i18n class="home-banner-title">Create project</span>
               <span data-i18n class="home-banner-title home-banner-title-drop">Drop to start a new project</span>
             </div>
-            <div data-i18n class="home-banner-sub">Upload a video to dub it, erase or burn in subtitles, or save it from a link. Drop it here or click to choose</div>
+            <div data-i18n class="home-banner-sub">Drop a video or an audio file here, or click to choose</div>
+            <div data-i18n class="home-banner-formats">Video MP4 · MOV | Audio WAV · FLAC · MP3 · M4A</div>
             <!-- The link field: it is a selling point, not a second step, so it
                  sits in the banner itself now (user, 2026-09-30) rather than in
                  its own card below. stopPropagation on click/mousedown keeps it
                  from also opening the file picker the banner's own click does. -->
             <label class="link-field home-banner-linkin" id="homeBannerLink"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
               <input id="linkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" data-i18n-placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
-            <input type="file" id="videoInput" accept="video/*" multiple hidden>
+            <input type="file" id="videoInput" accept=".mp4,.mov,.wav,.flac,.mp3,.m4a" multiple hidden>
           </div>
 
           <!-- The row under the banner (the mockup's first screen): the Dub
@@ -210,7 +208,7 @@
             <button class="home-card home-card-btn" id="homeDubCard" type="button">
               <span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20"/><path d="M19.8 17.8a7.5 7.5 0 0 0 .003-10.603"/><path d="M17 15a3.5 3.5 0 0 0-.025-4.975"/></svg></span>
               <div data-i18n class="home-card-title">Dubbing</div>
-              <div data-i18n class="home-card-desc">Voice a video in another language</div>
+              <div data-i18n class="home-card-desc">Voice a video or an audio file in another language</div>
             </button>
             <button class="home-card home-card-btn" id="homeEraseCard" type="button">
               <span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></span>
@@ -671,7 +669,25 @@
                 <div class="video-wrap" id="videoWrap">
                   <!-- === ratio: the black canvas of the picked shape === -->
                   <div class="ratio-canvas" id="ratioCanvas" hidden></div>
+                  <!-- An audio project has no picture: in the middle of
+                       the box, the sound sign and the word, which the
+                       stylesheet shows while the body is "audio-project"
+                       (ui/src/app.mjs paintMediaKind). The running panel's
+                       box has the same. -->
                   <video id="doneVideo" playsinline></video>
+                  <div class="video-audio"><svg class="lu" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg><span data-i18n>Audio</span></div>
+                  <!-- A video brought into a finished audio project
+                       (ui/src/joinPlayer.mjs): its picture, muted, plays
+                       here with the dubbed sound, which stays on #doneVideo.
+                       Until one is in, the way to bring it sits under the
+                       word Audio. The stylesheet shows the picture while the
+                       body is "joined-video" (ui/src/app.mjs paintMediaKind). -->
+                  <video id="joinVideo" muted playsinline></video>
+                  <div class="video-bring" id="joinBring" hidden>
+                    <div class="video-bring-row"><button data-i18n class="btn btn-outline" id="joinBringBtn" type="button">Bring in a video</button><span>MP4 · MOV</span></div>
+                    <div class="video-bring-note" id="joinBringNote" role="status"></div>
+                    <input type="file" id="joinFile" accept=".mp4,.mov" hidden>
+                  </div>
                   <!-- The subtitles, live on the player: what the burned file
                        will say and how big, always at the foot of the picture
                        (owner, 2026-10-23). Kept in the job's own
@@ -732,6 +748,7 @@
               <div class="video-body">
                 <div class="running-video" id="runStage">
                   <video id="runningVideo" playsinline></video>
+                  <div class="video-audio"><svg class="lu" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg><span data-i18n>Audio</span></div>
                 </div>
                 <!-- Which part of the video is being dubbed, when the job was
                      started with a trim. Empty, and invisible, otherwise. -->
@@ -886,7 +903,9 @@
          video looks like on the left, what is decided about it on the right. -->
     <div class="modal-body" id="projectModalBody">
       <div class="project-left">
-        <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><span class="project-dur" id="projectDur"></span><button data-i18n class="project-replace" id="projectReplace" type="button">Replace</button></div>
+        <!-- A batch with no video in it has no picture: the sound sign and
+             the word stand in the box (ui/src/newProject.mjs). -->
+        <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><div class="project-audio"><svg class="lu" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg><span data-i18n>Audio</span></div><span class="project-dur" id="projectDur"></span><button data-i18n class="project-replace" id="projectReplace" type="button">Replace</button></div>
         <!-- Over 30 minutes: not refused, but said plainly (user, 2026-09-23).
              ui/src/newProject.mjs shows it the moment the length is known. -->
         <div data-i18n class="job-notice" id="projectLongHint" hidden>Over 30 minutes. Dubbing takes much longer and depends on your computer. Trimming into parts is recommended.</div>
@@ -1017,25 +1036,25 @@
         <div class="help-item"><b>Erase subtitles</b><p>Why: Original subtitles left in the video overlap the translated ones.</p><p>How: Fit the box → Erase subtitles → Dubbing → Burn in subtitles.</p><div class="help-where">Time: About 10 min for a 10-second video (Local model).</div></div>
         <div class="help-item"><b>Save video</b><p>Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it or erase it from there.</p><div class="help-where">This computer.</div></div>
         <div class="help-item"><b>Dub Agent</b><p>Ask in plain words, such as &#8220;Korean dubbing for this link&#8221; or &#8220;make line 9 fit&#8221;. It works through the same tools and shows each step.</p><div class="help-where">Claude Code, installed and signed in, or Codex, which the app can download and sign in.</div></div>
-        <p class="help-links"><a href="#" id="helpGuide">User guide</a><span id="helpFaqItem"> · <a href="#" id="helpFaq">FAQ</a></span></p>
+        <p class="help-links"><a href="#" id="helpGuide">User guide</a> · <a href="#" id="helpFaq">FAQ</a></p>
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-primary" id="helpOk" type="button">OK</button></div>
   </div>
 </div>
 
-<!-- Customer support, the production edition's (ui/src/feedbackSheet.mjs): a
-     Service inquiry form like Perso's own, sent to the support inbox. The
-     open-source edition's Send feedback opens the repository's issues instead. -->
+<!-- Send feedback's form (ui/src/feedbackSheet.mjs): a Service inquiry form
+     like Perso's own, sent to the support inbox. A build with no address to
+     send it to opens the repository's issues instead. -->
 <div class="modal-overlay" id="feedbackOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" style="max-width: 460px">
-    <div class="modal-head"><h2 data-i18n id="feedbackTitle">Service inquiry</h2></div>
+    <div class="modal-head"><h2 data-i18n id="feedbackTitle">Feedback</h2></div>
     <div class="modal-body">
       <div class="modal-inner">
-        <div class="field"><label data-i18n for="feedbackType">Inquiry type</label><select id="feedbackType"><option value="problem" data-i18n>Problem or inconvenience</option><option value="bug" data-i18n>Bug report</option><option value="payment" id="feedbackTypePayment" data-i18n>Payment or refund</option><option value="other" data-i18n>Other</option></select></div>
+        <div class="field"><label data-i18n for="feedbackType">Inquiry type</label><select id="feedbackType"><option value="problem" data-i18n>Problem or inconvenience</option><option value="bug" data-i18n>Bug report</option><option value="other" data-i18n>Other</option></select></div>
         <div class="field"><label data-i18n for="feedbackSubjectInput">Subject</label><input type="text" id="feedbackSubjectInput" maxlength="120" required></div>
         <div class="field"><label data-i18n for="feedbackDetails">Details</label><textarea id="feedbackDetails" rows="5" maxlength="4000" required></textarea></div>
-        <div class="field"><label data-i18n for="feedbackReplyTo">Reply-to email</label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email" maxlength="254"><div data-i18n class="settings-hint" id="feedbackReplyToHint">Leave it empty to be answered at your account's address.</div></div>
+        <div class="field"><label data-i18n for="feedbackReplyTo">Reply-to email</label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email" maxlength="254"></div>
         <p data-i18n class="help-where">The app version and your computer are added automatically.</p>
         <p class="help-where" id="feedbackLogsNote" hidden><span data-i18n>A bug report also sends the app's logs.</span> <span data-i18n>Titles, file names, links and dialogue are not sent.</span></p>
         <div class="feedback-consent"><input type="checkbox" id="feedbackConsent"><label data-i18n for="feedbackConsent">I agree to the collection and use of my personal information for this inquiry.</label> <a href="#" id="feedbackPrivacy" data-i18n>Privacy policy</a></div>
@@ -1181,7 +1200,7 @@
              empty -- user decision 2026-08-06), but masked by default with a
              Show toggle: screen shares and screenshots were putting the keys
              on other people's screens (review 2026-08-07). -->
-        <div class="set-row" id="persoKeyRow">
+        <div class="set-row">
           <label data-i18n for="persoKeyInput">Perso API key</label>
           <div class="set-ctl">
             <input type="password" id="persoKeyInput" placeholder="Not set" data-i18n-placeholder="Not set" spellcheck="false">
@@ -1191,19 +1210,6 @@
                  UTM-tagged link from /api/settings on open; this plain URL is the fallback
                  so the link still works if that request fails. -->
             <a class="settings-link" id="persoSignupLink" href="https://developers.perso.ai/api-keys" target="_blank" rel="noopener" data-i18n>Get a Perso API key…</a>
-          </div>
-        </div>
-        <!-- The production edition signs in to Perso instead of taking a
-             pasted key: the account row stands in the key row's place, which hides
-             (ui/src/settingsDialog.mjs paintAccount, mockup 2026-10-25). -->
-        <div class="set-row" id="persoAccountRow" hidden>
-          <span data-i18n>Perso account</span>
-          <div class="set-ctl">
-            <div class="set-ctl set-inline"><span class="acct-mail" id="persoAccountMail"></span><span class="status-chip acct-chip" id="persoKeyChip"></span></div>
-            <div class="set-ctl set-inline">
-              <button data-i18n class="btn btn-outline btn-sm" id="persoSignOutBtn" type="button">Sign out</button>
-            </div>
-            <div data-i18n class="settings-hint">Used when Choose a model, Voice separation or Speech-to-text is set to Perso API. Uses Perso credits.</div>
           </div>
         </div>
         <div class="set-row">
@@ -1280,35 +1286,12 @@
 
       <div class="set-panel" id="settingsPanel-privacy" role="tabpanel" aria-labelledby="settingsTab-privacy" hidden>
         <div class="set-row">
-          <label data-i18n for="analyticsToggle">Anonymous usage counts</label>
+          <label data-i18n for="shareToggle">Share usage data</label>
           <div class="set-ctl">
-            <input type="checkbox" class="switch" id="analyticsToggle" checked>
-            <!-- The shell re-reads the file before every count, so promising
-                 a restart would be wrong. One sentence: what goes and why. -->
-            <div class="settings-hint" id="analyticsHint"><span data-i18n>Helps improve {app} by sending only how often the app is used, anonymously.</span></div>
-          </div>
-        </div>
-        <div class="set-row">
-          <label data-i18n for="eventsToggle">Share App Analytics</label>
-          <div class="set-ctl">
-            <!-- Checked from GET /api/settings' events_enabled: with nothing
-                 saved, on in both editions (desktop/src/events.js). -->
-            <input type="checkbox" class="switch" id="eventsToggle">
-            <div class="settings-hint" id="eventsHint"><span data-i18n>Helps improve {app} by sending only which screens and buttons you used, never what you type.</span></div>
-          </div>
-        </div>
-        <div class="set-row">
-          <label data-i18n for="reportsToggle">Help improve {app}</label>
-          <div class="set-ctl">
-            <input type="checkbox" class="switch" id="reportsToggle" checked>
-            <!-- Separate from the counts: this one carries the logs of finished
-                 and failed jobs, so it is its own choice. Nothing personal
-                 leaves -- keys and folder names are taken out first
-                 (desktop/src/report.js). One sentence: what goes, what never
-                 goes and why; the rest is in docs/privacy.md (owner, 2026-10-27). -->
-            <div class="settings-hint" id="reportsHint">
-              <span data-i18n>Helps improve {app} by sending only job records, never titles, files or dialogue.</span>
-            </div>
+            <!-- One switch for everything the app sends about its own use.
+                 Checked from GET /api/settings' share_usage. -->
+            <input type="checkbox" class="switch" id="shareToggle" checked>
+            <div class="settings-hint" id="shareHint"><span data-i18n>It helps improve the {app} project.</span></div>
           </div>
         </div>
       </div>
@@ -1500,7 +1483,7 @@
      #videoInput on the home screen is a separate input, for the same reason
      two <input type=file> never share a value: picking the same file twice
      in a row must still fire "change". -->
-<input type="file" id="draftFileInput" accept="video/*" hidden>
+<input type="file" id="draftFileInput" accept=".mp4,.mov,.wav,.flac,.mp3,.m4a" hidden>
 
 <!-- The top bar's New project window (ui/src/newProjectWindow.mjs): the Home
      banner's three ways in, over the screen that is open. -->
@@ -1521,7 +1504,7 @@
     </div>
   </div>
 </div>
-<input type="file" id="newProjFileInput" accept="video/*" multiple hidden>
+<input type="file" id="newProjFileInput" accept=".mp4,.mov,.wav,.flac,.mp3,.m4a" multiple hidden>
 
 <!-- A dub now keeps its per-line voices so single lines can be redone, which
      means a job needs room. Refusing up front with a dialog beats failing three
@@ -1557,41 +1540,6 @@
      Since 2026-09-01 that includes starting a dub (queue_dub), behind the
      confirm gate every spending tool has: nothing starts until the user has
      been asked and agreed. cancel_dub stops a job when the user asks. -->
-
-<!-- The production edition's sign-in (ui/src/signIn.mjs; the shell signs in
-     to Perso in a window of its own, desktop/src/auth.js). Over the whole
-     window while signed out, while that window is open on Perso, and while the
-     account has no API key (mockup 2026-10-25). The open-source edition never
-     shows it. The top strip moves the window, as the top bar does. -->
-<div class="signin" id="signInScreen" hidden>
-  <div class="signin-bar"></div>
-  <div class="signin-stage" id="signInStart">
-    <img class="signin-logo" src="/logo.png" alt="">
-    <div class="signin-name" id="signInName" data-i18n>{app}</div>
-    <button class="btn btn-primary signin-btn" id="signInBtn" type="button"></button>
-    <div class="signin-hint" id="signInHint"></div>
-  </div>
-  <div class="signin-stage" id="signInWait" hidden>
-    <img class="signin-logo sm" src="/logo.png" alt="">
-    <h1 id="signInWaitTitle"></h1>
-    <p id="signInWaitNote" hidden></p>
-    <div class="signin-prog"><b></b></div>
-    <div class="signin-btns"><button class="btn btn-secondary signin-btn" id="signInReopen" type="button"></button></div>
-    <button data-i18n class="signin-link" id="signInCancel" type="button">Cancel</button>
-  </div>
-  <div class="signin-stage" id="signInNoKey" hidden>
-    <img class="signin-logo sm" src="/logo.png" alt="">
-    <h1 data-i18n>No API key yet</h1>
-    <p data-i18n>The key page is open in your browser. Make a key there; {app} carries on by itself.</p>
-    <div class="signin-acct" id="signInAccount"></div>
-    <div class="signin-btns">
-      <button data-i18n class="btn btn-primary signin-btn" id="signInMakeKey" type="button">Make a key</button>
-      <button data-i18n class="btn btn-secondary signin-btn" id="signInCheckKey" type="button">Check again</button>
-    </div>
-    <div class="signin-hint danger" id="signInKeyNote"></div>
-    <button data-i18n class="signin-link" id="signInSignOut" type="button">Sign out</button>
-  </div>
-</div>
 
 <!-- The app's script is ui/src/app.mjs. It is imported in the "from" form
      because that is the form app/main.py stamps with the launch token: a bare

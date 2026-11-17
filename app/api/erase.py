@@ -40,6 +40,7 @@ from app.api._shared import (
     free_path,
     parse_ranges,
     ratio_errors_as_http,
+    require_video,
     work_dir_of,
 )
 from app.downloads import save_folder
@@ -63,7 +64,7 @@ _PROGRESS = re.compile(r"^progress (\d+)%")
 
 class SaveRequest(BaseModel):
     dir: Optional[str] = None       # default: the user's Downloads folder
-    audio: Optional[str] = None     # "mp3" or "wav": the sound only
+    audio: Optional[str] = None     # one of media.AUDIO_CODECS: the sound only
     # A canvas to save the video in (app/ratio.py); default: as it is. Not
     # read with `audio`: the sound alone has no picture.
     ratio: Optional[str] = None
@@ -172,6 +173,7 @@ def erase_suggest(video: Optional[UploadFile] = File(None),
             os.makedirs(probe, exist_ok=True)
             path = os.path.join(probe, "input.mp4")
             copy_into(path)
+        require_video(path)
         try:
             found = eraser.suggest_area(path)
         except eraser.EraserMissing:
@@ -204,6 +206,9 @@ def erase_start(
     into one video the way a dub joins them (app/api/_shared.py parse_ranges). A
     trim or kept parts, not both.
 
+    An audio file (a dubbing takes those) has no picture to clean and is
+    refused with 422.
+
     Answers as soon as the job is on the queue: an erase runs for minutes, and
     GET /api/erase/{job_id} is what follows it.
     """
@@ -220,6 +225,13 @@ def erase_start(
     work = job_dir(project, "erase")
     video_path = os.path.join(work, "input.mp4")
     copy_into(video_path)
+    # Before the cut: no record points at this folder yet, so a refusal
+    # clears it, as a failed cut does.
+    try:
+        require_video(video_path)
+    except HTTPException:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
     cut_to_kept_parts(work, video_path, trim_start, trim_end, kept,
                       cut_video=_cut_video, cut_ranges=_cut_ranges, check_fit=check_ranges_fit)
 
@@ -334,7 +346,7 @@ def erase_save(jid: str, body: SaveRequest):
     if not os.path.exists(out):
         raise HTTPException(404, t("This video is not erased yet."))
     if body.audio is not None and body.audio not in media.AUDIO_CODECS:
-        raise HTTPException(422, t("Audio is saved as mp3 or wav."))
+        raise HTTPException(422, t("Audio is saved as MP3, WAV, FLAC or M4A."))
     if body.audio and not media.has_audio(out):
         raise HTTPException(422, t("This video has no sound."))
     if not body.audio:

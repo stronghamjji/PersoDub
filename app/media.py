@@ -3,9 +3,11 @@
 Lowest layer -- imports nothing from app/ except config/logging and the
 timeout formula (app/timeouts.py, itself a leaf).
 """
+import json
 import os
 import re
 import subprocess
+import time
 from typing import Callable, Optional
 
 from app.timeouts import scaled_timeout
@@ -22,7 +24,62 @@ def stream_duration(path: str, stream: str) -> float:
 
 
 def video_duration(path: str) -> float:
-    return stream_duration(path, "v:0")
+    """How long the file a job works on is, in seconds: its picture's length,
+    or the file's own when it has no picture. An audio project's input.mp4 is
+    a song, and ffprobe answers nothing for its first video stream; every
+    length reader in the app comes through here, so this is the one place
+    that has to know. A file with no length at all still raises."""
+    try:
+        return stream_duration(path, "v:0")
+    except (IndexError, ValueError):
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        return float(out.stdout.strip().splitlines()[0].rstrip(","))
+
+
+def _probe(path: str) -> dict:
+    """ffprobe's account of a file: each stream's kind and whether it is only
+    an attached picture, and the container's name. {} for a file it cannot
+    read. A missing ffprobe (OSError) raises as it comes."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries",
+         "format=format_name:stream=codec_type:stream_disposition=attached_pic", "-of", "json", path],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        found = json.loads(out.stdout or "{}")
+    except ValueError:
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def media_kind(path: str) -> Optional[str]:
+    """What a file is to the app: "video" when it has a picture, "audio" when
+    it has sound and no picture, None when ffprobe finds neither in it.
+
+    Asked once, when a file comes in, and kept on the job as `media` (app/jobs.py).
+    An album cover is a video stream to ffprobe (an mp3 or m4a carries one as
+    attached_pic); it does not make a song a video, or the app would try to
+    put the dubbed voice on a one-frame picture.
+    """
+    streams = _probe(path).get("streams") or []
+    if any(s.get("codec_type") == "video" and not (s.get("disposition") or {}).get("attached_pic")
+           for s in streams):
+        return "video"
+    if any(s.get("codec_type") == "audio" for s in streams):
+        return "audio"
+    return None
+
+
+def audio_format(path: str) -> Optional[str]:
+    """Which of the four audio formats the app takes this file is ("wav",
+    "flac", "mp3" or "m4a", the names AUDIO_CODECS and AUDIO_MIME use), read
+    from its container and not from its name: a job's input.mp4 keeps that
+    name whatever it holds. None for any other container."""
+    names = ((_probe(path).get("format") or {}).get("format_name") or "").split(",")
+    return next((fmt for fmt in ("wav", "flac", "mp3", "m4a") if fmt in names), None)
 
 
 def probe_size(path: str, timeout: Optional[float] = None, check: bool = True):
@@ -106,6 +163,25 @@ def mux(video: str, audio: str, out: str, dur: float) -> subprocess.CompletedPro
     )
 
 
+def build_result(source: str, mix_wav: str, out_path: str) -> subprocess.CompletedProcess:
+    """The finished file of a dub, from the file it was made from and the
+    dubbed mix: ffmpeg's run, for the caller to read the failure from.
+
+    A `.wav` target is an audio project's (app/dub_launch.py names it): there
+    is no picture to put the mix on, so the result is the mix itself, padded
+    with silence or cut to exactly the source's length, the promise mux makes
+    for a video. Any other target is the source's picture with the mix as its
+    sound (mux).
+    """
+    dur = video_duration(source)
+    if not out_path.endswith(".wav"):
+        return mux(source, mix_wav, out_path, dur)
+    return subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-i", mix_wav, "-af", "apad", "-t", f"{dur:.3f}", out_path],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+
+
 def ensure_video_length(original_video: str, out_path: str, log: Callable[[str], None]) -> None:
     """🔒 Absolute guarantee: if the output video length differs from the original, rebuild using the original video untouched.
 
@@ -130,6 +206,27 @@ def ensure_video_length(original_video: str, out_path: str, log: Callable[[str],
         log(f"   Warning: Length correction failed — keeping the export result ({r.stderr[-80:]})")
 
 
+def _cut_audio(path: str, ranges, on_cut, what: str) -> None:
+    """cut_video and cut_ranges for a file that is sound only: `ranges` of it,
+    joined, in place, with the same promise about `on_cut`.
+
+    There is no picture to encode, and an album cover must not become one, so
+    only the sound is kept. It is written as FLAC, which loses nothing
+    whatever the file was; the file keeps its name, and everything that reads
+    it goes by what is inside. The scratch file is named .flac because that
+    is how ffmpeg is told what to write.
+    """
+    tmp = path + ".cut.flac"
+    try:
+        run_new_file(audio_command(path, tmp, "flac", ranges), sum(b - a for a, b in ranges), what)
+        os.replace(tmp, path)
+        if on_cut is not None:
+            on_cut()
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
 def cut_video(path: str, start: float, end: float, on_cut=None) -> None:
     """Keep only [start, end] of the video, in place. Re-encodes so the cut is
     exact (a copy-cut lands on the nearest keyframe, seconds away).
@@ -139,7 +236,11 @@ def cut_video(path: str, start: float, end: float, on_cut=None) -> None:
     now": recording it a statement later leaves a window where a force-quit
     saves a record that still owes a cut over a video that has already had one,
     and the next run would take the same seconds out twice.
+
+    An audio project's file is cut as sound alone (_cut_audio).
     """
+    if media_kind(path) == "audio":
+        return _cut_audio(path, [[start, end]], on_cut, "Could not trim the audio")
     tmp = path + ".cut.mp4"
     try:
         r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
@@ -197,13 +298,18 @@ def cut_ranges_command(src: str, out: str, ranges, audio: bool = True, vf: Optio
 
 
 # What "Audio only" can be saved as, and how ffmpeg is asked for each.
-AUDIO_CODECS = {"mp3": ["-c:a", "libmp3lame", "-b:a", "192k"], "wav": ["-c:a", "pcm_s16le"]}
+AUDIO_CODECS = {"mp3": ["-c:a", "libmp3lame", "-b:a", "192k"], "wav": ["-c:a", "pcm_s16le"],
+                "flac": ["-c:a", "flac"], "m4a": ["-c:a", "aac", "-b:a", "256k"]}
+
+# The type each is served as. An audio project's own file is one of the same
+# four (audio_format), so its type is read here too.
+AUDIO_MIME = {"mp3": "audio/mpeg", "wav": "audio/wav", "flac": "audio/flac", "m4a": "audio/mp4"}
 
 
 def audio_command(src: str, out: str, fmt: str, ranges=None) -> list:
-    """ffmpeg argv that writes the sound of src as a new mp3 or wav: all of
-    it, or only `ranges` ([[start, end], ...] in seconds) joined the way
-    cut_ranges_command joins them."""
+    """ffmpeg argv that writes the sound of src as a new file in `fmt` (one
+    of AUDIO_CODECS): all of it, or only `ranges` ([[start, end], ...] in
+    seconds) joined the way cut_ranges_command joins them."""
     argv = ["ffmpeg", "-y", "-v", "error", "-i", src]
     if ranges:
         parts = [f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[a{i}]"
@@ -241,7 +347,11 @@ def cut_ranges(path: str, ranges, on_cut=None) -> None:
     The same promise as cut_video: the joined file takes the original's place
     in one rename, and `on_cut` runs the instant it has, so a caller can
     record "this video is cut now" before anything else can happen.
+
+    An audio project's file is joined as sound alone (_cut_audio).
     """
+    if media_kind(path) == "audio":
+        return _cut_audio(path, ranges, on_cut, "Could not join the kept parts")
     tmp = path + ".cut.mp4"
     total = sum(b - a for a, b in ranges)
     try:
@@ -253,3 +363,78 @@ def cut_ranges(path: str, ranges, on_cut=None) -> None:
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
+
+
+# Windows will not replace or delete a file that something still has open:
+# the page's player, a download still being saved, a virus scanner. Most let
+# go within a moment, so the ask is made again for about two seconds.
+HOLD_TRIES, HOLD_STEP = 20, 0.1
+
+
+def when_free(act, *paths):
+    """os.replace or os.remove (`act`) on a file that may still be open
+    somewhere: asked again while it is refused as held. One held to the end
+    raises the PermissionError, and nothing has been changed."""
+    for _ in range(HOLD_TRIES):
+        try:
+            return act(*paths)
+        except PermissionError:
+            time.sleep(HOLD_STEP)
+    return act(*paths)
+
+
+def join_video(video: str, sound: str, out: str, video_ranges, sound_ranges, tempo: float = 1.0,
+               what: str = "Could not make the dubbed video") -> None:
+    """A video brought into an audio project and its dubbed sound, as one new
+    file `out`: the kept parts of the picture (`video_ranges`) with the kept
+    parts of the sound (`sound_ranges`) played `tempo` times faster, each
+    laid end to end from zero. The video's own sound is left out, and neither
+    file given is written to.
+
+    The file is as long as the picture kept: a shorter sound ends in silence
+    and a longer one is cut there (mux). The picture is copied as it is when
+    only its tail is cut; a cut at the head or in the middle encodes it
+    again, since a copy would land on the nearest keyframe. A picture mp4
+    cannot hold as it is gets encoded too, once the copy has failed. A
+    failure raises RuntimeError in the words of `what` (see _failure), and
+    `out` appears whole or not at all. An `out` already there that stays
+    open elsewhere (Windows, a download still reading it) is left as it is
+    and PermissionError is raised (when_free).
+    """
+    kept = sum(b - a for a, b in video_ranges)
+    cut_sound, cut_picture, part = out + ".sound.wav", out + ".picture.mp4", out + ".part.mp4"
+    try:
+        # A sound that only starts at zero is not whole: as it is, it would
+        # play on past where it was cut.
+        whole = (len(sound_ranges) == 1 and sound_ranges[0][0] <= 0
+                 and sound_ranges[0][1] >= video_duration(sound) - 0.05)
+        if not (whole and tempo == 1):
+            argv = audio_command(sound, cut_sound, "wav", sound_ranges)
+            if tempo != 1:
+                # atempo changes the speed and keeps the pitch. Older ffmpeg
+                # takes 0.5 to 2 in one step and newer ones drop samples
+                # above 2, so a faster speed is several steps of 2 or less.
+                steps, left = [], tempo
+                while left > 2:
+                    steps.append(2.0)
+                    left /= 2
+                speed = ",".join(f"atempo={step:g}" for step in steps + [left])
+                graph = argv.index("-filter_complex") + 1
+                argv[graph] = argv[graph].removesuffix("[a]") + "," + speed + "[a]"
+            run_new_file(argv, sum(b - a for a, b in sound_ranges), what)
+            sound = cut_sound
+        picture = video
+        if len(video_ranges) != 1 or video_ranges[0][0] > 0:
+            run_new_file(cut_ranges_command(video, cut_picture, video_ranges, audio=False), kept, what)
+            picture = cut_picture
+        r = mux(picture, sound, part, kept)
+        if r.returncode != 0 and picture == video:
+            run_new_file(cut_ranges_command(video, cut_picture, [[0, kept]], audio=False), kept, what)
+            r = mux(cut_picture, sound, part, kept)
+        if r.returncode != 0:
+            raise RuntimeError(_failure(what, r.stderr, (video, sound, cut_picture, part)))
+        when_free(os.replace, part, out)
+    finally:
+        for scratch in (cut_sound, cut_picture, part):
+            if os.path.exists(scratch):
+                os.remove(scratch)

@@ -26,6 +26,7 @@ import { readRemembered, rememberChoice, choicesToPutBack } from "./rememberedCh
 import { lucide } from "./icons.mjs";
 import { placeList, listKeys } from "./pickList.mjs";
 import { languageName, t } from "./i18n.mjs";
+import { fileKind } from "./mediaKind.mjs";
 
 // How often the dialog asks how far along a link's download is. A second is
 // what the progress row is worth: the percent moves in visible steps and the
@@ -760,8 +761,15 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     const v = $("projectVideo");
     // A local file can be played and scrubbed; a link only ever has a still.
     v.hidden = !file;
-    // How many, said once: here and nowhere else in the window.
-    $("projectTitle").textContent = files ? t("New project · {n} videos", { n: files.length }) : t("New project");
+    // What the box shows of a batch: its first video, or with no video in it
+    // the sound sign and the word (the stylesheet's .project-thumb.audio).
+    const shown = (files && files.find((f) => fileKind(f.name) === "video")) || file;
+    $("projectThumb").classList.toggle("audio", !!shown && fileKind(shown.name) === "audio");
+    // How many, said once: here and nowhere else in the window. "Videos"
+    // while every one is; a batch may hold audio files too (ui/src/mediaKind.mjs).
+    $("projectTitle").textContent = !files ? t("New project")
+      : files.every((f) => fileKind(f.name) === "video") ? t("New project · {n} videos", { n: files.length })
+      : t("New project · {n} files", { n: files.length });
     // Replace picks ONE file, which would silently drop the rest of the batch.
     $("projectReplace").hidden = !!files;
     $("projectThumb").style.backgroundImage = "";
@@ -772,7 +780,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // this link actually has to be fetched.
     $("dlRow").hidden = true;
     if (file) {
-      projectObjectUrl = URL.createObjectURL(file);
+      projectObjectUrl = URL.createObjectURL(shown);
       v.src = projectObjectUrl;
       // Only a real file ever fires this, so only a real file may register it --
       // a once-listener that never fires never detaches, and one per link would

@@ -75,11 +75,11 @@ test("a copy that cannot be written where it goes is written to the system's tem
   const blocker = join(mkdtempSync(join(tmpdir(), "pd-screens-")), "a-file");
   writeFileSync(blocker, "");   // a file where the folder should go: mkdir fails
   const temp = mkdtempSync(join(tmpdir(), "pd-screens-temp-"));
-  const named = (key) => key.replaceAll("{app}", "PersoDubbing");
+  const named = (key) => key.replaceAll("{app}", "OtherDub");
   const file = withTempFolder(temp, () => screenFile(SCREENS, "error.html", join(blocker, "screens"), named));
   assert.equal(file, join(temp, "persodub-screens", "error.html"));
   const html = readFileSync(file, "utf8");
-  assert.match(html, /<h2 id="title" data-i18n>PersoDubbing could not start<\/h2>/);
+  assert.match(html, /<h2 id="title" data-i18n>OtherDub could not start<\/h2>/);
   assert.ok(html.startsWith(`<!doctype html><base href="${pathToFileURL(SCREENS + sep).href}">`), html.slice(0, 200));
 });
 

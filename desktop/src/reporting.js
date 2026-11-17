@@ -10,7 +10,7 @@ import { buildInquiry, buildReport, collectEnvironment, describeDevice, maskText
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
 import { envWithKit } from "./kitEnv.js";
-import { kitEdition } from "./edition.js";
+import { EDITION } from "./edition.js";
 import { readFileEnd } from "./fileEnd.js";
 
 // Automatic failure reports. The usage count (usageIpc.js) says a dub failed;
@@ -25,7 +25,7 @@ import { readFileEnd } from "./fileEnd.js";
 // /record, which keeps them for the private dashboard and never opens an
 // issue (owner, 2026-10-22).
 //
-// The production edition's Service inquiry never goes to the relay: Cloudflare
+// Send feedback's inquiry never goes to the relay: Cloudflare
 // is not among the processors Perso's privacy policy lists (owner,
 // 2026-10-27). It goes straight to the support web app the build names
 // (PERSODUB_INQUIRY_URL, edition.js BUILD_KEYS), which mails it to the support
@@ -47,14 +47,6 @@ const ENGINE_LOG_BYTES = 2 * 1024 * 1024;
 const MAX_INQUIRY_LOGS = 20 * 1024 * 1024;
 const LOGS_LEFT_OUT = "\n\n(logs too large, not attached)";
 
-// The Perso account an inquiry is from: the production edition's signed-in
-// account, its full e-mail and Perso's number for it (`signedIn`, src/auth.js
-// signedInAccount), or empty strings signed out and in the open-source edition.
-function accountForInquiry(signedIn) {
-  const account = signedIn() || {};
-  return { email: account.email || "", id: account.id || "" };
-}
-
 /** Write a queue entry (and its archive) into the kit's queue, under its base name. */
 function queueReport(kitDir, base, entry, archive) {
   try {
@@ -74,14 +66,12 @@ function unqueue(kitDir, base) {
  * The shell's failure reports, for this app. `ctx.engines` is read each time a
  * report is gathered: the backend's half of a report comes from engines that
  * may not be up yet, or never came up. `inquiryUrl` is the support web app
- * Customer support's inquiries go to, "" when the build names none, and
- * `account` answers the signed-in Perso account an inquiry is from.
- * `edition` is the app file's, which a failure says while kit.env names none.
+ * Send feedback's inquiries go to, "" when the build names none.
  * `fetchImpl` is the real fetch, and `probeImpl` the real probes, everywhere
  * but the tests.
  */
-export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl = "", account = () => null,
-                                 edition = "", fetchImpl = fetch, probeImpl = runProbes }) {
+export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl = "",
+                                 fetchImpl = fetch, probeImpl = runProbes }) {
   // The report's install id, which the relay's daily limit counts by, lives in
   // its own file and is minted only by a run that really reports. The id the
   // dashboard knows a computer by is analytics.json's, which the launch makes
@@ -219,7 +209,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
         torchVariant: torchVariantFor(kitDir),
         packs,
         freeDiskBytes: await freeSpaceAt(kitDir),
-        edition: kitEdition(kitDir) || edition,
+        edition: EDITION,
         installed: app.isPackaged,
       }),
       timing,
@@ -358,13 +348,13 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
   }
 
   /**
-   * Customer support's Service inquiry, from the page, to the support web app
+   * Send feedback's inquiry, from the page, to the support web app
    * (postInquiry). Written into the queue first, a bug's logs beside it as a
    * failure's are, so one that cannot land now goes with the next launch's
    * flush. Answers {id} once the web app has it, {queued: true} when it waits,
    * {needReplyTo: true}, sending nothing, when no one could be answered (no
-   * Reply-to, and an account with no e-mail), and null when it could not even
-   * be built or the build names nowhere to send it.
+   * Reply-to), and null when it could not even be built or the build names
+   * nowhere to send it.
    */
   async function sendInquiry(form, { kitDir, os, osVersion }) {
     if (!kitDir) return null;
@@ -372,17 +362,15 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
       shellLog("[persodub-report] inquiry no destination");
       return null;
     }
-    const from = accountForInquiry(account);
     const inquiry = buildInquiry({
-      ...form, os, osVersion, version: app.getVersion(), edition: kitEdition(kitDir) || "",
-      device: describeDevice({ installed: app.isPackaged, edition: kitEdition(kitDir) || "" }),
-      accountEmail: from.email, accountId: from.id,
+      ...form, os, osVersion, version: app.getVersion(), edition: EDITION,
+      device: describeDevice({ installed: app.isPackaged, edition: EDITION }),
       // The computer's id, the one the dashboard knows it by and hides the
       // owner's own computers by (EXCLUDED_DEVICES).
       installId: savedDevice(analyticsFile(app)) || loadState(REPORT_STATE()).device,
     });
     if (!inquiry) return null;
-    if (!inquiry.replyTo && !inquiry.accountEmail) return { needReplyTo: true };
+    if (!inquiry.replyTo) return { needReplyTo: true };
     const base = queueBase(randomBytes(6).toString("hex"), Date.now());
     inHand.add(base);
     try {
@@ -397,26 +385,6 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
     } finally {
       inHand.delete(base);
     }
-  }
-
-  /**
-   * Signed out: every inquiry still waiting goes, its logs with it. Each
-   * holds the account's full e-mail, which must not outlive the sign-in on
-   * this computer. Failure reports stay.
-   */
-  function dropInquiries(kitDir) {
-    const dir = kitDir ? reportsDir(kitDir) : "";
-    let names = [];
-    try { names = readdirSync(dir); } catch { return; }
-    let dropped = 0;
-    for (const name of names.filter((n) => n.endsWith(REPORT_EXT))) {
-      let entry = null;
-      try { entry = JSON.parse(readFileSync(join(dir, name), "utf8")); } catch { continue; }
-      if (!entry || !entry.inquiry) continue;
-      unqueue(kitDir, name.slice(0, -REPORT_EXT.length));
-      dropped++;
-    }
-    if (dropped) shellLog(`[persodub-report] inquiry dropped at sign-out: ${dropped}`);
   }
 
   /**
@@ -487,5 +455,5 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
     }
   }
 
-  return { sendReport, sendInquiry, dropInquiries, flushReports, reportMode, lastReport: () => lastReport };
+  return { sendReport, sendInquiry, flushReports, reportMode, lastReport: () => lastReport };
 }

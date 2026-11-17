@@ -21,16 +21,12 @@ from app.i18n import t
 from app.perso_client import APP_VERSION, RECHARGE_LINK, SIGNUP_LINK, UTM_TAIL, WORKSPACE_LINK, list_dubbing_spaces
 from app.settings_env import (
     current_value,
-    read_analytics_off,
-    read_events_enabled,
     read_key_status,
-    read_reports_off,
+    read_share_usage,
     read_value,
-    write_analytics_off,
-    write_events_enabled,
     write_keys,
     write_language,
-    write_reports_off,
+    write_share_usage,
 )
 
 router = APIRouter()
@@ -41,9 +37,7 @@ class SettingsRequest(BaseModel):
     gemini_api_key: Optional[str] = None
     perso_api_key: Optional[str] = None
     perso_space_seq: Optional[str] = None
-    analytics_off: Optional[bool] = None
-    reports_off: Optional[bool] = None
-    events_enabled: Optional[bool] = None
+    share_usage: Optional[bool] = None
     ui_language: Optional[str] = None
 
 
@@ -73,12 +67,11 @@ def settings_get():
             "perso_recharge_link": RECHARGE_LINK,
             # Tagged the same way; the Home sidebar's perso.ai button opens it.
             "perso_workspace_link": WORKSPACE_LINK,
-            # The tail the page puts on its own links into Perso (edition.mjs persoLink).
+            # The tail the page puts on its own links into Perso (persoLinks.mjs persoLink).
             "perso_utm": UTM_TAIL,
-            "analytics_off": read_analytics_off(),
-            "reports_off": read_reports_off(),
-            # Button and screen events: on by default in the production edition only.
-            "events_enabled": read_events_enabled(),
+            # Settings > Privacy's one switch: usage counts, button and screen
+            # events, job records and failure reports. On until it is turned off.
+            "share_usage": read_share_usage(),
             # "auto", "en" or "ko" (app/i18n.py): the page resolves "auto"
             # against the computer's language itself.
             "ui_language": i18n.saved_setting(),
@@ -118,17 +111,10 @@ def settings_post(body: SettingsRequest):
         raise HTTPException(503, t("Settings need a desktop install (no kit.env found)"))
     except ValueError as e:
         raise HTTPException(422, str(e))
-    # Unlike the keys, this one needs no restart: the desktop shell re-reads
-    # kit.env before every count, so the next event already obeys the switch.
-    if body.analytics_off is not None:
-        write_analytics_off(body.analytics_off)
-    # The same story for the failure reports, and the same lack of a restart:
-    # the shell re-reads kit.env before it sends one.
-    if body.reports_off is not None:
-        write_reports_off(body.reports_off)
-    # And the button events', read again by the shell with every batch.
-    if body.events_enabled is not None:
-        write_events_enabled(body.events_enabled)
+    # The Share usage data switch needs no restart either: the desktop shell
+    # re-reads kit.env before every send, so the next one already obeys it.
+    if body.share_usage is not None:
+        write_share_usage(body.share_usage)
     # The language, saved and then in force for the engine's next sentence:
     # the engine keeps the one it decided on (app/i18n.py), so it is told.
     if body.ui_language is not None:

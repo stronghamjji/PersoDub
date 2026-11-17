@@ -23,20 +23,14 @@ test("dev / from-source runs never update themselves", () => {
   assert.equal(resolveUpdateMode({ isPackaged: false, env: {} }), "off");
 });
 
-test("the open-source feed is its GitHub Releases", () => {
-  assert.deepEqual(resolveFeed({}, "opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
+test("the feed is the repository's GitHub Releases", () => {
+  assert.deepEqual(resolveFeed({}), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
 });
 
-test("the production feed is Perso's folder, never the public releases", () => {
-  // The public releases turned a production install into an open-source one
-  // (0.8.3). The address itself: edition.test.mjs editionFeed.
-  assert.deepEqual(resolveFeed({}, "production"), { provider: "generic", url: "https://portal-static.perso.ai/public/app/desktop/" });
-});
-
-test("PERSODUB_UPDATE_URL points the updater at a test feed, whatever the edition", () => {
+test("PERSODUB_UPDATE_URL points the updater at a test feed", () => {
   // End-to-end testing serves latest-mac.yml + zip from a local HTTP server,
   // so the flow is provable without publishing anything to GitHub.
-  assert.deepEqual(resolveFeed({ PERSODUB_UPDATE_URL: "http://127.0.0.1:8099" }, "production"), {
+  assert.deepEqual(resolveFeed({ PERSODUB_UPDATE_URL: "http://127.0.0.1:8099" }), {
     provider: "generic",
     url: "http://127.0.0.1:8099",
   });
@@ -135,7 +129,7 @@ const shellLines = () => {
   return { lines, log: (line, level = "INFO") => lines.push(`${level} ${line}`) };
 };
 
-test("the list is the new version's own whats_new.json, at its release tag in the edition's repository", () => {
+test("the list is the new version's own whats_new.json, at its release tag in the repository", () => {
   const github = { provider: "github", owner: "stronghamjji", repo: "PersoDub" };
   assert.equal(whatsNewUrl(github, { version: "0.8.7", tag: "v0.8.7" }), NOTES_URL);
   assert.equal(whatsNewUrl(github, { version: "0.8.7" }), NOTES_URL, "no tag in the info: v<version>");
@@ -242,7 +236,7 @@ test("a prerelease build (1.0.0-rc.1) still looks for stable releases: prereleas
   };
   const lines = [];
   const updater = createUpdater({
-    app: { isPackaged: true, getVersion: () => "1.0.0-rc.1" }, dialog: {}, ctx: {}, edition: "opensource",
+    app: { isPackaged: true, getVersion: () => "1.0.0-rc.1" }, dialog: {}, ctx: {},
     shellLog: (line) => lines.push(line), load: async (name) => modules[name],
   });
   await updater.startUpdater({ isDestroyed: () => false, webContents: { send() {} } }, kitDir);

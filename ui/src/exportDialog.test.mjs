@@ -1,5 +1,6 @@
 // The Export dialog: which rows each kind of project gets, the ticks it
-// remembers, what Export does with the ticked rows, and the MP3 / WAV choice.
+// remembers, what Export does with the ticked rows, and the choice of sound
+// format (MP3, WAV, FLAC, M4A).
 //
 // Run with: node --test ui/src/exportDialog.test.mjs
 import test from "node:test";
@@ -16,10 +17,11 @@ const DUB = { kind: "dub", jobId: "J1", target: "ko", mark: "&v=2", hasSrt: true
               where: "Saved in Downloads / 2026-09-30 / clip" };
 const STEMS = { ...DUB, project: "clip", stems: { voice: true, background: true } };
 
-test("MP3 is the format unless WAV was remembered", () => {
+test("MP3 is the format unless one of the other three was remembered", () => {
   assert.equal(audioFormat(null), "mp3");
-  assert.equal(audioFormat("wav"), "wav");
-  assert.equal(audioFormat("flac"), "mp3");
+  for (const f of ["mp3", "wav", "flac", "m4a"]) assert.equal(audioFormat(f), f);
+  assert.equal(audioFormat("ogg"), "mp3");
+  assert.equal(audioFormat("FLAC"), "mp3", "only the names the app itself wrote");
 });
 
 test("a draft and an erased video hand back a video and its sound", () => {
@@ -169,7 +171,7 @@ test("a row is a checkbox, its icon, its name and the place its saved check goes
   const html = rowsHtml(exportRows(STEMS, "mp3"), "mp3", ["video"], ["video"]);
   assert.match(html, /<a href="#" role="checkbox" aria-checked="true" data-row="video" data-name="dub_ko\.mp4" class="saved"><span class="export-check"><svg[^]*?<\/svg><\/span><svg class="icon"[^]*?<\/svg>Dubbed video<span class="export-state"><svg class="icon icon-sm"/);
   assert.match(html, /<a href="#" role="checkbox" aria-checked="false" data-row="audio" data-name="dub_ko\.mp3">/);
-  assert.match(html, /Dubbed audio<span class="export-seg" role="radiogroup" aria-label="Audio format"><span role="radio" tabindex="0" data-fmt="mp3" aria-checked="true" class="on">MP3<\/span><span role="radio" tabindex="0" data-fmt="wav" aria-checked="false">WAV<\/span><\/span><span class="export-state"><\/span>/);
+  assert.match(html, /Dubbed audio<span class="export-seg" role="radiogroup" aria-label="Audio format"><span role="radio" tabindex="0" data-fmt="mp3" aria-checked="true" class="on">MP3<\/span><span role="radio" tabindex="0" data-fmt="wav" aria-checked="false">WAV<\/span><span role="radio" tabindex="0" data-fmt="flac" aria-checked="false">FLAC<\/span><span role="radio" tabindex="0" data-fmt="m4a" aria-checked="false">M4A<\/span><\/span><span class="export-state"><\/span>/);
   assert.equal(html.match(/export-seg"/g).length, 3, "the dubbed audio, the voice and the background");
   // The "?" says what the two separated sounds are; the other rows have none.
   assert.match(html, /Original voice<span class="export-help" data-tip="Only the speech\." tabindex="0" role="img" aria-label="Only the speech\.">\?<\/span><span class="export-seg"/);
@@ -227,9 +229,10 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
   const store = new Map(Object.entries(stored));
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
   const asked = [];      // what was fetched first
+  const wanted = [];     // the rows each opening named, as the page is told
   const followed = [];   // what was handed to the browser
   const api = initExportDialog({
-    $, getContext: async () => ctx, storage, shell,
+    $, getContext: async (only) => { wanted.push(only); return ctx; }, storage, shell,
     fetchFn: fetchFn || (async (href) => { asked.push(href); return { ok: true }; }),
     follow: (href, name) => followed.push([href, name]),
     record: (name, props) => steps.push([name, props]),
@@ -246,7 +249,7 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
   const tick = (id) => click({ closest: (sel) => (sel === "a" ? { dataset: { row: id } } : null) });
   const pick = (fmt) => click({ closest: (sel) => (sel === "[data-fmt]" ? { dataset: { fmt } } : null) });
   const go = () => $("exportGoBtn").listeners.click();
-  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, followed, steps };
+  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, wanted, followed, steps };
 }
 
 test("the dialog draws a dubbing's headings, and a press on one ticks nothing", async () => {
@@ -306,6 +309,17 @@ test("an opening that names its rows ticks those, and what was remembered stays 
 
 // The Save video tab (owner, 2026-10-23): the project's own video and nothing
 // else -- a draft's video, a project's original whatever it came from.
+// A dubbing project's Erase tab has nothing of its own to hand back, so the
+// page answered "nothing" there, and Save video, which asks for the project's
+// original, did nothing at all (Windows test, 2026-11-14). The page is told
+// which rows the opening is for, and gives the project for its original.
+test("the page is told which rows an opening is for", async () => {
+  const h = harness({ ctx: DUB });
+  await h.api.open(["original"], ["original"]);
+  await h.api.open();
+  assert.deepEqual(h.wanted, [["original"], null]);
+});
+
 test("an opening for some rows offers those alone, the original included for any project", async () => {
   const fromFile = { ...DUB, fromLink: false };
   const only = ["original"];
@@ -737,4 +751,243 @@ test("a burn's download is counted through the shell, done or failed, and a plai
   await dub.api.open();
   await dub.go();
   assert.deepEqual(counted, []);
+});
+
+// ---- the four sound formats, and an audio project ---------------------------
+
+// FLAC and M4A beside MP3 and WAV, for every project. It is still one choice
+// for all the sound rows.
+test("the sound rows offer MP3, WAV, FLAC and M4A, for a video project as for any other", () => {
+  const offered = (html) => [...html.matchAll(/data-fmt="(\w+)" aria-checked="(true|false)"[^>]*>(\w+)</g)].map((m) => m.slice(1));
+  for (const ctx of [STEMS, { kind: "draft" }, { kind: "erase" }]) {
+    const seg = rowsHtml(exportRows(ctx, "flac"), "flac").match(/<span class="export-seg"[^]*?<\/span><\/span>/)[0];
+    assert.deepEqual(offered(seg), [["mp3", "false", "MP3"], ["wav", "false", "WAV"],
+                                    ["flac", "true", "FLAC"], ["m4a", "false", "M4A"]], ctx.kind);
+  }
+  const rows = Object.fromEntries(exportRows(STEMS, "m4a").map((r) => [r.id, r]));
+  assert.equal(rows.audio.href, "/api/dub/result/J1/audio?format=m4a&download=1&v=2");
+  assert.equal(rows.audio.name, "dub_ko.m4a");
+  assert.equal(rows.voice.href, "/api/dub/result/J1/stem/voice?format=m4a");
+  assert.equal(rows.background.name, "clip_background.m4a");
+});
+
+test("a remembered FLAC or M4A is kept, saved as such, and another pick takes its place", async () => {
+  for (const kept of ["flac", "m4a"]) {
+    const asked = [];
+    const ctx = { kind: "erase", save: async (what) => { asked.push(what); return `/d/clip.${what.audio}`; } };
+    const h = harness({ ctx, stored: { [AUDIO_KEY]: kept, [TICKS_KEY]: '{"erase":["audio"]}' } });
+    await h.api.open();
+    assert.match(h.list.innerHTML, new RegExp(`data-fmt="${kept}" aria-checked="true" class="on"`));
+    assert.equal(h.store.get(AUDIO_KEY), kept, "opening the dialog changes nothing");
+    h.go();
+    await settle();
+    assert.deepEqual(asked, [{ audio: kept }]);
+    const other = kept === "flac" ? "m4a" : "flac";
+    h.pick(other);
+    assert.equal(h.store.get(AUDIO_KEY), other);
+    assert.match(h.list.innerHTML, new RegExp(`data-fmt="${other}" aria-checked="true" class="on"`));
+  }
+  // A dubbing's links carry it too.
+  const dub = harness({ ctx: STEMS, stored: { [AUDIO_KEY]: "flac", [TICKS_KEY]: '{"dub":["audio"]}' } });
+  await dub.api.open();
+  dub.go();
+  await settle();
+  assert.deepEqual(dub.followed, [["/api/dub/result/J1/audio?format=flac&download=1&v=2", "dub_ko.flac"]]);
+});
+
+// An audio project (the job's record says media "audio", ui/src/mediaKind.mjs)
+// has no picture, so nothing that is a video is offered: the sounds first,
+// then the subtitles and the script.
+const AUDIO = { ...STEMS, media: "audio", hasScript: true, title: "talk", source: "en" };
+
+test("an audio project hands back its dubbed audio, the voice, the background, the .srt and the .xlsx, and no video", () => {
+  const rows = exportRows(AUDIO, "flac");
+  assert.deepEqual(rows.map((r) => [r.id, r.label]), [
+    ["audio", "Dubbed audio"], ["voice", "Original voice"], ["background", "Background"],
+    ["srt", "Subtitles (.srt)"], ["script", "Script (original + translation, .xlsx)"]]);
+  assert.deepEqual(rows.map((r) => r.name), ["dub_ko.flac", "clip_voice.flac", "clip_background.flac",
+                                             "dub_ko.srt", "talk_ENtoKO_OriginalTranslatedScript.xlsx"]);
+  assert.deepEqual(rows.map((r) => r.href), [
+    "/api/dub/result/J1/audio?format=flac&download=1&v=2",
+    "/api/dub/result/J1/stem/voice?format=flac", "/api/dub/result/J1/stem/background?format=flac",
+    "/api/dub/result/J1/srt?download=1", "/api/dub/jobs/J1/script.xlsx"]);
+  assert.ok(rows.every((r) => r.icon !== "film"), "no row is a video");
+  // Not even when asked for by name, a link's original, or a picked ratio.
+  assert.deepEqual(exportRows({ ...AUDIO, only: ["original"] }, "mp3"), []);
+  assert.deepEqual(exportRows({ ...AUDIO, only: ["video", "audio"] }, "mp3").map((r) => r.id), ["audio"]);
+  assert.ok(exportRows({ ...AUDIO, ratio: "9:16" }, "mp3").every((r) => !/ratio=/.test(r.href)));
+  // Each only when there is one, as for a video project.
+  assert.deepEqual(exportRows({ ...AUDIO, hasSrt: false, hasScript: false, stems: {} }, "mp3").map((r) => r.id), ["audio"]);
+  // A project with a picture is what it was.
+  assert.deepEqual(exportRows({ ...AUDIO, media: undefined }, "mp3").map((r) => r.id),
+    ["video", "subtitled", "original", "srt", "script", "audio", "voice", "background"]);
+});
+
+test("an audio project's rows stand under Audio, then Subtitles & script", async (t) => {
+  const rows = exportRows(AUDIO, "mp3");
+  assert.deepEqual(rows.map((r) => r.group), ["audio", "audio", "audio", "subtitles", "subtitles"]);
+  const headings = (html) => [...html.matchAll(/<div class="export-group">([^<]*)<\/div><a [^>]*data-row="(\w+)"/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(headings(rowsHtml(rows, "mp3")), [["Audio", "audio"], ["Subtitles &amp; script", "srt"]]);
+  const html = rowsHtml(rows, "mp3");
+  assert.equal(html.match(/export-seg"/g).length, 3, "the switch on each sound row");
+  await inKorean(t);
+  assert.deepEqual(headings(rowsHtml(exportRows(AUDIO, "mp3"), "mp3")), [["오디오", "audio"], ["자막·대본", "srt"]]);
+  assert.deepEqual(exportRows(AUDIO, "mp3").map((r) => r.label),
+    ["더빙 오디오", "원본 목소리", "배경음", "자막 (.srt)", "대본 (원문·번역, .xlsx)"]);
+});
+
+test("an audio draft hands back its sound alone, in the format picked", async () => {
+  const rows = exportRows({ kind: "draft", media: "audio" }, "mp3");
+  assert.deepEqual(rows.map((r) => [r.id, r.label, !!r.audio]), [["audio", "Audio", true]]);
+  assert.ok(!rows[0].href, "the app writes it itself");
+  const asked = [];
+  const h = harness({ ctx: { kind: "draft", media: "audio", ratio: "9:16", where: "Saved in Downloads",
+                             save: async (what) => { asked.push(what); return "/d/talk.m4a"; } },
+                      stored: { [AUDIO_KEY]: "m4a" } });
+  await h.api.open();
+  assert.deepEqual(h.ticked(), ["audio"]);
+  h.go();
+  await settle();
+  assert.deepEqual(asked, [{ audio: "m4a" }]);
+  assert.equal(h.$("exportWhere").textContent, "Saved talk.m4a to Downloads");
+});
+
+test("an audio project opens on Dubbed audio, and its ticks are remembered apart from a video project's", async () => {
+  // What a video project remembered is not this dialog's: Video is not here,
+  // and Subtitles alone would be a strange thing to open on.
+  const h = harness({ ctx: AUDIO, stored: { [TICKS_KEY]: '{"dub":["video","srt"]}' } });
+  await h.api.open();
+  assert.deepEqual(h.ticked(), ["audio"]);
+  h.tick("srt");
+  h.tick("audio");
+  assert.deepEqual(JSON.parse(h.store.get(TICKS_KEY)), { dub: ["video", "srt"], "dub-audio": ["srt"] });
+  const again = harness({ ctx: AUDIO, stored: { [TICKS_KEY]: h.store.get(TICKS_KEY) } });
+  await again.api.open();
+  assert.deepEqual(again.ticked(), ["srt"]);
+  const video = harness({ ctx: STEMS, stored: { [TICKS_KEY]: h.store.get(TICKS_KEY) } });
+  await video.api.open();
+  assert.deepEqual(video.ticked(), ["video", "srt"]);
+  // A draft the same way.
+  const draft = harness({ ctx: { kind: "draft", media: "audio" }, stored: { [TICKS_KEY]: '{"draft":["video"]}' } });
+  await draft.api.open();
+  draft.tick("audio");
+  assert.deepEqual(JSON.parse(draft.store.get(TICKS_KEY)), { draft: ["video"], "draft-audio": [] });
+});
+
+test("an audio project's downloads are steps in the charts under the same names as any dubbing's", async () => {
+  const h = harness({ ctx: AUDIO });
+  await h.api.open();
+  await h.go();
+  await settle();
+  assert.deepEqual(h.steps, [["tool_started", { tool: "export", from: "dub", files: 1 }],
+                             ["tool_finished", { tool: "export", outcome: "done", files: 1 }]]);
+});
+
+// The page says which project is audio by handing the dialog the mark the
+// record carries (ui/src/app.mjs exportContext): a draft's own and a job's.
+test("the page hands the dialog the project's media, for a draft and for a dubbing", () => {
+  const app = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
+  const block = app.slice(app.indexOf("async function exportContext("), app.indexOf("const exportDialog = initExportDialog("));
+  assert.match(block, /return \{ kind: "draft", media: getDraft\(\)\.media, /);
+  assert.match(block, /kind: "dub", [^}]*\bmedia: job\.media,/);
+});
+
+// ---- a video brought into a finished audio project ---------------------------
+// The app's answer about it (app/api/join.py GET /join), as the page hands it
+// over after a save still waiting has gone out (ui/src/app.mjs exportContext).
+const JOIN = { video: { name: "walk.mp4", seconds: 95 }, audio_seconds: 80,
+               ranges: { video: [[0, 95]], audio: [[0, 80]] }, tempo: 1, stamp: "a1b2c3" };
+const JOINED = { ...AUDIO, joined: JOIN };
+const NOTE = "The audio lane is cut, so the subtitle file's times differ from the dubbed video's.";
+
+test("a video brought in comes first, as Dubbed video under Video; the audio and subtitles rows stay as they were", () => {
+  const rows = exportRows(JOINED, "flac");
+  assert.deepEqual(rows[0], { id: "video", group: "video", icon: "film", label: "Dubbed video",
+                              href: "/api/dub/result/J1/joined?download=1&v=a1b2c3", name: "dub_ko.mp4" });
+  assert.deepEqual(rows.slice(1), exportRows(AUDIO, "flac"));
+  // Its picture is the user's own, in its own shape: no ratio rides on it.
+  assert.equal(exportRows({ ...JOINED, ratio: "9:16" }, "mp3")[0].href, "/api/dub/result/J1/joined?download=1&v=a1b2c3");
+  // Another stamp after a cut: another address, so no file from before it is served.
+  assert.equal(exportRows({ ...JOINED, joined: { ...JOIN, stamp: "ffee00" } }, "mp3")[0].href,
+               "/api/dub/result/J1/joined?download=1&v=ffee00");
+  const headings = [...rowsHtml(rows, "flac").matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]);
+  assert.deepEqual(headings, ["Video", "Audio", "Subtitles &amp; script"]);
+});
+
+test("without a video brought in, an audio project and a video project are what they were", () => {
+  assert.deepEqual(exportRows({ ...AUDIO, joined: null }, "mp3"), exportRows(AUDIO, "mp3"));
+  assert.deepEqual(exportRows({ ...STEMS, joined: JOIN }, "mp3"), exportRows(STEMS, "mp3"));
+  assert.equal(rowsHtml(exportRows(AUDIO, "mp3"), "mp3").includes("export-note"), false);
+  assert.equal(rowsHtml(exportRows(STEMS, "mp3"), "mp3").includes("export-note"), false);
+});
+
+test("the dialog opens on Dubbed video the first time, and its ticks are remembered apart from the plain audio project's", async () => {
+  const h = harness({ ctx: JOINED, stored: { [TICKS_KEY]: '{"dub-audio":["srt"],"dub":["audio"]}' } });
+  await h.api.open();
+  assert.deepEqual(h.ticked(), ["video"]);
+  h.tick("audio");
+  assert.deepEqual(JSON.parse(h.store.get(TICKS_KEY)),
+                   { "dub-audio": ["srt"], dub: ["audio"], "dub-joined": ["video", "audio"] });
+  const again = harness({ ctx: JOINED, stored: { [TICKS_KEY]: h.store.get(TICKS_KEY) } });
+  await again.api.open();
+  assert.deepEqual(again.ticked(), ["video", "audio"]);
+  const plain = harness({ ctx: AUDIO, stored: { [TICKS_KEY]: h.store.get(TICKS_KEY) } });
+  await plain.api.open();
+  assert.deepEqual(plain.ticked(), ["srt"]);
+});
+
+test("the subtitles group says the times differ only when the audio lane is cut or sped", async (t) => {
+  const with_ = (change) => rowsHtml(exportRows({ ...JOINED, joined: { ...JOIN, ...change } }, "mp3"), "mp3");
+  // Escaped, as every row's words are.
+  const note = `<div class="export-note">${NOTE.replaceAll("'", "&#39;")}</div>`;
+  const notes = (html) => html.split('class="export-note"').length - 1;
+  assert.equal(notes(with_({})), 0, "whole and at normal speed");
+  assert.equal(notes(with_({ ranges: { video: [[0, 95]], audio: [[0, 40], [40, 80]] } })), 0, "split, nothing taken out");
+  assert.equal(notes(with_({ ranges: { video: [[10, 95]], audio: [[0, 80]] } })), 0, "only the picture cut");
+  for (const change of [{ ranges: { video: [[0, 95]], audio: [[0, 30], [50, 80]] } },
+                        { ranges: { video: [[0, 95]], audio: [[2, 80]] } },
+                        { tempo: 2 }, { tempo: 0.5 }]) {
+    const html = with_(change);
+    assert.equal(notes(html), 1);
+    // Under the last row of the group, before nothing else.
+    assert.ok(html.endsWith(`</a>${note}`));
+    assert.ok(/data-row="script"[^]*<\/a><div class="export-note">/.test(html), "right after the script row");
+  }
+  // Under the .srt when there is no script, and nowhere when there is neither.
+  const srtOnly = rowsHtml(exportRows({ ...JOINED, hasScript: false, joined: { ...JOIN, tempo: 2 } }, "mp3"), "mp3");
+  assert.ok(srtOnly.endsWith(`</a>${note}`));
+  assert.equal(notes(rowsHtml(exportRows({ ...JOINED, hasSrt: false, hasScript: false, joined: { ...JOIN, tempo: 2 } }, "mp3"), "mp3")), 0);
+  await inKorean(t);
+  assert.match(with_({ tempo: 3 }), /<div class="export-note">오디오 줄을 잘라서 자막 파일의 시간이 더빙 영상과 달라요\.<\/div>/);
+});
+
+// Built on request, as the subtitled video is: the file is asked for first,
+// the line under the rows says which one is going out and the buttons wait.
+test("the dubbed video is made first, the way the subtitled video is, then handed over under its name", async () => {
+  let made = null;
+  const asked = [];
+  const h = harness({ ctx: JOINED, fetchFn: (href) => { asked.push(href); return new Promise((r) => { made = r; }); } });
+  await h.api.open();
+  h.go();
+  await settle();
+  assert.deepEqual(asked, ["/api/dub/result/J1/joined?download=1&v=a1b2c3"]);
+  assert.equal(h.$("exportWhere").textContent, "Downloading 1 of 1…");
+  assert.equal(h.$("exportGoBtn").disabled, true);
+  assert.equal(h.$("exportCloseBtn").disabled, true);
+  assert.deepEqual(h.followed, [], "not handed over before it is made");
+  made({ ok: true });
+  await settle();
+  assert.deepEqual(h.followed, [["/api/dub/result/J1/joined?download=1&v=a1b2c3", "dub_ko.mp4"]]);
+  assert.deepEqual(h.saved(), ["video"]);
+});
+
+// The page sends a cut still waiting before it asks for the stamp, so the
+// link is the one for what is on the timeline now.
+test("the page saves a waiting change, then hands the dialog the app's answer as `joined`", () => {
+  const app = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
+  const block = app.slice(app.indexOf("async function exportContext("), app.indexOf("const exportDialog = initExportDialog("));
+  const saved = block.indexOf("await joinPlayer.saved()");
+  const asked = block.indexOf("/api/dub/jobs/${job.id}/join`");
+  assert.ok(saved > 0 && asked > saved, "saved first, then asked");
+  assert.match(block, /kind: "dub", [^}]*\bjoined,/);
 });

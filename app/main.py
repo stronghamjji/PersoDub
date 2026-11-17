@@ -24,13 +24,14 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import codex_fetch, config, state
+from app import codex_fetch, config, settings_env, state
 from app.api import agent as agent_api
 from app.api import captions as captions_api
 from app.api import clips as clips_api
 from app.api import downloads as downloads_api
 from app.api import dub as dub_api
 from app.api import erase as erase_api
+from app.api import join as join_api
 from app.api import media as media_api
 from app.api import misc as misc_api
 from app.api import models as models_api
@@ -79,6 +80,14 @@ async def lifespan(_app):
     log.info("PersoDub %s starting up", APP_VERSION)
     for problem in config.CONFIG_ERRORS:
         log.error("Bad setting, using the default instead -- %s", problem)
+    # Settings > Privacy was three switches and is one now: a kit.env that had
+    # only some of them off is settled here, once. A file that cannot be read
+    # or written is logged and passed over, whatever the error, for the reason
+    # above -- the app must still open.
+    try:
+        settings_env.settle_share_usage()
+    except Exception as e:
+        log.warning("Could not settle the Share usage data switch (%s)", type(e).__name__)
     state.job_store.restore(state.WORKSPACE)
     dub_api.rearm_queued_jobs()
     codex_fetch.prefetch()
@@ -153,6 +162,7 @@ app.include_router(clips_api.router)
 app.include_router(downloads_api.router)
 app.include_router(dub_api.router)
 app.include_router(erase_api.router)
+app.include_router(join_api.router)
 app.include_router(separate_api.router)
 app.include_router(captions_api.router)
 app.include_router(media_api.router)

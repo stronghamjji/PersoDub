@@ -239,6 +239,72 @@ test("several files are one dialog: the batch title, no Replace, no trim bar", a
   assert.equal(h.$("trimBox").innerHTML, "");
 });
 
+// Dubbing takes audio files too, and a batch may hold either kind: told by
+// the end of each name, as at the ways in (ui/src/mediaKind.mjs).
+test("a batch with audio files in it counts files, and asks nothing about a picture", async (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const files = [{ name: "a.wav" }, { name: "b.FLAC" }, { name: "c.mp3" }, { name: "d.m4a" }];
+
+  h.api.openNewProject({ files });
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+
+  assert.equal(h.$("projectTitle").textContent, "New project · 4 files");
+  assert.equal(h.state.newProject.files, files, "every one of them is what Start dubs");
+  // No cut, no clip to save and nothing to erase subtitles from; Start is on.
+  assert.equal(h.$("trimBox").innerHTML, "");
+  assert.equal(h.$("saveClipBtn").disabled, true);
+  assert.equal(h.$("eraseBtn").disabled, true);
+  assert.equal(h.$("startBtn").disabled, false);
+  // Nothing is sent before Start: the app says what each file is when it arrives.
+  assert.deepEqual(h.log.calls.filter((c) => /\/api\/(downloads|media)/.test(c)), []);
+
+  // One audio file among videos is enough: they are not all videos.
+  h.api.openNewProject({ files: [{ name: "a.mp4" }, { name: "b.mov" }, { name: "c.wav" }] });
+  assert.equal(h.$("projectTitle").textContent, "New project · 3 files");
+  h.api.openNewProject({ files: [{ name: "a.mp4" }, { name: "b.MOV" }] });
+  assert.equal(h.$("projectTitle").textContent, "New project · 2 videos");
+});
+
+// The owner's capture (2026-11-13): three audio files, and the box on the
+// left was plain black. A sound has no picture; the finished screen's box
+// says so with the sound sign and the word, and so does this one.
+test("a batch with no video in it shows the Audio sign in the box, and one with a video shows its first video", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  globalThis.URL.createObjectURL = (file) => `blob:${file.name}`;
+  const thumb = h.$("projectThumb");
+
+  h.api.openNewProject({ files: [{ name: "a.wav" }, { name: "b.MP3" }, { name: "c.m4a" }] });
+  assert.equal(thumb.classList.contains("audio"), true);
+
+  // A sound first and videos after it: the first video is the picture there is.
+  h.api.openNewProject({ files: [{ name: "a.wav" }, { name: "b.mp4" }, { name: "c.mov" }] });
+  assert.equal(thumb.classList.contains("audio"), false);
+  assert.equal(h.$("projectVideo").src, "blob:b.mp4");
+  assert.equal(h.state.newProject.file.name, "a.wav", "what Start dubs is as it was");
+
+  // Videos alone, as before: the first one.
+  h.api.openNewProject({ files: [{ name: "a.mp4" }, { name: "b.mov" }] });
+  assert.equal(thumb.classList.contains("audio"), false);
+  assert.equal(h.$("projectVideo").src, "blob:a.mp4");
+
+  // The sign does not outlive its batch: a link's still is a picture.
+  h.api.openNewProject({ files: [{ name: "a.wav" }, { name: "b.wav" }] });
+  assert.equal(thumb.classList.contains("audio"), true);
+  h.api.openNewProject({ probe: { url: "https://x/y", title: "Clip", duration_sec: 90 } });
+  assert.equal(thumb.classList.contains("audio"), false);
+});
+
+test("in Korean that batch is 파일 4개", async (t) => {
+  await inKorean(t);
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.openNewProject({ files: [{ name: "a.wav" }, { name: "b.flac" }, { name: "c.mp3" }, { name: "d.m4a" }] });
+  assert.equal(h.$("projectTitle").textContent, "새 프로젝트 · 파일 4개");
+});
+
 test("opening re-reads the saved defaults, then repaints hints, mode and greying", async (t) => {
   const h = harness({ responses: { "/api/setup": ok({ defaults: {} }) } });
   t.after(h.log.restore);

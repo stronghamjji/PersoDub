@@ -11,8 +11,7 @@ the app's page in its window. The app itself is a lightweight
 **orchestrator**; the heavy AI work (source separation, speech recognition,
 speaker diarization, translation, speech synthesis) runs in local
 subprocesses, a separately launched voice sidecar, a local Ollama server, or a
-online service (the Perso API makes the whole dub when chosen, and by default in the
-production edition).
+online service (the Perso API makes the whole dub when chosen).
 
 What runs where, the six pipeline stages and the files each leaves in a job's
 folder, the module map, the extension points, the contracts other programs
@@ -35,7 +34,7 @@ when the takes cannot be scored).
 |---|---|---|---|
 | **Qwen3-TTS sidecar** | Voice cloning + speech synthesis (the TTS engine). Vendored at `desktop/vendor/sidecar/server.py`, run as a separate process | Required | Inside a kit: the `tts_url` the desktop shell writes to `<kit>/runtime.json`. Without a kit: `QWEN_TTS_URL` (default `http://127.0.0.1:3901`) |
 | **Translation engine** (pick one) | Translates lines into the target language | Required (one of) | `TRANSLATE_ENGINE`, or the job's own choice. **ChatGPT** through the Codex CLI's sign-in (the default) / Local: **Ollama** with Hunyuan, Gemma or Qwen (`ollama_url` in `runtime.json` inside a kit, else `OLLAMA_URL`) / Cloud: **Google Gemini API** (`GEMINI_API_KEY`) or Vertex AI |
-| **Perso API** | Whole-video dubbing (`DUB_MODE=perso`, the production edition's default), separation, speech recognition + speaker labels | Optional; needed for `DUB_MODE=perso` | `PERSO_API_KEY` / `PERSO_SPACE_SEQ` / `PERSO_MEDIA_HOST`. Without a key, speech recognition uses local **Whisper** |
+| **Perso API** | Whole-video dubbing (`DUB_MODE=perso`), separation, speech recognition + speaker labels | Optional; needed for `DUB_MODE=perso` | `PERSO_API_KEY` / `PERSO_SPACE_SEQ` / `PERSO_MEDIA_HOST`. Without a key, speech recognition uses local **Whisper** |
 | **Local separation** (Mel-Band RoFormer or Demucs) | Splits voices from background audio, in a subprocess: Mel-Band RoFormer when its model is downloaded into the kit, else Demucs | Required (Demucs is built in) | `SEP_PYTHON`, `SEP_MODEL_DIR` (Demucs); the RoFormer weights in `<kit>/models/melband-roformer` |
 | **Local CAM++** (speaker diarization) | Labels lines by speaker (optional feature) | Optional | `DIAR_PYTHON`, `PERSODUB_CAMPPLUS_MODEL` |
 | **ffmpeg** | Audio/video cutting and final muxing | Required | Must be on `PATH` |
@@ -71,12 +70,6 @@ If `.venv` doesn't exist yet:
 `.venv\Scripts\pip install -r requirements.txt -r requirements-dev.txt`).
 `requirements-dev.txt` adds the pinned `ruff` that the lint check runs.
 
-### Docker (currently unverified)
-
-A `Dockerfile` and `docker-compose.yml` are in the repository, but they do not
-yet provision the subprocess interpreters the pipeline needs. The supported
-path is the local uvicorn setup above.
-
 ## Configuration (environment variables)
 
 Copy `env.server.example` to your own `.env` and fill in the values. Secrets
@@ -86,7 +79,7 @@ blocks `.env`, `*.env`, and `config/`.
 | Variable | Default | Meaning |
 |---|---|---|
 | `QWEN_TTS_URL` | `http://127.0.0.1:3901` | Qwen3-TTS sidecar address |
-| `DUB_MODE` | `local` (`perso` when `PERSODUB_EDITION=production`) | `perso` = the Perso API makes the whole dub (needs `PERSO_API_KEY`), `local` = the six stages on this computer |
+| `DUB_MODE` | `local` | `perso` = the Perso API makes the whole dub (needs `PERSO_API_KEY`), `local` = the six stages on this computer |
 | `TRANSLATE_ENGINE` | `chatgpt` (`hunyuan` on a kit that already has the Hunyuan model) | `chatgpt` = ChatGPT through the Codex CLI, `hunyuan` / `gemma` / `qwen` = local Ollama, `gemini` = Google Gemini API, `vertex` = Vertex AI |
 | `OLLAMA_URL` / `OLLAMA_MODEL` | `http://127.0.0.1:11434` / `gemma3:12b` | Local Ollama server and model |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | (none) / `gemini-flash-latest` | Google Gemini API key (secret) and model |
@@ -160,76 +153,50 @@ sidecar, Ollama, Perso). What each suite protects, and the tests that pin the
 contracts a refactor must not change, are listed in
 [Architecture](architecture.md#6-quality-gates).
 
-## Building an edition
+## Building the desktop app
 
-The desktop app is built as one of two editions from the same code. The
-open-source edition is PersoDub: it dubs on this computer when nothing is
+The desktop app is PersoDub: it dubs on this computer when nothing is
 chosen, reads its updates from the public repository's releases, and its
 GitHub button, Send feedback, Help documents and release notes open there.
-The production edition, the company build, is PersoDubbing: it dubs on
-the Perso API when nothing is chosen, signs in to Perso in the browser and
-takes the account's API key by itself, has no GitHub button or link, opens
-`https://perso.ai/dubbing/desktop-app` for its guide and release notes, sends
-Customer support's inquiries straight to the support web app it was built
-with (never through the relay), and reads its updates only from its own
-address, never from the public releases.
 
-| | open source | production |
-|---|---|---|
-| `PERSODUB_EDITION` | unset (or `opensource`) | `production` |
-| Name (window, dock, taskbar, installer, About, every `{app}` in a sentence) | `PersoDub` | `PersoDubbing` |
-| App id | `com.persodub.desktop` | `ai.perso.desktopapp` |
-| Installers | `PersoDub-Setup-<version>.exe`, `PersoDub-<version>-arm64.dmg` | `PersoDubbing-Setup-<version>.exe`, `PersoDubbing-<version>-arm64.dmg` |
-| Kit folder | `~/Library/Application Support/PersoDub`, `%LOCALAPPDATA%\PersoDub` | `~/Library/Application Support/PersoDubbing`, `%LOCALAPPDATA%\PersoDubbing` |
-| Electron's data folder (logs, sign-in) | `persodub-desktop-shell` | `perso-desktopapp-shell` |
-| Updates | the repository's GitHub Releases | `PRODUCTION_UPDATE_URL` in `src/edition.js`, or none while it is empty |
+| What | Value |
+|---|---|
+| Name (window, dock, taskbar, installer, About, every `{app}` in a sentence) | `PersoDub` |
+| App id | `com.persodub.desktop` |
+| Installers | `PersoDub-Setup-<version>.exe`, `PersoDub-<version>-arm64.dmg` |
+| Kit folder | `~/Library/Application Support/PersoDub`, `%LOCALAPPDATA%\PersoDub` |
+| Electron's data folder (logs) | `persodub-desktop-shell` |
+| Updates | the repository's GitHub Releases |
 
-Each edition has its own names and folders, so both can be installed on one
-computer. The names and app ids are `PRODUCTS` in `src/edition.js`; the
-production update address is the `PRODUCTION_UPDATE_URL` constant beside it
-(an electron-updater generic feed: `latest.yml`, `latest-mac.yml` and the
-files beside them). While it is empty the production app never checks for
-updates, and `shell.log` says so once a launch.
-
-The production build takes one value from the environment it is built in
+The build takes one value from the environment it is built in
 (`BUILD_KEYS` in `src/edition.js`). Nothing in the repository names it:
 `scripts/collect-payload.mjs` writes it, when set, into the payload's
-`build.env`, and the packaged app reads it from there, in either edition.
+`build.env`, and the packaged app reads it from there.
 
-| Variable | Used by | What it does | When it is not set |
-|---|---|---|---|
-| `PERSODUB_EDITION` | both | which edition the payload, and so the app, is (`--edition` on `collect-payload.mjs` wins over it) | the open-source edition |
-| `PERSODUB_INQUIRY_URL` | both | the support web app's address (a Google Apps Script web app's `/exec` URL) that Customer support's (production) and Send feedback's (open source) inquiries are posted to as JSON; it mails each one to the support inbox, with the edition in its subject, and answers `{ok, id}` | the production build hides Customer support; the open-source build's Send feedback opens the issues page |
-| `CAMPPLUS_SRC` | both | the path of your `campplus.onnx` | the build stops |
+| Variable | What it does | When it is not set |
+|---|---|---|
+| `PERSODUB_INQUIRY_URL` | the support web app's address (a Google Apps Script web app's `/exec` URL) that Send feedback's inquiries are posted to as JSON; it mails each one to the support inbox, with the edition in its subject, and answers `{ok, id}` | Send feedback opens the issues page |
+| `CAMPPLUS_SRC` | the path of your `campplus.onnx` | the build stops |
 
-Set them when the payload is collected. `electron-builder.js` reads the
-collected payload's edition, so `electron-builder` needs no variables of its
-own. A Mac release needs the dmg, the zip and `latest-mac.yml` (auto-update
+Set them when the payload is collected; `electron-builder` needs no variables
+of its own. A Mac release needs the dmg, the zip and `latest-mac.yml` (auto-update
 reads the last two), so collect the payload and build both targets in one
-run, in `desktop/`. The build copies the dmg as `<name>-mac.dmg`, the name a
+run, in `desktop/`. The build copies the dmg as `PersoDub-mac.dmg`, the name a
 download button links to.
 
 ```bash
-# open source
 CAMPPLUS_SRC=/path/to/campplus.onnx PERSODUB_INQUIRY_URL=<support web app address> \
   node scripts/collect-payload.mjs
 npx electron-builder --mac dmg zip --arm64 --publish never
-
-# production (the same as npm run dist:dmg:prod)
-CAMPPLUS_SRC=/path/to/campplus.onnx PERSODUB_INQUIRY_URL=<support web app address> \
-  node scripts/collect-payload.mjs --edition production
-npx electron-builder --mac dmg zip --arm64 --publish never
 ```
 
-On Windows, `npm run dist:win` (or `npm run dist:win:prod`) with the same
+On Windows, `npm run dist:win` with the same
 variables builds the installer. `npm run dist:dmg` would build the dmg alone.
-An unknown edition stops the build. Before a release, check what the packaged
-app carries: `cat dist/mac-arm64/<name>.app/Contents/Resources/payload/EDITION`
-must print the edition you meant, and `payload/build.env` must hold the
-support web app's address. A development run (`npm start`, no
-payload) reads them from its own environment. The Windows workflows set the
-edition from their input, and the public release workflow refuses a
-production build. Both give the build `PERSODUB_INQUIRY_URL` from the
+Before a release, check what the packaged
+app carries: `dist/mac-arm64/PersoDub.app/Contents/Resources/payload/build.env`
+must hold the support web app's address. A development run (`npm start`, no
+payload) reads it from its own environment. The Windows workflows give the
+build `PERSODUB_INQUIRY_URL` from the
 repository secret of that name, so the secret must exist in the repository
 (Settings > Secrets and variables > Actions); without it the installer is
 built with nowhere to send an inquiry.

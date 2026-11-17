@@ -3,12 +3,14 @@
 // "Draft" card that opens it again (owner, 2026-09-30). Kept in the browser's
 // own storage, newest first: what a draft is (ui/src/draft.mjs) less the
 // address its video plays from, which is made again from the id, plus the
-// tab it was left on. The video itself stays in the app's holding folder; the
+// tab it was left on. An audio draft keeps its mark (ui/src/mediaKind.mjs):
+// its card has no video frame to show. The video itself stays in the app's holding folder; the
 // app holds it again under the same id when the draft is reopened
 // (POST /api/downloads/{id}/hold).
 //
 // Nothing here touches the page or the network.
 import { normalizeRanges } from "./draft.mjs";
+import { isAudio } from "./mediaKind.mjs";
 
 const KEY = "persodub.drafts";
 // More than a screen of cards is a pile nobody goes back to: the oldest go.
@@ -26,7 +28,8 @@ function clean(row) {
   return { downloadId: row.downloadId, name: String(row.name || ""), duration,
            ranges: ranges.length ? ranges : [[0, duration]],
            ratio: typeof row.ratio === "string" ? row.ratio : "original",
-           tab: TABS.includes(row.tab) ? row.tab : "dubbing" };
+           tab: TABS.includes(row.tab) ? row.tab : "dubbing",
+           ...(isAudio(row) ? { media: "audio" } : {}) };
 }
 
 /** The drafts that were kept, newest first. [] when there are none, or the

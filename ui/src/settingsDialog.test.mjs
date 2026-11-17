@@ -43,7 +43,7 @@ function makeEl(id) {
 
 /** A page, a fetch log and a stopped clock. `responses` answers per URL;
     `shell` stands in for the desktop shell, none for a browser. */
-function harness({ responses = {}, refreshModelCatalog = null, shell = null, account = null } = {}) {
+function harness({ responses = {}, refreshModelCatalog = null, shell = null } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -101,7 +101,6 @@ function harness({ responses = {}, refreshModelCatalog = null, shell = null, acc
     refreshModelCatalog: () => { state.models += 1; return refreshModelCatalog && refreshModelCatalog($); },
     startAgain: () => { state.startedAgain += 1; },
     shell,
-    account,
   });
   return { $, api, state };
 }
@@ -114,7 +113,7 @@ const SAVED = {
   perso_signup_link: "https://developers.perso.ai/api-keys?utm=x",
   perso_recharge_link: "https://perso.ai/en/workspace/space-settings?tab=Subscription&utm=x",
   app_version: "0.5.0",
-  analytics_off: true,
+  share_usage: false,
 };
 const SPACES = { spaces: [{ seq: 7, name: "Studio", tier: "Pro", credits: 120 }] };
 
@@ -129,20 +128,9 @@ test("loadSavedSetup fills the fields from GET /api/settings", async (t) => {
   assert.equal(h.$("persoSignupLink").href, SAVED.perso_signup_link);
   assert.equal(h.$("persoRechargeLink").href, SAVED.perso_recharge_link);
   assert.equal(h.$("aboutVersion").textContent, "PersoDub 0.5.0");
-  // analytics_off: true means the "send counts" switch is OFF.
-  assert.equal(h.$("analyticsToggle").checked, false);
+  // share_usage: false means the "Share usage data" switch is OFF.
+  assert.equal(h.$("shareToggle").checked, false);
   assert.ok(h.state.calls.includes("GET /api/settings"));
-});
-
-test("the production edition's About names PersoDubbing, the name the shell passes", async (t) => {
-  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
-  const realWindow = globalThis.window;
-  globalThis.window = { ...realWindow, persodubShell: { edition: "production", name: "PersoDubbing" } };
-  t.after(() => { globalThis.window = realWindow; h.state.restore(); });
-
-  await h.api.loadSavedSetup();
-
-  assert.equal(h.$("aboutVersion").textContent, "PersoDubbing 0.5.0");
 });
 
 test("a version of 0.0.0 is not put on screen", async (t) => {
@@ -305,9 +293,8 @@ test("a save the engine refuses keeps the sheet open and says so beside Save", a
 test("Cancel with nothing changed closes at once; closing from code leaves without saving", async (t) => {
   const h = harness();
   t.after(h.state.restore);
-  // As the sheet shows them before it has read anything: both switches on.
-  h.$("analyticsToggle").checked = true;
-  h.$("reportsToggle").checked = true;
+  // As the sheet shows it before it has read anything: the switch on.
+  h.$("shareToggle").checked = true;
 
   h.$("settingsOverlay").classList.add("open");
   await h.$("settingsCancelBtn").fire("click");
@@ -326,9 +313,8 @@ test("Cancel with nothing changed closes at once; closing from code leaves witho
 test("Cancel with something typed asks once: Keep editing stays, Discard leaves without saving", async (t) => {
   const h = harness();
   t.after(h.state.restore);
-  // As the sheet shows them before it has read anything: both switches on.
-  h.$("analyticsToggle").checked = true;
-  h.$("reportsToggle").checked = true;
+  // As the sheet shows it before it has read anything: the switch on.
+  h.$("shareToggle").checked = true;
 
   h.$("geminiKeyInput").value = "typed-then-cancelled";
   h.$("settingsOverlay").classList.add("open");
@@ -352,9 +338,8 @@ test("Cancel with something typed asks once: Keep editing stays, Discard leaves 
 test("Escape closes the sheet only while it is open", async (t) => {
   const h = harness();
   t.after(h.state.restore);
-  // As the sheet shows them before it has read anything: both switches on.
-  h.$("analyticsToggle").checked = true;
-  h.$("reportsToggle").checked = true;
+  // As the sheet shows it before it has read anything: the switch on.
+  h.$("shareToggle").checked = true;
   const onKey = h.state.docKeydown[0];
   assert.ok(onKey, "the sheet has to answer Escape");
 
@@ -447,35 +432,42 @@ test("a folder that will not open says so under the button", async (t) => {
     "Could not open the folder.");
 });
 
-test("the two switches are saved with Save, each as its own setting", async (t) => {
-  const h = harness({ responses: { "/api/settings": ok({ analytics_off: false, reports_off: false }) } });
+// One switch, read from share_usage and saved with Save as share_usage, from
+// on to off and from off to on.
+for (const saved of [true, false]) {
+  test(`the privacy switch shows share_usage ${saved} and Save sends share_usage ${!saved}`, async (t) => {
+    const h = harness({ responses: { "/api/settings": ok({ share_usage: saved }) } });
+    t.after(h.state.restore);
+    await h.api.openSettings();
+    assert.equal(h.$("shareToggle").checked, saved);
+
+    h.$("shareToggle").checked = !saved;
+    await h.$("shareToggle").fire("change");
+    assert.equal(h.$("settingsChanges").textContent, "1 change");
+    assert.deepEqual(h.state.bodies, [], "nothing is sent before Save");
+    await h.$("settingsSaveBtn").fire("click");
+
+    assert.deepEqual(h.state.bodies, [{ url: "/api/settings", body: { share_usage: !saved } }]);
+    assert.equal(h.$("settingsOverlay").classList.has("open"), false);
+  });
+}
+
+test("a share switch that could not be saved keeps the sheet open and is still a change to save", async (t) => {
+  let gets = 0;
+  const h = harness({ responses: {
+    "/api/settings": () => (gets++ ? { ok: false, status: 500, json: async () => ({}) } : ok({ share_usage: true })),
+  } });
   t.after(h.state.restore);
   await h.api.openSettings();
 
-  h.$("analyticsToggle").checked = false;
-  await h.$("analyticsToggle").fire("change");
-  h.$("reportsToggle").checked = false;
-  await h.$("reportsToggle").fire("change");
-  assert.equal(h.$("settingsChanges").textContent, "2 changes");
-
+  h.$("shareToggle").checked = false;
+  await h.$("shareToggle").fire("change");
   await h.$("settingsSaveBtn").fire("click");
 
-  assert.deepEqual(h.state.bodies.map((b) => b.body),
-    [{ analytics_off: true }, { reports_off: true }]);
-});
-
-test("the button events switch shows events_enabled and is saved as its own setting", async (t) => {
-  const h = harness({ responses: { "/api/settings": ok({ analytics_off: false, reports_off: false, events_enabled: true }) } });
-  t.after(h.state.restore);
-  await h.api.openSettings();
-  assert.equal(h.$("eventsToggle").checked, true);
-
-  h.$("eventsToggle").checked = false;
-  await h.$("eventsToggle").fire("change");
-  assert.equal(h.$("settingsChanges").textContent, "1 change");
-  await h.$("settingsSaveBtn").fire("click");
-
-  assert.deepEqual(h.state.bodies.map((b) => b.body), [{ events_enabled: false }]);
+  assert.deepEqual(h.state.bodies.map((b) => b.body), [{ share_usage: false }]);
+  assert.equal(h.$("settingsOverlay").classList.has("open"), true);
+  assert.equal(h.$("settingsChanges").textContent, "Could not save. Is PersoDub running?");
+  assert.equal(h.$("settingsSaveBtn").disabled, false, "Save can be pressed again");
 });
 
 test("Acknowledgements folds open and shut", async (t) => {
@@ -700,101 +692,4 @@ test("a sheet that could not read the settings has no language change to save", 
   h.$("uiLanguageSelect").value = "ko";
   await h.$("uiLanguageSelect").fire("change");
   assert.equal(h.$("settingsChanges").textContent, before);
-});
-
-// The Perso sign-in's stand-in (ui/src/signIn.mjs): a status, its listeners,
-// and the Sign out button's calls counted.
-function fakeAccount(status) {
-  const a = { current: status, listeners: [], loggedOut: 0 };
-  a.status = () => a.current;
-  a.onChange = (cb) => a.listeners.push(cb);
-  a.logout = async () => { a.loggedOut += 1; };
-  a.set = (s) => { a.current = s; for (const cb of a.listeners) cb(s); };
-  return a;
-}
-
-test("the open-source edition's sheet keeps the key field and its tab name, and shows no account", async (t) => {
-  const account = fakeAccount({ enabled: false });
-  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
-  t.after(h.state.restore);
-  h.$("persoAccountRow").hidden = true;   // as the markup has it
-  await h.api.openSettings();
-  account.set({ enabled: false });
-
-  assert.equal(h.$("persoAccountRow").hidden, true);
-  assert.equal(h.$("persoKeyRow").hidden, false);
-  assert.equal(h.$("settingsTab-keys").dataset.i18n, undefined, "the tab's words are not touched");
-  assert.equal(h.$("persoKeyChip").textContent, "");
-});
-
-test("the production edition's sheet shows the signed-in account in the key field's place", async (t) => {
-  const account = fakeAccount({ enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true });
-  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
-  t.after(h.state.restore);
-  h.$("persoAccountRow").hidden = true;
-  await h.api.openSettings();
-
-  assert.equal(h.$("persoAccountRow").hidden, false);
-  assert.equal(h.$("persoKeyRow").hidden, true);
-  assert.equal(h.$("settingsTab-keys").textContent, "Account and keys");
-  assert.equal(h.$("persoAccountMail").textContent, "a@test.local");
-  assert.equal(h.$("persoKeyChip").textContent, "Key connected");
-  assert.ok(h.$("persoKeyChip").classList.contains("done"));
-  // A long address wraps; the chip beside it stays one line ("키 / 연결됨", re-test 2026-10-27).
-  const css = readFileSync(new URL("../../static/css/app.css", import.meta.url), "utf8");
-  assert.match(css, /\.acct-chip \{[^}]*white-space: nowrap;[^}]*\}/);
-
-  await h.$("persoSignOutBtn").fire("click");
-  assert.equal(account.loggedOut, 1);
-});
-
-// Signed out, the sign-in screen takes the window; the sheet left open under
-// it was still there after signing in again (re-test, 2026-10-27).
-test("signing out closes the sheet, from its Sign out button or from anywhere else", async (t) => {
-  const signedIn = { enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true };
-  const signedOut = { enabled: true, required: true, signedIn: false, account: "", hasKey: false };
-  const account = fakeAccount(signedIn);
-  account.logout = async () => { account.loggedOut += 1; account.set(signedOut); };
-  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
-  t.after(h.state.restore);
-  await h.api.openSettings();
-  h.$("geminiKeyInput").value = "typed-and-not-saved";
-  await h.$("geminiKeyInput").fire("input");
-  await h.$("persoSignOutBtn").fire("click");
-  assert.equal(account.loggedOut, 1);
-  assert.equal(h.$("settingsOverlay").classList.contains("open"), false);
-  assert.equal(h.$("settingsDiscardOverlay").classList.contains("open"), false, "nothing is asked: the sign-in screen is up");
-
-  account.set(signedIn);
-  await h.api.openSettings();
-  account.set(signedIn);
-  assert.equal(h.$("settingsOverlay").classList.contains("open"), true, "a status that is still signed in leaves it open");
-  account.set(signedOut);   // a sign-in Perso no longer takes
-  assert.equal(h.$("settingsOverlay").classList.contains("open"), false);
-});
-
-test("another account signed in while the sheet is open shows there, with its key and workspaces", async (t) => {
-  let saved = SAVED;
-  const account = fakeAccount({ enabled: true, signedIn: true, account: "a@test.local", hasKey: true });
-  const h = harness({ responses: { "/api/settings": () => ok(saved), "/api/perso/spaces": ok(SPACES) }, account });
-  t.after(h.state.restore);
-  await h.api.openSettings();
-  h.$("settingsOverlay").classList.add("open");
-  const spacesAsked = h.state.calls.filter((c) => c === "GET /api/perso/spaces").length;
-
-  saved = { ...SAVED, perso_api_key: "the-other-accounts-key", perso_space_seq: "" };
-  account.set({ enabled: true, signedIn: true, account: "b@test.local", hasKey: true });
-  await new Promise((r) => setImmediate(r));
-  await new Promise((r) => setImmediate(r));
-
-  assert.equal(h.$("persoAccountMail").textContent, "b@test.local");
-  assert.equal(h.$("persoKeyInput").value, "the-other-accounts-key");
-  assert.equal(h.state.calls.filter((c) => c === "GET /api/perso/spaces").length, spacesAsked + 1);
-  assert.equal(h.$("settingsChanges").textContent, "", "a key the sign-in saved is no change to save");
-
-  account.set({ enabled: true, signedIn: true, account: "", hasKey: false });
-  assert.equal(h.$("persoAccountMail").textContent, "Perso account", "an account with no e-mail or name");
-  account.set({ enabled: true, signedIn: true, account: "c@test.local", hasKey: false });
-  assert.equal(h.$("persoKeyChip").textContent, "No key");
-  assert.ok(!h.$("persoKeyChip").classList.contains("done"));
 });

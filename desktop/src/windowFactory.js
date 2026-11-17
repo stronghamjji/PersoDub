@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { zoomResetter } from "./zoomReset.js";
 import { useLanguage } from "./i18n.js";
-import { displayName } from "./edition.js";
+import { PRODUCT } from "./edition.js";
 import { blockedKey } from "./shortcuts.js";
 
 // Outbound links (the credit popup's Recharge button, Settings' "get a key") belong in
@@ -17,9 +17,9 @@ export function openExternally(shell, url) {
  * loads or navigates, since none of them exists yet when the window is made.
  */
 export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale, platform = process.platform,
-                              edition = "opensource", inquiry = false }) {
-  // What this edition is called on screen (src/edition.js displayName).
-  const name = displayName(edition);
+                              inquiry = false }) {
+  // What the app is called on screen (src/edition.js PRODUCT).
+  const { name } = PRODUCT;
   // The finished screen is a table beside a video with a strip under both, and
   // it needs 1280 to show the table's full set of columns. Clamped to the screen
   // the window opens on, so a small laptop gets a window that fits it rather
@@ -66,7 +66,7 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       preload: join(appDir, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      // The repository ("owner/repo") the build's edition points at, for the
+      // The repository ("owner/repo") the app points at, for the
       // page's GitHub links; preload.cjs reads it back as persodubShell.repo.
       // And the computer's language ("ko" or "en", src/i18n.js), which the
       // page reads as persodubShell.locale for a language setting of Auto.
@@ -74,19 +74,13 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       // on the page as data-platform: the stylesheet draws Windows' scrollbars
       // itself and leaves the Mac's to the system, and makes its top bar what
       // the window is moved by on both.
-      // And the build's edition, which the page shows the production
-      // edition's names and links for (ui/src/edition.mjs), and the name it
-      // shows, for the window title and the sign-in screen. And whether the
+      // And the name the app shows. And whether the
       // build has somewhere to send an inquiry (main.js, src/edition.js
       // BUILD_KEYS): then Send feedback is the inquiry form, else the issues page.
       additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`,
-        `--persodub-edition=${edition}`, `--persodub-name=${name}`, ...(inquiry ? ["--persodub-inquiry=1"] : [])],
+        `--persodub-name=${name}`, ...(inquiry ? ["--persodub-inquiry=1"] : [])],
     },
-    // The production edition's window is PersoDubbing whatever page is in
-    // it (the event below); the open-source window takes each page's title.
-    ...(edition === "production" ? { title: name } : {}),
   });
-  if (edition === "production") win.on("page-title-updated", (e) => e.preventDefault());
   // Every page load -- the app page arriving after boot, or a reload mid
   // download -- gets the update's current state again; announcements sent to
   // the loading screen would otherwise be the last the app page never hears.

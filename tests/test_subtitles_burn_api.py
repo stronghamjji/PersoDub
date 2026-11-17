@@ -6,6 +6,7 @@ presets) and burns THAT; ffmpeg is a recorder, so what these pin down is the
 written over. All free and local: no Perso, no credits, no confirm gate."""
 from fastapi.testclient import TestClient
 
+from app import media
 from app.api import results as results_api
 from app.main import app
 
@@ -96,6 +97,20 @@ def test_burn_says_when_there_is_no_srt_to_lay_on(monkeypatch, tmp_path):
     assert r.status_code == 404
     assert "subtitle" in r.json()["detail"].lower()
     assert ran.calls == []
+
+
+def test_burn_refuses_an_audio_file_before_anything_is_written(monkeypatch, tmp_path):
+    # A dubbing takes audio files, and the Dub Agent's folder list shows
+    # them. One has no picture to lay subtitles on, even with an .srt of its
+    # own name beside it.
+    ran, _video = _wire(monkeypatch, tmp_path)
+    song = tmp_path / "쇼츠 3편.mp3"
+    song.write_bytes(b"ID3")
+    monkeypatch.setattr(media, "media_kind", lambda path: "audio")
+    r = client.post("/api/subtitles/burn", json={"video_path": str(song)})
+    assert r.status_code == 422 and r.json()["detail"] == "This tool takes video files only."
+    assert ran.calls == []
+    assert not (tmp_path / "subtitle_render.ass").exists()
 
 
 def test_burn_refuses_a_preset_it_does_not_know(monkeypatch, tmp_path):

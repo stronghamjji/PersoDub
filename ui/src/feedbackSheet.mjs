@@ -1,15 +1,13 @@
-// Customer support in the production edition, Send feedback in the open-source
-// one (ui/src/homeSidebar.mjs): a Service inquiry form like Perso's own -- the kind, a subject, the details and an
+// Send feedback (ui/src/homeSidebar.mjs): a Service inquiry form like Perso's own -- the kind, a subject, the details and an
 // address to answer -- and Send hands it to the shell, which sends it to the
 // support web app with the app's version and this computer, a bug report with
 // the app's masked logs (desktop/src/reporting.js sendInquiry). No mail app:
 // a computer without a mail account left the person with nothing (owner,
 // 2026-10-27).
-// The open-source edition has no payments, so its form has no Payment or
-// refund kind, and its title is Feedback, like the button that opens it.
+// Its title is Feedback, like the button that opens it (the page's markup).
 //
 // Owns #feedbackOverlay, #feedbackType, #feedbackSubjectInput,
-// #feedbackDetails, #feedbackReplyTo, #feedbackReplyToHint, #feedbackLogsNote, #feedbackConsent,
+// #feedbackDetails, #feedbackReplyTo, #feedbackLogsNote, #feedbackConsent,
 // #feedbackPrivacy, #feedbackStatus, #feedbackClose and #feedbackSend.
 import { t } from "./i18n.mjs";
 import { record as recordStep } from "./events.mjs";
@@ -25,20 +23,14 @@ export const PRIVACY_URL = {
  * @param {(id: string) => any} deps.$
  * @param {(form: object) => Promise<{id?: string, queued?: boolean, needReplyTo?: boolean} | null>} deps.send  persodubShell.sendInquiry
  * @param {() => string} deps.language     the page's language, "ko" or "en"
- * @param {() => string} deps.account      the signed-in account's line (ui/src/signIn.mjs status):
- *        its e-mail, or its name when it has none
  * @param {(url: string) => void} deps.openUrl
- * @param {boolean} [deps.production]  the production edition: the only one with a Payment or refund kind
  * @returns {() => void} opens the form
  */
-export function initFeedbackSheet({ $, send, language, openUrl, account, production = false, record = recordStep }) {
+export function initFeedbackSheet({ $, send, language, openUrl, record = recordStep }) {
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
-  $("feedbackTypePayment").hidden = !production;
-  $("feedbackTitle").textContent = t(production ? "Service inquiry" : "Feedback");
-  // Optional: left empty, the answer goes to the signed-in account's address,
-  // which the shell adds itself (desktop/src/reporting.js accountForInquiry).
-  // An account with no e-mail has none: then the shell answers needReplyTo.
+  // Left empty, there is no address to answer at: the shell sends nothing
+  // and answers needReplyTo (desktop/src/reporting.js).
   const replyTo = $("feedbackReplyTo");
   let sending = false;
   // Subject, Details and the consent are required: Send waits for all three.
@@ -92,8 +84,6 @@ export function initFeedbackSheet({ $, send, language, openUrl, account, product
   });
   return function openFeedback() {
     status.textContent = "";
-    // The line under Reply-to promises the account's address: only an account that has one.
-    $("feedbackReplyToHint").hidden = !String(account() || "").includes("@");
     logsNote();
     ready();
     $("feedbackOverlay").classList.add("open");

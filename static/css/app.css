@@ -153,47 +153,6 @@
   * { box-sizing: border-box; }
   /* Plenty of the classes below set a `display`, which would otherwise beat
      the `hidden` attribute that showScreen() and setTopbar() toggle. */
-  /* The production edition's (the data-edition the shell's preload stamps on
-     the page): Perso's own workspace dark, measured off it -- a violet-grey
-     ground, white hairlines, and its green, amber and red -- under our blue,
-     which stays (owner, 2026-10-27). The open-source edition keeps the sheet
-     above. */
-  :root[data-edition="production"] {
-    --desk: #121119;
-    --background: #17161f;
-    --canvas: #17161f;
-    --agent-bg: #17161f;
-    --well: #1f1e28;
-    --trim-track: #1f1e28;
-    --head-bg: #1f1e28;
-    --agent-head-bg: #1f1e28;
-    --secondary: #26252f;
-    --agent-box: #26252f;
-    --field: #121119;
-    --agent-field: #121119;
-    --border: rgba(255, 255, 255, 0.07);
-    --agent-border: rgba(255, 255, 255, 0.07);
-    --head-line: rgba(255, 255, 255, 0.07);
-    --hair: rgba(255, 255, 255, 0.07);
-    --agent-field-line: rgba(255, 255, 255, 0.07);
-    --control-line: rgba(255, 255, 255, 0.2);
-    --divider: rgba(255, 255, 255, 0.2);
-    --well-line: rgba(255, 255, 255, 0.2);
-    --dropzone-line: rgba(255, 255, 255, 0.2);
-    --foreground: #ededf0;
-    --agent-fg: #ededf0;
-    --agent-me-fg: #ededf0;
-    --muted-foreground: #a3a2ad;
-    --agent-muted: #a3a2ad;
-    --success: #0bc673;
-    --success-ink: #0bc673;
-    --chip-done-fg: #0bc673;
-    --agent-ok: #0bc673;
-    --warning: #ffa31a;
-    --agent-warn: #ffa31a;
-    --destructive: #f03d3d;
-  }
-
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
 
@@ -220,18 +179,6 @@
     line-height: 1.5;
     background: var(--background);
     overflow: hidden; /* the app fills the window; only inner panes scroll */
-  }
-  /* The production edition's type is Perso's, Pretendard, from static/fonts
-     too (origin in NOTICE); after the flags only, which it does not draw. */
-  @font-face {
-    font-family: "Pretendard Variable";
-    src: url(/fonts/pretendard-variable.woff2) format("woff2");
-    font-weight: 45 920;
-    font-display: swap;
-  }
-  :root[data-edition="production"] body {
-    font-family: "Twemoji Country Flags", "Pretendard Variable", Onest, "Noto Sans KR", -apple-system, "Segoe UI",
-      "Apple SD Gothic Neo", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
   }
   /* Korean wraps between words, never inside one: left to itself a line may
      end mid-word, which reads as a typo. The page names its language on
@@ -574,7 +521,7 @@
   body[data-screen="running"]:not(.timeline-off) #runTimeline { display: flex; }
   /* A tab with nothing behind it yet, and Export before there is anything
      to hand back. */
-  .left-tab:disabled, .vtab:disabled { opacity: 0.4; cursor: default; }
+  .left-tab:disabled, .left-tab[aria-disabled="true"], .vtab:disabled { opacity: 0.4; cursor: default; }
   #exportBtn:disabled { background: var(--secondary); color: var(--muted-foreground);
     opacity: 1; cursor: default; box-shadow: none; }
   /* The panels' own buttons, the mockup's 24px. */
@@ -1016,16 +963,6 @@
      150.1 of the artwork's 303 (0.4955), the label's 0.72 x 12px = 8.64px,
      and 8.64 / 0.4955 = 17.4, so 17.5px. */
   .home-perso img { display: block; height: 17.5px; width: auto; }
-  /* The production edition's: the logo alone heads the sidebar, as wide as
-     the box and 41px tall (mockup m6-home, owner, 2026-10-23). */
-  .home-side .home-perso.big { padding: 9.5px 6px; }
-  .home-perso.big img { height: 22px; }
-  /* ...and on Perso's dark, the wordmark alone with white letters, 170px wide
-     from the sidebar's left edge, no box round it: the header of Perso's own
-     workspace (owner, 2026-10-27). */
-  :root[data-edition="production"] .home-gh { background: none; border: none; padding: 6px 0 4px; }
-  :root[data-edition="production"] .home-side .home-perso { justify-content: flex-start; padding: 0; background: none; }
-  :root[data-edition="production"] .home-perso img { width: 170px; height: auto; content: url(/perso-dubbing-white.svg); }
   .home-grp { color: var(--muted-foreground); font-size: 11px; font-weight: 500; margin: 10px 0 -4px; }
   .home-sep { height: 1px; background: var(--border); margin: 12px 0 0; flex: none; }
   .home-grow { flex: 1; }
@@ -1061,6 +998,8 @@
   .home-banner.drag-over .home-banner-title:not(.home-banner-title-drop) { display: none; }
   .home-banner.drag-over .home-banner-title-drop { display: inline; }
   .home-banner-sub { font-size: 12px; margin-top: -6px; color: rgba(255, 255, 255, 0.8); }
+  /* Which files, close under the line that asks for one. */
+  .home-banner-formats { font-size: 11px; margin-top: -9px; color: rgba(255, 255, 255, 0.65); }
   /* The link field, inside the banner (user, 2026-09-30): it is the selling
      point, not an afterthought below it. stopPropagation on click keeps it
      from also opening the file picker the banner itself opens on click. */
@@ -1156,6 +1095,8 @@
   .proj-thumb { position: relative; width: 124px; height: 124px; border-radius: var(--radius-sm);
     overflow: hidden; background: var(--thumb-bg); }
   .proj-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* An audio draft's tile: bars of sound in the timeline's waveform colour. */
+  .proj-wave { display: grid; place-items: center; color: var(--waveform); }
   .proj-chip { position: absolute; left: 5px; top: 4px; font-size: 10px; padding: 0 4px;
     border-radius: 3px; background: rgba(0,0,0,0.65); color: #fff; }
   .proj-chip-run { background: var(--primary); }
@@ -1926,8 +1867,51 @@
     display: inline-flex; align-items: center; justify-content: center;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
   .video-bigplay[hidden] { display: none; }
-  /* No video in the panel: no play sign over nothing, and the foot's play is off. */
-  .video-wrap:has(> video:not([src])) .video-bigplay { display: none; }
+  /* No video in the panel: no play sign over nothing, and the foot's play is off.
+     Asked of the player alone: the element beside it is a brought-in video's
+     picture, empty on every other project. */
+  .video-wrap:has(> #doneVideo:not([src])) .video-bigplay { display: none; }
+  /* An audio project (the body's "audio-project", ui/src/app.mjs): the box
+     has no picture, only the sound sign and the word in its middle. The
+     <video> still plays the sound and is still what the subtitles are placed
+     on, so with no picture to size it, it takes the whole box. Nothing is
+     "stopped on a frame", so there is no play sign over it either. */
+  .video-audio { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
+    font-size: 12px; color: var(--muted-foreground); }
+  body.audio-project .video-audio { display: flex; }
+  body.audio-project :is(.video-wrap, .running-video) video { width: 100%; height: 100%; }
+  body.audio-project .video-bigplay { display: none; }
+  /* A finished audio project takes a video (ui/src/joinPlayer.mjs). Until one
+     is in, the way to bring it sits under the sound sign and the word, the
+     two centred together, with what went wrong on a line below. */
+  .video-bring { position: absolute; left: 50%; top: 50%; transform: translate(-50%, 14px);
+    display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .video-bring[hidden] { display: none; }
+  .video-wrap:has(> .video-bring:not([hidden])) .video-audio { transform: translate(-50%, calc(-50% - 19px)); }
+  .video-bring-row { display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    font-size: 11px; color: var(--muted-foreground); }
+  .video-bring-row .btn { height: 26px; padding: 0 12px; font-size: 11px; font-weight: 500; }
+  .video-bring-note { font-size: 11px; color: var(--muted-foreground); text-align: center; }
+  .video-bring-note:empty { display: none; }
+  /* With a video in (the body's "joined-video", ui/src/app.mjs): its picture
+     has an element of its own, sized as any project's video is. The sound
+     goes on playing from #doneVideo, which takes no room. The box is a
+     picture again, so the sign and the row go and the play sign comes back. */
+  #joinVideo { display: none; }
+  body.joined-video #joinVideo { display: block; width: auto; height: auto; }
+  body.joined-video #doneVideo { position: absolute; width: 0; height: 0; }
+  body.joined-video .video-audio { display: none; }
+  /* With a video in, the box keeps only the line (bringing another in, a
+     refusal, a picture this browser cannot show). It lies on the picture, so
+     it sits at the top, clear of the play sign and of the subtitles at the
+     foot, on the badge the play sign wears: grey letters were lost on a
+     bright picture (Windows test, 2026-11-14). */
+  body.joined-video .video-bring-row { display: none; }
+  body.joined-video .video-bring { top: 10px; transform: translateX(-50%); width: max-content; max-width: 90%; }
+  body.joined-video .video-bring-note { padding: 5px 10px; border-radius: 6px; font-size: 12px;
+    background: var(--thumb-badge); color: var(--thumb-foreground); }
+  body.joined-video .video-bigplay:not([hidden]) { display: inline-flex; }
   /* The row under the picture: the small play button and the clock. The big
      button in the middle of the picture stays -- it is the "this is stopped"
      sign. This one is the control you reach for without covering the video. */
@@ -1940,6 +1924,7 @@
     padding: 0; background: none; cursor: pointer; color: var(--icon);
     display: grid; place-items: center; }
   .video-fs:hover { background: var(--secondary); }
+  .video-fs:disabled { opacity: 0.4; cursor: default; background: none; }
   .video-wrap:fullscreen { background: #000; }
   .video-play { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 6px;
     border: 0; background: none; color: var(--icon); cursor: pointer; padding: 0;
@@ -2042,6 +2027,10 @@
        two first, then four more before they come round again. */
     --tl-s1: #f2af48; --tl-s2: #b191ea; --tl-s3: #5fc3d6;
     --tl-s4: #e88aa8; --tl-s5: #8cc56b; --tl-s6: #7aacf6; }
+  /* A video brought into an audio project adds its lane, 55px and the 6px
+     gap, so the strip is that much taller there (the strip's "tl-joined",
+     ui/src/timeline.mjs, which adds the same to a height the grip remembered). */
+  .timeline.tl-joined { height: clamp(301px, 100vh - 499px, 355px); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
 
@@ -2185,6 +2174,50 @@
   .tl-cut { cursor: pointer; }
   .tl-cut .tl-film { height: 55px; }
   .tl-cut.sel { outline: 2px solid #fff; outline-offset: -1px; z-index: 1; }
+  /* A video brought into an audio project (ui/src/timeline.mjs joinLanesHtml):
+     its picture's lane is a draft's film strip alone, over the sound's lane,
+     and its name carries the quiet way to swap the video at its right end. */
+  .tl-name-join, .tl-lane-join, .tl-lane-join .tl-vclip, .tl-lane-join .tl-seam { height: 55px; }
+  /* The picked clip of its two lanes: the draft's white ring is lost on a
+     bright film strip, so 2px of the primary colour go round it (the ring
+     covers the shadow's first pixel). */
+  .tl-jclip.sel { box-shadow: 0 0 0 3px var(--primary); }
+  .tl-swap { margin-left: auto; margin-right: 8px; padding: 0; border: 0; background: none;
+    font: inherit; color: var(--muted-foreground); cursor: pointer; white-space: nowrap;
+    text-decoration: underline; text-underline-offset: 2px; }
+  .tl-swap:hover { color: var(--foreground); }
+  /* The audio speed, at the right of the Audio lane's name where the lane
+     above has Change the video (owner, 2026-11-14): a small button that says
+     the speed, and its menu of the steps hung under it from its right edge.
+     The menu lies over the names below, on a layer of its own because the
+     Captions name is one when its eye is off. The step playing is on the
+     pill colour and shows its tick; every step carries one. */
+  .tl-spd { position: relative; margin-left: auto; margin-right: 8px; }
+  .tl-spd-btn, .tl-spd-menu button { display: flex; align-items: center; border: 0;
+    font: inherit; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap;
+    color: var(--foreground); cursor: pointer; }
+  .tl-spd-btn { gap: 4px; height: 20px; padding: 0 4px 0 7px; border-radius: 5px;
+    background: var(--secondary); box-shadow: 0 0 0 1px var(--divider); }
+  .tl-spd-btn:hover { background: color-mix(in srgb, var(--foreground) 12%, var(--secondary)); }
+  .tl-name .tl-spd .lu { padding: 0; color: inherit; }
+  .tl-spd-btn .lu { opacity: 0.7; }
+  .tl-spd-menu { position: absolute; top: calc(100% + 3px); right: 0; z-index: 6; width: 78px; padding: 3px;
+    display: flex; flex-direction: column; background: var(--head-bg); border: 1px solid var(--divider);
+    border-radius: 7px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35); }
+  .tl-spd-menu[hidden] { display: none; }
+  .tl-spd-menu button { justify-content: space-between; flex: none; height: 19px; padding: 0 7px;
+    border-radius: 4px; background: none; }
+  .tl-spd-menu button:hover, .tl-spd-menu button[aria-checked="true"] { background: var(--secondary); }
+  .tl-spd-menu .lu { stroke-width: 2.6; visibility: hidden; }
+  .tl-spd-menu [aria-checked="true"] .lu { visibility: visible; }
+  /* Its head: the pill that says which lane is longer. */
+  .tl-pill { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 20px;
+    margin-left: 12px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .tl-pill.warn { color: var(--timeline-short); background: color-mix(in srgb, var(--timeline-short) 16%, transparent); }
+  .tl-pill.ok { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+  .tl-pill .lu { stroke-width: 2.6; }
+  /* Its tip is a sentence or two: wrapped, hung from its left edge. */
+  .tl-pill[data-tip]::after { white-space: normal; width: 260px; left: 0; transform: none; }
   /* Two adjacent clips show near-identical video frames, so the couple of
      pixels between them (left dark, the same as the space around the strip)
      used to be too faint to read as a cut. A thin accent-coloured line fills
@@ -2445,7 +2478,7 @@
   .help-item b { display: block; margin-bottom: 2px; }
   .help-item p { margin: 0; line-height: 1.45; }
   .help-where { color: var(--muted-foreground); font-size: 11px; margin-top: 2px; }
-  /* Customer support's Service inquiry (ui/src/feedbackSheet.mjs): the fields
+  /* Send feedback's Service inquiry (ui/src/feedbackSheet.mjs): the fields
      one under another, Details a box of a few lines dressed like the inputs. */
   #feedbackOverlay .field + .field { margin-top: 12px; }
   #feedbackOverlay textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; padding: 7px 9px;
@@ -2520,13 +2553,6 @@
   .set-panel input:focus, .set-panel select:focus { border-color: var(--primary); }
   .set-panel .settings-hint, .set-panel .job-notice, .set-panel .settings-link { margin-top: 0; font-size: 11px; }
   .set-panel .settings-hint:empty { display: none; }
-  /* Privacy's job logs: what goes, where, what never goes and why, a sentence
-     a line, with a little air between sentences. Five lines tall in Korean and
-     seven in English, the row keeps its label beside the switch rather than
-     halfway down the words. */
-  #reportsHint > span { display: block; }
-  #reportsHint > span + span { margin-top: 3px; }
-  .set-row:has(> .set-ctl > #reportsHint) { align-items: start; }
   .set-panel .settings-link { font-weight: 500; color: var(--primary-ink); }
   .set-panel .about-brand .settings-link { font-size: 11.5px; }
   .set-panel .btn { height: 24px; border: 0; border-radius: 6px; background: var(--secondary);
@@ -2747,6 +2773,14 @@
   .project-right > .form-error, .project-right > .project-saved { flex: none; }
   .project-thumb { flex: none; min-height: 0; height: 180px; border-radius: 6px; }
   .project-thumb video { width: 100%; height: 100%; max-height: none; }
+  /* Audio files alone have no picture: the finished screen's sound sign and
+     word, in the middle of the box (the box's "audio", ui/src/newProject.mjs).
+     Its own class, so an audio project open behind the dialog does not put
+     the sign over a video's picture. */
+  .project-audio { display: none; position: absolute; inset: 0; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px;
+    font-size: 12px; color: var(--muted-foreground); pointer-events: none; }
+  .project-thumb.audio .project-audio { display: flex; }
   .project-dur { right: 6px; bottom: 5px; padding: 0 4px; border-radius: 3px; font-size: 10px; }
   .project-dur:empty { display: none; }
   .project-replace { left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; text-decoration: none; }
@@ -2795,7 +2829,7 @@
     border: 1px solid transparent; border-radius: 5px; background-color: var(--secondary); font-size: 11.5px; }
   .opt-row > select:focus, .opt-row > input:focus { border-color: var(--primary); }
   /* Processing: Local model | Perso API, two halves in a dropdown's place
-     (owner, 2026-10-22) -- the export dialog's MP3 / WAV segment, as wide as
+     (owner, 2026-10-22) -- the export dialog's sound format segment, as wide as
      the dropdowns under it. The choice itself is #dubModeSelect, hidden. */
   .opt-row > .mode-seg { grid-column: 2; grid-row: 1; display: flex; height: 24px; padding: 2px; box-sizing: border-box;
     border-radius: 5px; background: var(--secondary); }
@@ -2899,14 +2933,17 @@
   .export-where .erase-link { font-size: inherit; }
   .export-where .export-links { white-space: nowrap; }
   /* === export === */
-  /* Audio only's MP3 / WAV switch, at the right of its row (mockup
+  /* Audio only's format switch (MP3, WAV, FLAC, M4A), at the right of its row (mockup
      export-ratio 1): the Captions tab's segment, lit in the primary colour. */
   .export-seg { margin-left: auto; display: inline-flex; background: var(--secondary);
     border-radius: var(--radius-sm); padding: 2px; }
-  .export-seg [data-fmt] { border-radius: 5px; padding: 3px 8px; font-size: var(--font-label);
+  .export-seg [data-fmt] { border-radius: 5px; padding: 3px 6px; font-size: var(--font-label);
     color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
   .export-seg [data-fmt].on { background: var(--primary); color: var(--primary-foreground); }
   .export-list a .export-seg + .export-state { margin-left: 0; }
+  /* A line said under a row (the subtitle file's times after the audio lane
+     is cut): quiet, the size of a group's heading. */
+  .export-list .export-note { margin: -2px 12px 0; font-size: 11px; color: var(--muted-foreground); }
   /* The "?" beside Voice and Background: what each file is, in the same tip
      the timeline's tools show ([data-tip] above), hung from the "?"'s left
      edge and wrapped at 180px: the dialog is narrow and clips what leaves
@@ -2992,48 +3029,5 @@
   .np-window { width: min(520px, 92vw); }
   #newProjError { margin-top: 10px; }
 
-  /* ---------------- Perso sign-in (production edition) ---------------- */
-  /* The whole window, over everything (ui/src/signIn.mjs), measured off the
-     mockup (2026-10-25): a 36px strip that moves the window, then one centred
-     column -- the logo, a 240px-wide pair of 40px buttons, short grey lines. */
-  .signin { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column;
-    background: var(--desk); color: var(--foreground); }
-  .signin-bar { height: 36px; flex: none; -webkit-app-region: drag; }
-  .signin-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 0 24px; }
-  .signin-logo { width: 96px; height: 96px; border-radius: 22px; margin: 0 0 18px; }
-  .signin-logo.sm { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 16px; }
-  .signin-name { font-size: 24px; font-weight: 600; letter-spacing: .01em; margin: 0 0 34px; }
-  .signin h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
-  .signin p { margin: 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
-  .signin-acct { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
-  .signin-acct:empty { display: none; }
-  .signin .signin-btn { height: 40px; min-width: 240px; padding: 0 24px; border-radius: 8px; font-size: 15px; }
-  .signin .btn-secondary.signin-btn { font-weight: 500; }
-  .signin-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
-  .signin-hint { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
-  .signin-hint.danger { color: var(--destructive); }
-  .signin-hint:empty { display: none; }
-  .signin-link { margin-top: 18px; padding: 0; border: none; background: none; font: inherit; font-size: 13px;
-    color: var(--primary-ink); cursor: pointer; }
-  .signin-prog { position: relative; width: 240px; height: 4px; margin: 22px 0 0; border-radius: 2px;
-    background: var(--secondary); overflow: hidden; }
-  .signin-prog b { position: absolute; left: 0; top: 0; width: 38%; height: 100%; border-radius: 2px;
-    background: var(--primary); animation: signin-wait 1.4s ease-in-out infinite alternate; }
-  @keyframes signin-wait { from { transform: translateX(0); } to { transform: translateX(163px); } }
-  @media (prefers-reduced-motion: reduce) { .signin-prog b { animation: none; transform: translateX(60px); } }
   /* A link dressed as a button (the Recharge credits buttons) wears no underline. */
   a.btn, a.btn:hover { text-decoration: none; }
-  /* Home: the signed-in account under the brand (production edition). */
-  .home-account { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 0; border: none; background: none;
-    font-size: 12px; color: var(--muted-foreground); max-width: 100%; }
-  .home-account[hidden] { display: none; }
-  .home-account:hover .home-account-name { color: var(--foreground); }
-  .home-account-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #34c77b; }
-  .home-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Settings > Account and keys: the account's e-mail, in full and wrapped
-     anywhere when it is long, and its key chip, on one line beside it. */
-  .acct-mail { font-size: 11.5px; color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
-  .acct-chip { font-size: 11px; white-space: nowrap; }
-  /* The account row stands first once the key row above it hides: no line over it. */
-  #persoKeyRow[hidden] + .set-row { border-top: none; }

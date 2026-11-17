@@ -7,7 +7,6 @@ the Dub Agent's set_default is in force for the very next dub, no restart.
 One table below names every stage, its kit.env key, its choices and its
 fallback; the screen, the API and the agent's tools all read it.
 """
-import os
 from typing import Dict, Optional
 
 from app import config
@@ -19,7 +18,9 @@ from app.settings_env import current_value, write_values
 # A None fallback means "computed": see _fallback below. The translators are
 # the ones app/engines_status.py's TRANSLATORS offers, in its order.
 STAGES = {
-    "dub_mode": ("DUB_MODE", ("local", "perso"), None),
+    # This computer, key or no key: a local dub needs no key
+    # (owner, 2026-10-12).
+    "dub_mode": ("DUB_MODE", ("local", "perso"), "local"),
     # "local" is Demucs and "roformer" Mel-Band RoFormer, both on this
     # computer; the screen lists each with its own download state.
     "separation": ("SEP_ENGINE", ("local", "roformer", "perso"), None),
@@ -29,10 +30,7 @@ STAGES = {
     "stt": ("STT_ENGINE", ("local", "perso"), "local"),
     "translator": ("TRANSLATE_ENGINE", tuple(t.name for t in TRANSLATORS.values() if t.offered), None),
     "voice_quality": ("VOICE_QUALITY", ("fast", "high"), "fast"),
-    # OmniVoice only in the open-source edition: its weights are licensed for
-    # non-commercial use, and the production edition is part of a paid service
-    # (owner, 2026-11-04). The desktop shell passes the edition.
-    "voice": ("TTS_ENGINE", ("qwen3",) if os.environ.get("PERSODUB_EDITION") == "production" else ("qwen3", "omnivoice"), "qwen3"),
+    "voice": ("TTS_ENGINE", ("qwen3", "omnivoice"), "qwen3"),
 }
 
 # What the voice engine's best-of-N count is for each quality word (the same
@@ -55,14 +53,6 @@ def _roformer_installed() -> bool:
 
 
 def _fallback(stage: str) -> str:
-    if stage == "dub_mode":
-        # One build, two defaults. The production edition, the company's
-        # build, dubs on Perso, key or no key: without one, Start says to save
-        # a key first (app/api/dub.py), which is how a new user is led to get
-        # one (owner, 2026-10-07). The open-source edition, and a plain server
-        # run, dub on this computer, which needs no key (owner, 2026-10-12).
-        # The desktop shell passes the edition (desktop/src/orchestrator.js).
-        return "perso" if os.environ.get("PERSODUB_EDITION") == "production" else "local"
     if stage == "translator":
         # ChatGPT for a new install; a machine that already has the local
         # Hunyuan model keeps translating locally after the update, so no

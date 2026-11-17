@@ -58,7 +58,9 @@ from app.api._shared import (
     check_ranges_fit,
     check_trim,
     cut_to_kept_parts,
+    dub_media,
     parse_ranges,
+    same_media,
     script_work_dir,
     work_dir_of,
 )
@@ -478,6 +480,7 @@ def dub_job_redub(jid: str):
               # in the same project.
               "source_lang": job.get("source_lang"),
               **_same_project(job),
+              **same_media(job),
               # ...and made with the same engines, so its finished
               # screen says what the job it came from said.
               **engines}
@@ -543,9 +546,11 @@ def dub_job_again(jid: str):
     # job that stopped before its cut still holds the whole video.
     pending = job.get("trim_pending") or job.get("ranges_pending")
     held = downloads_api.download_store.add_file(
-        state.WORKSPACE, title, downloads_api.seconds_of(source), lambda dest: shutil.copyfile(source, dest))
+        state.WORKSPACE, title, downloads_api.seconds_of(source), lambda dest: shutil.copyfile(source, dest),
+        media=job.get("media"))
     return {"download_id": held.id, "title": held.title, "duration_sec": held.duration_sec,
-            "ranges": separate_launch.parts_of(job) if pending else None}
+            "ranges": separate_launch.parts_of(job) if pending else None,
+            **same_media(job)}
 
 
 # A stopped job that can pick up where it left off: failed, cancelled, or cut
@@ -718,6 +723,7 @@ def dub_job_retry(jid: str):
               **({"ranges": kept, "ranges_pending": False} if kept else {}),
               "source_lang": job.get("source_lang"),
               **_same_project(job),
+              **same_media(job),
               # The video is a local copy now, whatever the first job was
               # started from -- there is no link to download again.
               "from_link": False,
@@ -1000,20 +1006,31 @@ def _start_preflight(plan: _StartPlan, has_script: bool) -> Optional[str]:
     return warning
 
 
-def _start_folder(plan: _StartPlan) -> str:
+def _start_folder(plan: _StartPlan):
     """The job's folder, with the video in it when the video is here already:
     the free-space floor, the folder, the held or uploaded file copied in and
     cut, then the whole job judged by the room left. A link is fetched, and
-    cut, inside the job. Returns the folder."""
+    cut, inside the job. Returns the folder and what the file in it is:
+    "audio" for sound with no picture, None for a video (a link is one)."""
     check_space(state.WORKSPACE)
     work = job_dir(plan.title, plan.language_code)
     video_path = os.path.join(work, "input.mp4")
+    kind = plan.held.media if plan.held else None
     if plan.held:
         shutil.copyfile(plan.held.path, video_path)
     if plan.has_upload or plan.held:
         if plan.has_upload:
             with open(video_path, "wb") as f:
                 shutil.copyfileobj(plan.video.file, f)
+            # An upload sent straight here (the Dub Agent's queue_dub) is
+            # asked what it is now that its bytes are here; a held file was
+            # asked when it was dropped (app/api/downloads.py). Before the
+            # cut, which needs a real file.
+            try:
+                kind = dub_media(video_path)
+            except HTTPException:
+                shutil.rmtree(work, ignore_errors=True)
+                raise
         # Cut before the job starts, so everything downstream (and the running
         # screen's original) only ever sees the part the user picked. A link
         # has nothing to cut yet -- that happens after the download, in the job.
@@ -1034,7 +1051,7 @@ def _start_folder(plan: _StartPlan) -> str:
             if short:
                 shutil.rmtree(work, ignore_errors=True)
                 raise HTTPException(507, short)
-    return work
+    return work, kind
 
 
 def _reuse_stems(plan: _StartPlan, work: str):
@@ -1066,9 +1083,10 @@ def _save_subtitles(work: str, srt, source_srt) -> None:
             shutil.copyfileobj(source_srt.file, f)
 
 
-def _start_record(plan: _StartPlan, work: str, separation: Optional[str]) -> dict:
+def _start_record(plan: _StartPlan, work: str, separation: Optional[str], kind: Optional[str]) -> dict:
     """The new job's record. `separation` is the engine it names for that
     stage: the one that made reused stems (_reuse_stems), else the plan's.
+    `kind` is what _start_folder found the file to be.
 
     The download filenames are built from this; the job record is the only
     place the result endpoints can read the user's choice back from.
@@ -1111,6 +1129,10 @@ def _start_record(plan: _StartPlan, work: str, separation: Optional[str]) -> dic
         # draft on (dub_job_again) rather than the cut copy in its folder.
         **({"download_id": plan.held.id} if plan.held else {}),
         **({"project_id": plan.project_id} if plan.project_id else {}),
+        # "audio" when the file has sound and no picture: the screens draw
+        # the project without a video, and the result is dubbed.wav
+        # (app/dub_launch.py). A video says nothing (app/jobs.py).
+        **({"media": kind} if kind else {}),
         # The link itself and the speaker count: what the boot
         # re-arm needs to rebuild this job's work should it wait
         # out an app restart in the queue.
@@ -1191,6 +1213,11 @@ def dub_start(
 ):
     """Start dubbing by uploading a video (+ optional subtitles) from the screen.
 
+    video = a video, or a WAV, FLAC, MP3 or M4A audio file; the file decides,
+    not its name, and anything else is refused with 422 (app/api/_shared.py
+    dub_media). An audio file makes an audio project: its record says media
+    "audio" and its result is the dubbed sound alone.
+
     srt = translated subtitles (used as is) / source_srt = source subtitles (translate
     this instead of transcribing — with a script, transcription errors & omissions vanish).
     n_takes = how many candidate takes per line the best-of-N selection
@@ -1230,7 +1257,7 @@ def dub_start(
             trim_end=trim_end, ranges=ranges, tts_engine=tts_engine, stems_from=stems_from,
             project_id=project_id, perso_model=perso_model)
         warning = _start_preflight(plan, has_script=srt is not None)
-        work = _start_folder(plan)
+        work, kind = _start_folder(plan)
     except HTTPException as e:
         # What the screen sent, under the names a job's Inputs line uses
         # (app/jobs.py): settings only -- no title, file name, path or link.
@@ -1244,7 +1271,7 @@ def dub_start(
         raise
     reused, separation = _reuse_stems(plan, work)
     _save_subtitles(work, srt, source_srt)
-    fields = _start_record(plan, work, separation)
+    fields = _start_record(plan, work, separation, kind)
     return _start_launch(plan, work, fields, reused, warning)
 
 

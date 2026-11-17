@@ -17,13 +17,14 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License" /></a>
   <a href="docs/requirements.md"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform" /></a>
+  <a href="docs/languages.md"><img src="https://img.shields.io/badge/languages-646-orange.svg" alt="Languages" /></a>
   <a href="https://github.com/stronghamjji/PersoDub/releases"><img src="https://img.shields.io/github/v/release/stronghamjji/PersoDub?color=green" alt="Version" /></a>
   <a href="docs/privacy.md"><img src="https://img.shields.io/badge/privacy-footage%20can%20stay%20local-brightgreen.svg" alt="Privacy" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.1.0-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.1.0.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.2.0-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.2.0.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
 <p align="center">
@@ -31,7 +32,7 @@
        alt="A finished job, English into Spanish: the script line by line on the left, each line with its original and its translation and how well the dubbed line fits its slot; the player on the right showing the dubbed video; and a timeline underneath." />
 </p>
 
-<p align="center">Drop in a video. Clone the voice. Dub it. Fix any line. Post it to Shorts, TikTok or Reels.<br>Open-source, in each speaker's own voice, on your own computer: the ElevenLabs, HeyGen and Rask AI alternative you run yourself.</p>
+<p align="center">Drop in a video. Clone the voice. Dub it into any of 646 languages. Fix any line. Post it to Shorts, TikTok or Reels.<br>Open-source, in each speaker's own voice, on your own computer: the ElevenLabs, HeyGen and Rask AI alternative you run yourself.</p>
 
 ---
 
@@ -45,7 +46,7 @@
 
 ### Dub
 
-One video in, one dubbed video out, in each speaker's own voice. 646 languages on your computer with OmniVoice, 100+ with the Perso API, depending on the dubbing model.
+One video in, one dubbed video out, in each speaker's own voice. 646 languages on your computer with OmniVoice, 100+ with the Perso API, depending on the dubbing model. Audio works too: WAV, FLAC, MP3 or M4A in, dubbed audio out, and you can bring in a video for it afterwards.
 
 </td>
 <td width="50%" valign="top">
@@ -113,8 +114,8 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 
 ## Get started
 
-1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.1.0-arm64.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.1.0.exe).
-2. Drop in a video, or paste a link.
+1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.2.0-arm64.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.2.0.exe).
+2. Drop in a video or an audio file, or paste a link.
 3. Pick a language and press **Start dubbing**.
 
 **Updating from 0.8.4 or earlier?** Download and install the latest version once. From 0.8.5 on, PersoDub updates itself.
@@ -164,6 +165,7 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 
 ## Why PersoDub
 
+- **646 languages, on your own computer.** Pick OmniVoice as the voice model (an optional download, for personal, non-commercial use) and dub into every language it speaks. Out of the box it is ten; with the Perso API, 100+.
 - **Your footage can stay yours.** PersoDub dubs on this computer by default. With Whisper and a local translator, none of it leaves. The Perso API, if you choose it, uploads the video.
 - **Fix any line after the dub.** Change the words, the speaker or the voice of one line and only that line is remade. Cut on the timeline, or tell the Dub Agent what to fix.
 - **Fits the words to the time.** Other tools speed the audio up. On this computer, PersoDub fits the translation instead, and speeds a line up (10% at most) only when it would run into the next one.

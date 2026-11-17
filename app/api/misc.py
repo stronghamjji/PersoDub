@@ -137,14 +137,6 @@ def perso_logo():
                         media_type="image/svg+xml")
 
 
-@router.get("/perso-dubbing-white.svg")
-def perso_logo_white():
-    """The same wordmark with white letters (static/perso-dubbing-white.svg),
-    on the production edition's dark sidebar."""
-    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "perso-dubbing-white.svg"),
-                        media_type="image/svg+xml")
-
-
 @router.get("/mascot.png")
 def mascot():
     """The mascot (static/mascot.png), at the head of the Home screen's Dub Agent card."""
@@ -171,9 +163,8 @@ def font(name: str):
 def api_languages():
     """The languages each dubbing path offers: local = the Qwen3-TTS voice
     engine's ten, omnivoice = the OmniVoice voice engine's 646 (a local dub
-    made with it; the ten again where this edition has no OmniVoice),
-    perso = Perso's list (asked daily, kept locally). One id per entry is
-    what the New project dropdown sends as language_code."""
+    made with it), perso = Perso's list (asked daily, kept locally). One id
+    per entry is what the New project dropdown sends as language_code."""
     return {"local": languages.local_languages("qwen3"), "omnivoice": languages.local_languages("omnivoice"),
             "perso": languages.perso_languages()}
 
@@ -187,17 +178,12 @@ def whats_new():
     # "notes_<code>" ("notes_ko") in each language the app speaks. The notes
     # follow the engine's language (app/i18n.py), so a Korean computer reads
     # them in Korean; a language with no notes of its own gets the English.
-    # Where the editions' words differ, the file has the production edition's
-    # own lists too ("notes_production", "notes_production_ko"), which that
-    # app file reads (PERSODUB_BUILD_EDITION, the page's edition).
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "whats_new.json")
     notes = []
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        own = os.environ.get("PERSODUB_BUILD_EDITION") == "production" and data.get("notes_production")
-        key = "notes_production" if own else "notes"
-        notes = [str(n) for n in (data.get(f"{key}_{current_language()}") or data.get(key) or [])]
+        notes = [str(n) for n in (data.get(f"notes_{current_language()}") or data.get("notes") or [])]
     except Exception as e:
         # No notes is fine; the popup simply never shows. Worth a line all the
         # same -- the file ships with the release, so an unreadable one is a

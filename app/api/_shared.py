@@ -83,6 +83,41 @@ def ratio_errors_as_http():
         raise HTTPException(status_code=503, detail=str(e))
 
 
+def dub_media(path: str) -> Optional[str]:
+    """What a file that has just come in for dubbing is, as the held record
+    and the job's record say it: "audio" for sound with no picture, None for a
+    video.
+
+    The file itself decides, here and nowhere else; its name is not read. Any
+    file with a picture is a video, as it always was: the Dub Agent sends
+    .mkv, .webm and .avi too (app/mcp_server.py list_videos). Sound with no
+    picture has to be in one of the four containers a dubbing takes (WAV,
+    FLAC, MP3, M4A: media.audio_format). Anything else, an .ogg or made-up
+    bytes, is refused with 422 and one sentence.
+    """
+    kind = media.media_kind(path)
+    if kind is None or (kind == "audio" and media.audio_format(path) is None):
+        raise HTTPException(422, t("Only MP4 or MOV video and WAV, FLAC, MP3 or M4A audio can be used."))
+    return "audio" if kind == "audio" else None
+
+
+def same_media(job: dict) -> dict:
+    """A job made again from an audio project is an audio project, and so is
+    the draft opened on it again: its input.mp4 is copied as it is, and what
+    that file is was settled when it first came in. A video's record says
+    nothing, and neither does its copy."""
+    return {"media": job["media"]} if job.get("media") else {}
+
+
+def require_video(path: str) -> None:
+    """Refuse a file that has no picture. For the tools that work on one:
+    Erase subtitles, Captions, laying subtitles on a file and cutting a clip,
+    which a dubbing's audio files must not reach. The caller clears whatever
+    it copied first."""
+    if media.media_kind(path) != "video":
+        raise HTTPException(422, t("This tool takes video files only."))
+
+
 def check_trim(trim_start, trim_end) -> None:
     """A trim is both ends or neither, and long enough to be a video at all.
 

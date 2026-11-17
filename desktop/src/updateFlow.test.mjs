@@ -3,9 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createUpdater } from "./updateFlow.js";
 
-// ...and tells the page, whose update window would otherwise say the app is
-// up to date: nothing was checked (ui/src/updateWindow.mjs check-off).
-test("a production build checks Perso's folder for updates, not the public releases", async (t) => {
+test("a packaged app checks the public repository's releases for updates", async (t) => {
   // A test feed in this shell's environment (updater.js resolveFeed) would
   // replace the build's own address.
   const was = process.env.PERSODUB_UPDATE_URL;
@@ -19,9 +17,9 @@ test("a production build checks Perso's folder for updates, not the public relea
     ? { default: { autoUpdater } }
     : { session: { fromPartition: () => ({ webRequest: web }) }, net: { fetch: async () => ({ ok: false }) } });
   const { startUpdater } = createUpdater({ app: { isPackaged: true, getVersion: () => "0.9.1" }, ctx: {}, shellLog: (l) => lines.push(l),
-                                           edition: "production", load });
+                                           load });
   await startUpdater({ isDestroyed: () => false, webContents: { send: () => {} } }, null);
-  assert.deepEqual(feeds, [{ provider: "generic", url: "https://portal-static.perso.ai/public/app/desktop/" }]);
+  assert.deepEqual(feeds, [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }]);
   assert.ok(!lines.some((l) => l.startsWith("UPDATE CHECK OFF")), lines.join("\n"));
 });
 
@@ -42,7 +40,7 @@ test("an update found is recorded with its version", async (t) => {
     : { session: { fromPartition: () => ({ webRequest: web }) }, net: { fetch: async () => ({ ok: false }) } });
   const steps = [];
   const { startUpdater } = createUpdater({ app: { isPackaged: true, getVersion: () => "0.9.1" }, ctx: {}, shellLog: () => {},
-                                           edition: "opensource", load, track: (name, props) => steps.push([name, props]) });
+                                           load, track: (name, props) => steps.push([name, props]) });
   await startUpdater({ isDestroyed: () => false, webContents: { send: () => {} } }, null);
   assert.deepEqual(steps, [["update_available", { version: "0.9.2" }]]);
 });

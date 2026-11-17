@@ -285,6 +285,27 @@ def test_list_videos_shows_only_videos_newest_first(tmp_path):
     assert out["videos"][0]["size_mb"] >= 0
 
 
+def test_list_videos_lists_the_audio_a_dubbing_takes_and_no_other(tmp_path, monkeypatch):
+    # A dubbing takes WAV, FLAC, MP3 and M4A audio as well as video, so the
+    # folder's list is where "the interview in Downloads" becomes a path.
+    for name in ("talk.wav", "talk.flac", "TALK.MP3", "talk.m4a", "talk.ogg", "clip.mp4"):
+        (tmp_path / name).write_bytes(b"x")
+    names = sorted(v["name"] for v in mcp_server.list_videos(str(tmp_path))["videos"])
+    assert names == ["TALK.MP3", "clip.mp4", "talk.flac", "talk.m4a", "talk.wav"]
+    # The four are the backend's own list (app/media.py), not a copy kept here.
+    monkeypatch.setitem(mcp_server.media.AUDIO_CODECS, "ogg", [])
+    assert "talk.ogg" in [v["name"] for v in mcp_server.list_videos(str(tmp_path))["videos"]]
+
+
+def test_the_tools_that_take_audio_say_so_and_name_each_format():
+    # The assistant knows a tool by its description alone: one that says
+    # "video" only is not offered a song.
+    for tool in (mcp_server.list_videos, mcp_server.queue_dub):
+        assert "audio" in tool.__doc__
+        for fmt in mcp_server.media.AUDIO_CODECS:
+            assert fmt.upper() in tool.__doc__, "%s does not name %s" % (tool.__name__, fmt)
+
+
 def test_list_videos_names_a_folder_that_is_not_there(tmp_path):
     with pytest.raises(ValueError, match="폴더|folder|No such"):
         mcp_server.list_videos(str(tmp_path / "없는폴더"))

@@ -5,6 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initNewProjectWindow } from "./newProjectWindow.mjs";
+import { dubFormatProblem } from "./mediaKind.mjs";
 
 function makeEl(id) {
   const classes = new Set();
@@ -19,7 +20,7 @@ function makeEl(id) {
   };
 }
 
-function harness({ emptyImport } = {}) {
+function harness({ emptyImport, checkFile = (f) => (/\.(mp4|mov)$/i.test(f.name) ? null : "Please choose an MP4 or MOV video file.") } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -33,7 +34,7 @@ function harness({ emptyImport } = {}) {
   const got = { files: [], links: [], calls: [] };
   initNewProjectWindow({
     $,
-    checkFile: (f) => (/\.(mp4|mov)$/i.test(f.name) ? null : "Please choose an MP4 or MOV video file."),
+    checkFile,
     leaveJob: () => got.calls.push("leaveJob"),
     openDraft: (s) => {
       got.calls.push("openDraft");
@@ -54,7 +55,7 @@ test("New project opens the window over the screen, with the link field inside t
   t.after(h.restore);
   const block = h.$("newProjImportSlot").outerHTML;
   assert.match(block, /^<div class="import-block" id="newProjDrop" tabindex="0">/);
-  assert.match(block, />Import<\/div><div class="import-sub">Drop videos here, or click to choose<\/div><label class="import-link" id="newProjLinkRow">/);
+  assert.match(block, />Import<\/div><div class="import-sub">Drop videos or audio here, or click to choose<\/div><label class="import-link" id="newProjLinkRow">/);
   assert.match(block, /id="newProjLinkInput"/);
   assert.ok(!/import-or|>Add</.test(block), "no or line and no Add button");
   h.$("newProjError").textContent = "old";
@@ -113,6 +114,27 @@ test("a dropped batch is handed on whole; one bad file keeps the window open and
   h.$("newProjDrop").fire("drop", ev({ dataTransfer: { files: [{ name: "a.mp4" }, { name: "b.mov" }] } }));
   assert.deepEqual(h.got.files, [["a.mp4", "b.mov"]]);
   assert.equal(h.isOpen(), false);
+});
+
+// With the page's own rule for dubbing (ui/src/mediaKind.mjs), which is what
+// ui/src/app.mjs hands this window.
+test("audio files come in as videos do: several to the dialog, one to its draft, another kind stops the drop", (t) => {
+  const h = harness({ checkFile: dubFormatProblem });
+  t.after(h.restore);
+  h.$("newProjectBtn").fire("click");
+  h.$("newProjDrop").fire("drop", ev({ dataTransfer: { files: [{ name: "a.wav" }, { name: "b.ogg" }] } }));
+  assert.deepEqual(h.got.calls, []);
+  assert.equal(h.$("newProjError").textContent, "b.ogg: Only MP4 or MOV video and WAV, FLAC, MP3 or M4A audio can be used.");
+  assert.equal(h.isOpen(), true);
+  const batch = [{ name: "a.wav" }, { name: "b.flac" }, { name: "c.MP3" }, { name: "d.m4a" }, { name: "e.mp4" }];
+  h.$("newProjDrop").fire("drop", ev({ dataTransfer: { files: batch } }));
+  assert.deepEqual(h.got.calls, ["leaveJob", "openNewProject"]);
+  assert.deepEqual(h.got.files, [["a.wav", "b.flac", "c.MP3", "d.m4a", "e.mp4"]]);
+  assert.equal(h.isOpen(), false);
+  h.$("newProjectBtn").fire("click");
+  h.$("newProjDrop").fire("drop", ev({ dataTransfer: { files: [{ name: "talk.m4a" }] } }));
+  assert.deepEqual(h.got.calls, ["leaveJob", "openNewProject", "leaveJob", "openDraft"]);
+  assert.deepEqual(h.got.files[1], ["talk.m4a"]);
 });
 
 test("the link field keeps its clicks from the drop area, and Enter hands the link on", (t) => {

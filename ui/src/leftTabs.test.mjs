@@ -14,6 +14,7 @@ function harness() {
       dataset: { tab },
       setAttribute: (k, v) => { attrs[k] = v; },
       getAttribute: (k) => attrs[k],
+      removeAttribute: (k) => { delete attrs[k]; },
       classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)), contains: (c) => classes.has(c) },
       closest: function () { return this; },
     };
@@ -80,4 +81,49 @@ test("Save video saves the project's video and leaves the row as it was", () => 
   assert.equal(h.saved.length, 1);
   assert.equal(h.api.current(), "captions");
   assert.deepEqual(h.lit(), ["captions"]);
+});
+
+// An audio project has no picture for Erase, Burn in subtitles or Save video.
+test("a locked tab is dimmed, says why on its tip and does nothing when pressed", () => {
+  const h = harness();
+  const tab = (name) => h.buttons.find((b) => b.dataset.tab === name);
+  h.api.lock(["erase", "captions", "save"], "Only for projects with a video.");
+  for (const name of ["erase", "captions", "save"]) {
+    assert.equal(tab(name).getAttribute("aria-disabled"), "true", name);
+    assert.equal(tab(name).title, "Only for projects with a video.", name);
+    // Not `disabled`: a disabled button shows no tip.
+    assert.equal(tab(name).disabled, false, name);
+    h.press(name);
+  }
+  assert.equal(tab("dubbing").getAttribute("aria-disabled"), undefined);
+  assert.equal(tab("dubbing").title, "");
+  assert.equal(h.erased.length, 0);
+  assert.equal(h.saved.length, 0);
+  assert.equal(h.api.current(), "dubbing");
+  assert.equal(h.els.tabCaptions.hidden, true);
+});
+
+test("unlocked, the tabs open again and their tips are gone", () => {
+  const h = harness();
+  h.api.lock(["erase", "captions", "save"], "Only for projects with a video.");
+  h.api.lock([]);
+  for (const b of h.buttons) {
+    assert.equal(b.getAttribute("aria-disabled"), undefined, b.dataset.tab);
+    assert.equal(b.title, "", b.dataset.tab);
+  }
+  h.press("captions");
+  h.press("erase");
+  h.press("save");
+  assert.equal(h.api.current(), "captions");
+  assert.equal(h.erased.length, 1);
+  assert.equal(h.saved.length, 1);
+});
+
+test("a tab on show when it is locked gives way to Dubbing", () => {
+  const h = harness();
+  h.press("captions");
+  h.api.lock(["erase", "captions", "save"], "Only for projects with a video.");
+  assert.equal(h.api.current(), "dubbing");
+  assert.equal(h.els.tabDubbing.hidden, false);
+  assert.equal(h.els.tabCaptions.hidden, true);
 });

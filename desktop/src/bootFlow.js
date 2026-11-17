@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, kitFolderProblem, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
 import { checkKit, readKitVersion } from "./engineCheck.js";
 import { startEngines } from "./orchestrator.js";
-import { rememberedEdition, kitEdition, editionLine, findPayloadDir, displayName } from "./edition.js";
+import { EDITION, PRODUCT, findPayloadDir } from "./edition.js";
 import { buildSteps, bytesStillNeeded, bootSteps, packInstallingMarker, PACKS } from "./installSpec.js";
 import { runInstall, openSteps, downloadInterrupted } from "./installer.js";
 import { classifyError } from "./analytics.js";
@@ -63,7 +63,7 @@ export function startStopText(message) {
  * ctx.engines and ctx.bootedKitDir once the engines are up. `track` records
  * the install and the error screens as steps (events.js track).
  */
-export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, sendReport, flushReports, startUpdater,
+export function createBoot({ app, ctx, appDir, shellLog, countUsage, sendReport, flushReports, startUpdater,
                              track = () => {} }) {
   // The old-path kit boot walked away from (issue #6); the cleanup step
   // removes it once its models are carried over.
@@ -95,7 +95,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
   // through a translated copy in userData when there is one (screenText.js).
   function showScreen(win, name, query = {}) {
     const file = screenFile(join(appDir, "screens"), name, join(app.getPath("userData"), "screens"));
-    return win.loadFile(file, { query: { v: app.getVersion(), name: displayName(edition), ...query } });
+    return win.loadFile(file, { query: { v: app.getVersion(), name: PRODUCT.name, ...query } });
   }
 
   // One line of memory figures in shell.log (memoryLine.js): once the engines
@@ -243,7 +243,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       shellLog(`INSTALL START (${mode}): ${toRun.length} steps, ${(stillNeeded / 1024 ** 3).toFixed(1)} GB to download`);
       track("kit_install_started", { mode, gigabytes: Math.round(stillNeeded / 1024 ** 3) });
       shellLog(`Inputs: ${JSON.stringify({
-        kitDir: cfg.kitDir, edition, appVersion: app.getVersion(), kitVersion,
+        kitDir: cfg.kitDir, edition: EDITION, appVersion: app.getVersion(), kitVersion,
         platform: `${process.platform}-${process.arch}`, steps: toRun.map((s) => s.id),
       })}`);
       // runInstall already reports which step failed; without keeping it the
@@ -302,22 +302,13 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
   // The engines, then the app page in the window.
   async function startApp(win, cfg) {
     await showScreen(win, "loading.html");
-    // The kit's own edition, remembered from its first run (src/edition.js),
-    // and where this run's came from: the kit's memory, or this app file.
-    const kept = kitEdition(cfg.kitDir);
-    const runEdition = rememberedEdition(cfg.kitDir, edition);
-    const how = kept ? "kept in kit.env"
-      : kitEdition(cfg.kitDir) ? "first run of this kit, written to kit.env" : "no kit.env to keep it in";
-    shellLog(editionLine(runEdition, edition, how));
     try {
       const from = Date.now();
       ctx.engines = await startEngines(cfg, {
         logDir: join(app.getPath("userData"), "logs"),
         appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
         locale: systemLocale(),
-        edition: runEdition, // where a dub runs by default (app/setup.py)
-        buildEdition: edition, // what the events switch defaults by (app/settings_env.py)
-        appName: displayName(edition), // the name its sentences call the app (app/i18n.py)
+        appName: PRODUCT.name, // the name its sentences call the app (app/i18n.py)
         preferredBackendPort: readRememberedPorts().backend,
         log: shellLog,
         onExit: logMemory,

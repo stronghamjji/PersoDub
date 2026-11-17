@@ -6,7 +6,8 @@
 // Never typed or pressed here: an API key field, a sign-in (ChatGPT, Claude,
 // Codex), a model's Delete confirm, anything that opens an outside site.
 // Notes never carry a key, an account address or a home folder's name.
-import { isClosed, isOpen, isProductionHelp, onHome, pressable, shown, sleep, textOf, Skip } from "../lib/cdp.mjs";
+import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf, Skip } from "../lib/cdp.mjs";
+import { needQuietKit } from "../lib/kit.mjs";
 
 export const area = "settings";
 
@@ -15,20 +16,20 @@ const TAB_WORDS = ["API keys", "Models", "Storage", "Privacy", "About"];
 const GROUPS = ["Audio separation", "Speech-to-text", "Translation", "Text-to-speech", "Required programs"];
 // Names that stay English in the Korean page: products, engines, units, keys, the 12 looks.
 const ALLOW = ["PersoDub", "Perso API", "Perso", "ChatGPT", "Claude", "Codex", "Whisper", "Demucs", "Mel-Band RoFormer",
-  "Qwen3-TTS", "Hunyuan", "Gemma 3", "Gemini", "Ollama", "Python", "PyTorch", "GitHub", "API", "MP3", "WAV", "YouTube",
+  "Qwen3-TTS", "OmniVoice", "Hunyuan", "Gemma 3", "Gemini", "Ollama", "Python", "PyTorch", "GitHub", "API", "MP3", "WAV", "YouTube",
   "TikTok", "Reels", "Fast mode", "High quality", "Linnet", "Oriole", "Wren", "Finch", "Nightingale", "GB", "MB", "OK",
   "A-", "A+", "Esc", "Clean", "Bold Punch", "Sticker", "Neon Yellow", "Soft Card", "Rainbow", "Broadcast", "Streaming",
   "Lower Bar", "Neon", "Black Box", "White Box",
   // Two more names, beyond the list the sweep was asked for: the agent's and the copyright holder's.
   "Dub Agent", "ESTsoft corp.",
-  // The Perso workspace picker's label (kept English in Korean too), and the production edition's name.
-  "Workspace", "PersoDubbing",
+  // The Perso workspace picker's label (kept English in Korean too).
+  "Workspace",
   // The assistants' model names, shown as their makers write them ("Claude · Opus").
   "Opus", "Sonnet", "Haiku", "Fable", "GPT"];
 // What the person put there, not the app's words: project and file names, the
-// workspace list, the conversation, the signed-in account.
+// workspace list, the conversation.
 const USER_TEXT = [".proj-name", ".proj-rename", "#topbarTitle", "#topbarForwardName", "#queueRows", "#persoSpaceSelect",
-  "#assistantLog", "#assistantState", "#draftPartCard", "#homeBannerLink", "#homeAccount", "#persoAccountMail", "#signInAccount"].join(",");
+  "#assistantLog", "#assistantState", "#draftPartCard", "#homeBannerLink"].join(",");
 
 // An address or a home folder never goes into a note.
 const clean = (s) => String(s).replace(/[^\s@"'<>]+@[^\s@"'<>]+\.[A-Za-z]{2,}/g, "<account>").replace(/\/Users\/[^/\s]+/g, "~")
@@ -202,9 +203,7 @@ export const steps = [
       await app.waitFor("the Settings dialog", 10000, isOpen, "#settingsOverlay");
       const names = await app.inPage(() => [...document.querySelectorAll("#settingsTabs .set-tab")].map((b) => b.textContent.trim()));
       const want = TAB_WORDS.map((k) => app.tr(k));
-      // The production edition names the first tab "Account and keys" (ui/src/settingsDialog.mjs paintAccount).
-      const production = [app.tr("Account and keys"), ...want.slice(1)];
-      if (names.join("|") !== want.join("|") && names.join("|") !== production.join("|")) {
+      if (names.join("|") !== want.join("|")) {
         throw new Error(`the tabs read ${names.join(", ")}, not ${want.join(", ")}`);
       }
       return `opened from the gear; ${names.length} tabs: ${names.join(", ")}`;
@@ -357,44 +356,53 @@ export const steps = [
         + `used space on this tab: ${gb || "none, the GB in use is on the Models header"}`;
     } },
 
-  { name: "Privacy: two switches, their words, usage counts round trip", looks: ["#reportsHint"],
+  { name: "Privacy: one switch and its words", looks: ["#shareHint"],
     async run(app) {
       await showTab(app, "privacy");
       const got = await app.inPage(() => {
-        const spans = [...document.querySelectorAll("#reportsHint > span")];
-        return { labels: ["analyticsToggle", "reportsToggle"].map((id) => document.querySelector(`label[for=${id}]`).textContent.trim()),
-                 on: ["#analyticsToggle", "#reportsToggle"].map((s) => document.querySelector(s).checked),
-                 lines: spans.map((s) => ({ text: s.textContent.trim(), top: s.getBoundingClientRect().top, bottom: s.getBoundingClientRect().bottom })) };
+        const panel = document.querySelector("#settingsPanel-privacy");
+        return { rows: panel.querySelectorAll(".set-row").length,
+                 switches: [...panel.querySelectorAll("input")].map((i) => i.id),
+                 label: document.querySelector("label[for=shareToggle]").textContent.trim(),
+                 on: document.querySelector("#shareToggle").checked,
+                 hint: document.querySelector("#shareHint").textContent.trim() };
       });
-      const lines = got.lines;
-      // One sentence since 0.9.1 (owner, 2026-10-27): what goes, what never goes and why.
-      if (lines.length !== 1) throw new Error(`the job-logs text has ${lines.length} sentences, not 1`);
-      const all = lines.map((l) => l.text).join(" ");
-      const need = app.page.lang === "ko" ? ["작업 기록만 보내", `${app.page.name} 개선을 도와요`] : ["job records", `Helps improve ${app.page.name}`];
-      const absent = need.filter((w) => !all.includes(w));
-      if (absent.length) throw new Error(`the job-logs text lacks ${absent.join(", ")}`);
-      const was = (await app.api("/api/settings")).analytics_off;
+      // One switch and one sentence (owner, 2026-11-12); it was three of each.
+      if (got.rows !== 1 || got.switches.join() !== "shareToggle") throw new Error(`Privacy has ${got.rows} rows and the switches ${got.switches.join(", ")}`);
+      const label = app.tr("Share usage data"), hint = app.tr("It helps improve the {app} project.");
+      if (got.label !== label) throw new Error(`the label reads "${got.label}", not "${label}"`);
+      if (got.hint !== hint) throw new Error(`the hint reads "${clean(got.hint)}", not "${hint}"`);
+      const saved = (await app.api("/api/settings")).share_usage;
+      if (got.on !== saved) throw new Error(`the switch is ${got.on ? "on" : "off"} and GET /api/settings share_usage is ${saved}`);
+      return `${got.label} ${got.on ? "on" : "off"}, as GET /api/settings says; "${clean(got.hint)}"`;
+    } },
+
+  // The switch is turned, so first: nothing a test turns on may be sent (lib/kit.mjs).
+  { name: "Privacy: share_usage round trip through Save", looks: ["#settingsPanel-privacy"],
+    async run(app) {
+      needQuietKit();
+      await showTab(app, "privacy");
+      const was = (await app.api("/api/settings")).share_usage;
       let flipped;
       try {
-        await app.click("#analyticsToggle");
+        await app.click("#shareToggle");
         await saveOne(app);
         await app.waitFor("Save to close the dialog", 10000, isClosed, "#settingsOverlay");
-        flipped = (await app.api("/api/settings")).analytics_off;
-        if (flipped !== !was) throw new Error(`after Save, GET /api/settings analytics_off is ${flipped}, not ${!was}`);
+        flipped = (await app.api("/api/settings")).share_usage;
+        if (flipped !== !was) throw new Error(`after Save, GET /api/settings share_usage is ${flipped}, not ${!was}`);
         await showTab(app, "privacy");
-        if ((await app.inPage(() => document.querySelector("#analyticsToggle").checked)) !== was) throw new Error("the reopened switch does not show the saved value");
-        await app.click("#analyticsToggle");
+        if ((await app.inPage(() => document.querySelector("#shareToggle").checked)) !== flipped) throw new Error("the reopened switch does not show the saved value");
+        await app.click("#shareToggle");
         await saveOne(app);
         await app.waitFor("Save to close the dialog", 10000, isClosed, "#settingsOverlay");
       } finally {
-        if ((await app.api("/api/settings")).analytics_off !== was) {
-          await app.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ analytics_off: was }) });
+        if ((await app.api("/api/settings")).share_usage !== was) {
+          await app.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ share_usage: was }) });
         }
       }
-      const now = (await app.api("/api/settings")).analytics_off;
-      if (now !== was) throw new Error(`analytics_off did not come back to ${was}`);
-      const sw = (i) => `${got.labels[i]} ${got.on[i] ? "on" : "off"}`;
-      return `${sw(0)}, ${sw(1)}; job-logs text one sentence; usage counts switch → Save → analytics_off ${was}→${flipped}→${now}`;
+      const now = (await app.api("/api/settings")).share_usage;
+      if (now !== was) throw new Error(`share_usage did not come back to ${was}`);
+      return `switch → Save → share_usage ${was}→${flipped}→${now}`;
     } },
 
   { name: "About: version, What's new, Escape", looks: ["#aboutVersion", "#wnTitle"],
@@ -471,27 +479,19 @@ export const steps = [
       await app.waitFor("the Dubbing tab", 10000, shown, "#homeBtn");
       await app.click("#homeBtn");
       await app.waitFor("Home", 10000, onHome);
-      // The production edition's Help is Perso's desktop app page in the browser, not the dialog.
-      let help;
-      if (app.production) {
-        const urls = await app.opened(() => app.click("#homeHelp"));
-        if (urls.length !== 1 || !isProductionHelp(urls[0])) throw new Error(`Help opened ${urls.join(", ") || "nothing"}`);
-        help = "Perso's desktop app page in the browser";
-      } else {
-        await app.click("#homeHelp");
-        await app.waitFor("Help", 5000, isOpen, "#helpOverlay");
-        help = `"${await app.inPage(textOf, "#helpTitle")}"`;
-        await app.key("Escape");
-        await app.waitFor("Escape to close Help", 5000, isClosed, "#helpOverlay");
-        help += ", Escape closed it";
-      }
+      await app.click("#homeHelp");
+      await app.waitFor("Help", 5000, isOpen, "#helpOverlay");
+      let help = `"${await app.inPage(textOf, "#helpTitle")}"`;
+      await app.key("Escape");
+      await app.waitFor("Escape to close Help", 5000, isClosed, "#helpOverlay");
+      help += ", Escape closed it";
       await app.click("#homeWhatsNew");
       await app.waitFor("the update window", 5000, isOpen, "#updateOverlay");
       const upd = await app.inPage(() => `${document.querySelector("#updTitle").textContent.trim()} · ${document.querySelectorAll("#updNotes li").length} notes`);
       await app.key("Escape");
       await app.waitFor("Escape to close the update window", 5000, isClosed, "#updateOverlay");
       return `${app.tr("Home")} (from the Dubbing tab, ${1 + (ctx.state.homeBtn || 0)} presses) back to Home; [${words[0]}] → ${help}; `
-        + `[${words[2]}] → "${upd}", Escape closed it; [${words[1]}] pressable, not pressed (${app.production ? "opens the inquiry form" : "opens GitHub in the browser"})`;
+        + `[${words[2]}] → "${upd}", Escape closed it; [${words[1]}] pressable, not pressed (opens GitHub in the browser)`;
     } },
 
   { name: "Dub Agent panel: who is signed in", looks: ["#homeAgentOpen"],

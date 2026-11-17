@@ -17,7 +17,7 @@ import worker from "../../relay/report-worker.js";
 const DEVICE = "0123456789abcdef0123456789abcdef";
 const settle = () => new Promise((r) => setTimeout(r, 30));
 
-// The production edition, packaged, on a computer of its own: its kit and
+// The app, packaged, on a computer of its own: its kit and
 // userData in a temp folder, the relay's handler in place of the network.
 function theApp(t) {
   const base = mkdtempSync(join(tmpdir(), "odroad-"));
@@ -44,8 +44,8 @@ function theApp(t) {
     await Promise.all(waits);
     return res;
   };
-  const ctx = { bootedKitDir: kitDir, userId: "" };
-  const shell = createEvents({ app, ctx, edition: "production", shellLog: () => {}, fetchImpl: relayFetch });
+  const ctx = { bootedKitDir: kitDir };
+  const shell = createEvents({ app, ctx, shellLog: () => {}, fetchImpl: relayFetch });
 
   // The page in the shell's window: its document, its screen and its clock.
   const listeners = {};
@@ -66,8 +66,7 @@ test("a person's way reaches GA4 and Amplitude under each step's own name, with 
   const a = theApp(t);
   await settle();
   a.shell.track("app_launch", { first_run: true });
-  a.press("signInBtn");
-  a.shell.track("sign_in_started", { method: "window" });
+  a.press("settingsBtn");
   a.listeners.drop({ dataTransfer: { files: [{ name: "My wedding.mp4", type: "video/mp4" }] } });
   record("dub_started", { mode: "local", target_lang: "ko", minutes: 3, speakers: 0, title: "My wedding" });
   a.go("running");
@@ -75,30 +74,30 @@ test("a person's way reaches GA4 and Amplitude under each step's own name, with 
   await a.shell.quit({ signed_in: false });
 
   const ga = a.sent("www.google-analytics.com");
-  assert.deepEqual(ga.map((e) => e.name), ["app_launch", "sign_in_started", "app_screen", "button_press", "media_added",
+  assert.deepEqual(ga.map((e) => e.name), ["app_launch", "app_screen", "button_press", "media_added",
     "dub_started", "app_screen", "app_quit"]);
   const byName = Object.fromEntries(ga.map((e) => [e.name, e.params]));
   assert.equal(byName.app_launch.first_run, "true");
   assert.equal(byName.dub_started.target_lang, "ko");
   assert.equal(byName.dub_started.title, undefined);
-  assert.equal(ga.find((e) => e.name === "button_press").params.button, "sign_in_btn");
+  assert.equal(ga.find((e) => e.name === "button_press").params.button, "settings_btn");
   assert.equal(ga.at(-2).params.previous_screen, "home");
   assert.deepEqual([byName.app_quit.last_screen, byName.app_quit.signed_in], ["running", "false"]);
-  assert.equal(byName.app_quit.edition, "production");
+  assert.equal(byName.app_quit.edition, "opensource");
 
   const amp = a.sent("api2.amplitude.com");
   assert.deepEqual(amp.map((e) => e.event_type), ga.map((e) => e.name), "the same names in both");
   assert.deepEqual(amp.find((e) => e.event_type === "media_added").event_properties,
-    { source: "drop", kind: "video", screen: "home", edition: "production" });
+    { source: "drop", kind: "video", screen: "home", edition: "opensource" });
   assert.ok(!JSON.stringify([ga, amp]).includes("wedding"), "no file name or title on the way");
 });
 
-test("the production edition with recording switched off sends nothing, the quit included", async (t) => {
+test("with recording switched off the app sends nothing, the quit included", async (t) => {
   const a = theApp(t);
   writeFileSync(join(a.ctx.bootedKitDir, "kit.env"), "PERSODUB_EVENTS=0\n");
   await settle();
   a.shell.track("app_launch", { first_run: true });
-  a.press("signInBtn");
+  a.press("settingsBtn");
   record("dub_started", { mode: "local" });
   await a.handOver();
   await a.shell.quit({ signed_in: false });

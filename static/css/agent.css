@@ -144,8 +144,21 @@
   .chip.chip-done .chip-mark { color: var(--agent-ok); }
   /* Something has to move the moment a message is sent. A turn takes seconds,
      and a strip that sits blank that whole time reads as broken -- it did. */
-  .thinking { align-self: flex-start; display: flex; align-items: center; gap: 5px;
-    padding: 4px 2px; }
+  .thinking { align-self: flex-start; display: flex; align-items: flex-end; gap: 9px;
+    padding: 4px 2px; position: relative; }
+  /* The mascot is the one thinking: it stands on the row's floor and its
+     thought, the bubble with the dots in it, floats up and to its right. */
+  .thinking img { height: 22px; width: auto; display: block; flex: none;
+    image-rendering: pixelated; animation: think-bob 1.6s ease-in-out infinite; }
+  .think-bubble { position: relative; display: flex; align-items: center; gap: 5px;
+    margin-bottom: 14px; padding: 8px 11px; border-radius: 12px;
+    background: var(--agent-box); }
+  /* The two puffs a thought trails, from the bubble's lower left down to the
+     mascot, smaller as they near it. */
+  .think-bubble::before, .think-bubble::after { content: ""; position: absolute;
+    border-radius: 50%; background: var(--agent-box); }
+  .think-bubble::before { width: 7px; height: 7px; left: -2px; bottom: -5px; }
+  .think-bubble::after { width: 4px; height: 4px; left: -6px; bottom: -8px; }
   .thinking i { width: 6px; height: 6px; border-radius: 50%;
     background: var(--agent-muted); display: inline-block;
     animation: think 1.3s ease-in-out infinite; }
@@ -153,8 +166,22 @@
   .thinking i:nth-child(3) { animation-delay: .36s; }
   @keyframes think { 0%, 60%, 100% { opacity: .28; transform: translateY(0); }
                      30% { opacity: 1; transform: translateY(-3px); } }
-  @media (prefers-reduced-motion: reduce) { .thinking i { animation: none; opacity: .6; } }
-  .thinking span { font-size: var(--font-label); color: var(--agent-muted); margin-left: 4px; }
+  @keyframes think-bob { 0%, 100% { transform: translateY(0); }
+                         50% { transform: translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .thinking i { animation: none; opacity: .6; }
+    .thinking img { animation: none; }
+  }
+  /* The picture says "thinking" to the eye, so the word is kept for a screen
+     reader only: clipped to nothing rather than display: none, which would
+     take it from the reader as well. Once the turn runs slow the word changes
+     and is drawn: as tall as the bubble and raised with it, so it sits level
+     with the dots. */
+  .thinking span { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; }
+  .thinking.thinking-slow span { position: static; width: auto; height: auto;
+    overflow: visible; clip-path: none; line-height: 22px; margin-bottom: 14px;
+    font-size: var(--font-label); color: var(--agent-muted); }
   /* "You stopped this one." Under whatever the turn had already said, muted:
      it is a fact about the answer, not a failure and not part of the answer. */
   .assistant-stopped { align-self: stretch; font-size: var(--font-label);

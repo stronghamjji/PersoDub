@@ -12,6 +12,7 @@ seam the work builder reaches the pipeline through.
 """
 import json
 import os
+import shutil
 import subprocess
 import time
 
@@ -453,3 +454,70 @@ def test_a_separation_that_waited_out_a_restart_is_put_back_in_line(separated, t
     back = _wait(job["id"])
     assert back["status"] == "done" and back["done"] is True
     assert len(separated) == 2
+
+
+# --- a file that is sound only -------------------------------------------------
+
+@pytest.fixture
+def split(monkeypatch):
+    """A stand-in separation that needs no ffmpeg: the two files, a few bytes each."""
+    def fake(video_path, work, engine, *, cancel_check, on_notice, log, seconds=None, title=None):
+        paths = [os.path.join(work, name) for name in ("vocals.wav", "background.wav")]
+        for p in paths:
+            with open(p, "wb") as f:
+                f.write(b"RIFF")
+        return paths[0], paths[1], None, "RoFormer"
+
+    monkeypatch.setattr(separate_launch, "separate", fake)
+
+
+def _held_audio():
+    """An audio file as the New project screen holds one (app/api/downloads.py)."""
+    return downloads_api.download_store.add_file(
+        state.WORKSPACE, "Talk", 10, lambda dest: open(dest, "wb").write(b"RIFF-bytes"), media="audio")
+
+
+def test_a_separation_of_an_audio_draft_is_an_audio_project_and_so_is_its_second_try(split):
+    """The screens draw an audio project without a video, and read which it is
+    off the record: a separation's as a dubbing's."""
+    held = _held_audio()
+    job = _wait(client.post("/api/separate", data={"download_id": held.id}).json()["job_id"])
+    assert job["status"] == "done" and job["media"] == "audio"
+    listed = {j["id"]: j["media"] for j in client.get("/api/dub/jobs").json()["jobs"]}
+    assert listed[job["id"]] == "audio"
+    assert json.load(open(os.path.join(job["work_dir"], "job.json"), encoding="utf-8"))["media"] == "audio"
+    # Try again copies the file as it is, and what it is with it. The probe
+    # says "video" here (tests/conftest.py): the record is what is read.
+    again = _wait(client.post("/api/separate/%s/retry" % job["id"]).json()["job_id"])
+    assert again["id"] != job["id"] and again["media"] == "audio"
+
+
+def test_an_audio_file_sent_straight_to_a_separation_is_an_audio_project(split, monkeypatch):
+    monkeypatch.setattr(media, "media_kind", lambda path: "audio")
+    r = client.post("/api/separate", files={"video": ("talk.mp3", b"ID3", "audio/mpeg")})
+    assert r.status_code == 200, r.text
+    assert _wait(r.json()["job_id"])["media"] == "audio"
+
+
+def test_a_separation_of_a_video_says_nothing_about_its_media(split):
+    job = _wait(_start(project="clip").json()["job_id"])
+    assert job["status"] == "done" and job.get("media") is None
+    assert "media" not in client.post("/api/separate/%s/open" % job["id"]).json()
+
+
+def test_a_finished_audio_separation_reopens_as_an_audio_draft(split):
+    held = _held_audio()
+    job = _wait(client.post("/api/separate", data={"download_id": held.id}).json()["job_id"])
+    # The file it was made from is still held.
+    r = client.post("/api/separate/%s/open" % job["id"]).json()
+    assert r["download_id"] == held.id and r["media"] == "audio"
+    # And when it is not, the job's own copy is held, as the audio the record
+    # says it is.
+    shutil.rmtree(os.path.join(state.WORKSPACE, "downloads"))
+    downloads_api.download_store._items.clear()
+    r = client.post("/api/separate/%s/open" % job["id"]).json()
+    assert r["download_id"] != held.id and r["media"] == "audio"
+    assert client.get("/api/downloads/%s" % r["download_id"]).json()["media"] == "audio"
+    # Opened once more, that same copy comes back, still audio.
+    again = client.post("/api/separate/%s/open" % job["id"]).json()
+    assert again["download_id"] == r["download_id"] and again["media"] == "audio"

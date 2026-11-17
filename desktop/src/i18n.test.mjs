@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  LANGUAGES, localeLanguage, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t, setAppName } from "./i18n.js";
+  LANGUAGES, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t, setAppName } from "./i18n.js";
 import { screenKeys } from "./screenText.js";
 import { builderConfig } from "../electron-builder.js";
 
@@ -27,9 +27,11 @@ function kitWith(text) {
   return dir;
 }
 
-test("a Korean system locale is Korean, every other is English", () => {
-  for (const l of ["ko", "ko-KR", "KO-kr"]) assert.equal(localeLanguage(l), "ko", l);
-  for (const l of ["en-US", "en", "ja", "fr-FR", "", undefined]) assert.equal(localeLanguage(l), "en", String(l));
+test("a Korean system locale is Korean, every other is English", (ctx) => {
+  ctx.after(() => useLanguage({ osLocale: "en-US" }));
+  const system = (l) => { useLanguage({ osLocale: l }); return systemLocale(); };
+  for (const l of ["ko", "ko-KR", "KO-kr"]) assert.equal(system(l), "ko", l);
+  for (const l of ["en-US", "en", "ja", "fr-FR", "", null]) assert.equal(system(l), "en", String(l));
 });
 
 test("PERSODUB_LANG of en or ko wins; auto, nothing or nonsense is the computer's", () => {
@@ -128,17 +130,15 @@ test("every sentence the shell says is in the English table (once it has any)", 
 });
 
 test("the tables ship with the app", () => {
-  for (const edition of ["opensource", "production"]) {
-    assert.ok(builderConfig(edition).files.includes("i18n/**"), `desktop/electron-builder.js files leaves desktop/i18n out (${edition})`);
-  }
+  assert.ok(builderConfig().files.includes("i18n/**"), "desktop/electron-builder.js files leaves desktop/i18n out");
 });
 
-test("{app} in a sentence is the name the edition shows, PersoDub until it is set", () => {
+test("{app} in a sentence is the name the app was given, PersoDub until it is set", () => {
   setLanguage("en");
   setAppName(null);
   assert.equal(t("{app} could not start"), "PersoDub could not start");
-  setAppName("PersoDubbing");
-  assert.equal(t("Updating {app}"), "Updating PersoDubbing");
-  assert.equal(t("{app}: {what}", { what: "Installing" }), "PersoDubbing: Installing");
+  setAppName("OtherDub");
+  assert.equal(t("Updating {app}"), "Updating OtherDub");
+  assert.equal(t("{app}: {what}", { what: "Installing" }), "OtherDub: Installing");
   setAppName(null);
 });

@@ -255,7 +255,7 @@ def test_audio_only_saves_the_cleaned_videos_sound_under_the_plain_name(erased, 
     assert os.path.basename(r.json()["path"]) == "my clip.wav"
     assert calls[-1][calls[-1].index("-c:a") + 1] == "pcm_s16le" and calls[-1][-1] == r.json()["path"]
     assert client.post("/api/erase/%s/save" % jid,
-                       json={"dir": str(tmp_path), "audio": "flac"}).status_code == 422
+                       json={"dir": str(tmp_path), "audio": "ogg"}).status_code == 422
     monkeypatch.setattr(media, "has_audio", lambda p: False)
     assert client.post("/api/erase/%s/save" % jid,
                        json={"dir": str(tmp_path), "audio": "mp3"}).status_code == 422

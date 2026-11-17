@@ -44,7 +44,7 @@ def omnivoice_table() -> tuple:
 
 def voice_engine(voice: Optional[str] = None) -> str:
     """The voice engine a local dub is made with: the one named, or the app's
-    default (app/setup.py) when none is, or one this edition does not offer."""
+    default (app/setup.py) when none is, or one the app does not offer."""
     voice = (voice or "").strip().lower()
     return voice if voice in setup.STAGES["voice"][1] else setup.default_for("voice")
 

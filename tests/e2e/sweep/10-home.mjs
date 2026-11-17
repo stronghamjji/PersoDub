@@ -1,7 +1,7 @@
 // Home: the project grid, folding it, its search, What's new, Help, deleting a test
 // project from its card's menu, and a finished dub's card opening its screen.
 // Only a card named e2e-click-* or e2e-dub* is ever deleted.
-import { shown, pressable, isOpen, isClosed, onHome, textOf, isProductionHelp, Skip } from "../lib/cdp.mjs";
+import { shown, pressable, isOpen, isClosed, onHome, textOf, Skip } from "../lib/cdp.mjs";
 
 export const area = "home";
 
@@ -46,14 +46,8 @@ export const steps = [
         return { label: b.getAttribute("aria-label"), alt: img.alt, loaded: img.naturalWidth > 0, on: b.getClientRects().length > 0 };
       });
       if (!pill.on || !pill.loaded || pill.label !== "Perso Dubbing") throw new Error(`the Perso pill: ${JSON.stringify(pill)}`);
-      // The production edition has no repository button (ui/src/homeSidebar.mjs).
-      let gh = "no GitHub button";
-      if (app.production) {
-        if (await app.inPage(shown, "#homeGhName")) throw new Error("the production edition shows the GitHub button");
-      } else {
-        gh = await app.inPage(textOf, "#homeGhName");
-        if (gh !== app.tr("PersoDub on GitHub") || !(await app.inPage(pressable, "#homeGhName"))) throw new Error(`the GitHub button reads "${gh}"`);
-      }
+      const gh = await app.inPage(textOf, "#homeGhName");
+      if (gh !== app.tr("PersoDub on GitHub") || !(await app.inPage(pressable, "#homeGhName"))) throw new Error(`the GitHub button reads "${gh}"`);
       return `${n} cards; tool cards ${Object.values(tools).map((k) => app.tr(k)).join(", ")}; Perso pill "${pill.label}" with its wordmark; "${gh}"`;
     } },
 
@@ -119,10 +113,8 @@ export const steps = [
       const title = await app.inPage(textOf, "#homeWhatsNewTitle");
       await app.click("#homeWhatsNew");
       await app.waitFor("the update window", 5000, isOpen, "#updateOverlay");
-      // A production build with no update address names the version in the
-      // title alone, and no line under it (ui/src/updateWindow.mjs, check-off).
       const head = await app.waitFor("its version line", 5000, () => {
-        const v = document.querySelector("#updCurrent").textContent.trim() || document.querySelector("#updTitle").textContent.trim();
+        const v = document.querySelector("#updCurrent").textContent.trim();
         return /\d+\.\d+\.\d+/.test(v) ? { h: document.querySelector("#updHead").textContent.trim(), v, notes: document.querySelectorAll("#updNotes li").length } : null;
       });
       await app.shot("home-whats-new-open");
@@ -136,14 +128,6 @@ export const steps = [
       await toHome(app);
       const label = await app.inPage(textOf, "#homeHelp");
       if (label !== app.tr("Help")) throw new Error(`the Help button reads "${label}"`);
-      // The production edition's Help is Perso's desktop app page in the browser, not the dialog.
-      if (app.production) {
-        const urls = await app.opened(() => app.click("#homeHelp"));
-        if (urls.length !== 1 || !isProductionHelp(urls[0])) throw new Error(`Help opened ${urls.join(", ") || "nothing"}`);
-        if (await app.inPage(isOpen, "#helpOverlay")) throw new Error("the production Help opened the Help dialog too");
-        const at = new URL(urls[0]);
-        return `"${label}" opened ${at.origin}${at.pathname} with utm_content=help, not the Help dialog`;
-      }
       await app.click("#homeHelp");
       await app.waitFor("the Help dialog", 5000, isOpen, "#helpOverlay");
       const help = await app.inPage(() => ({ title: document.querySelector("#helpTitle").textContent.trim(),

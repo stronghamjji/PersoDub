@@ -15,6 +15,7 @@
 // Run with: node --test ui/src/timeline.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { initTimelineUi, TL_LABEL_PX, TL_PPS, fmtRuler, labelEvery } from "./timeline.mjs";
 import { getDraft, setDraft, clearDraft } from "./draft.mjs";
 import { modKey } from "./format.mjs";
@@ -42,6 +43,8 @@ function makeEl(id) {
     appendChild(kid) { this.children.push(kid); return kid; },
     remove() { this.removed = true; },
     setPointerCapture(pid) { this.captured.push(pid); },
+    scrollIntoView(how) { this.shown = how; },
+    focus() { this.focused = (this.focused || 0) + 1; },
     addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
     removeEventListener(ev, fn) {
       this.listeners[ev] = (this.listeners[ev] || []).filter((f) => f !== fn);
@@ -85,7 +88,7 @@ const WAVE = { rate: 25, duration: 10, peaks: Array.from({ length: 250 }, (_, i)
 
 /** A page, the calls the strip reaches out through, and the globals it reads. */
 function harness({ room = 600, innerHeight = 900, innerWidth = 1600,
-                   stored = {}, media = null, own = false } = {}) {
+                   stored = {}, media = null, own = false, join = null } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -166,6 +169,8 @@ function harness({ room = 600, innerHeight = 900, innerWidth = 1600,
     loadImage: async (url) => { log.fetched.push(url); return STRIP; },
     fetchJson: async (url) => { log.fetched.push(url); return WAVE; },
     ownSubtitles: () => own,
+    getJoin: () => (typeof join === "function" ? join() : join),
+    changeJoinVideo: () => { log.swapped = (log.swapped || 0) + 1; },
   });
   return { $, api, log, video, subStyle, box: $("timeline") };
 }
@@ -475,6 +480,42 @@ test("the video lane shows the file's name, then its film strip and waveform onc
   // Asked once, whatever is drawn after.
   h.api.redraw();
   assert.equal(h.log.fetched.length, 2);
+});
+
+// An audio project (ui/src/mediaKind.mjs) has sound and no frames.
+test("an audio project's first lane is named Audio and shows the waveform alone, with no film strip asked for", async (t) => {
+  const h = harness({ media: { kind: "job", id: "j1", name: "talk.wav", media: "audio" } });
+  t.after(h.log.restore);
+  h.api.renderTimeline(LINES, 10);
+  const names = h.box.innerHTML;
+  assert.ok(names.includes('<div class="tl-name tl-name-video">'), "the same lane, in the same place");
+  assert.ok(names.includes("<span>Audio</span>") && !names.includes("<span>Video</span>"));
+  // The lanes under it are a dubbing's as ever.
+  assert.ok(names.includes("<span>Original</span>") && names.includes("<span>Translated</span>") && names.includes("<span>Captions</span>"));
+  assert.deepEqual(h.log.fetched, ["/api/media/job/j1/waveform"]);
+  await settle();
+  const track = h.$("timelineTrack").innerHTML;
+  assert.ok(track.includes('<div class="tl-vcap">talk.wav<b>00:10</b></div>'));
+  assert.ok(!track.includes("tl-film") && !track.includes("filmstrip"));
+  assert.ok(track.includes('<div class="tl-wave"><svg viewBox="0 0 250 100" preserveAspectRatio="none"'));
+  assert.ok(track.includes('class="tl-lane tl-lane-caps"'), "the subtitle lane stays");
+  assert.deepEqual(h.log.fetched, ["/api/media/job/j1/waveform"]);
+});
+
+test("an audio draft's lane is named Audio too, and its clips are waveform alone", async (t) => {
+  clearDraft();
+  const h = harness({ room: 850 });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.$("timeline").offsetWidth = 1200;   // on show
+  setDraft({ ...DRAFT, name: "talk.wav", media: "audio" });
+  h.api.showDraft();
+  assert.ok(h.box.innerHTML.includes("<span>Audio</span>") && !h.box.innerHTML.includes("<span>Video</span>"));
+  await settle();
+  assert.deepEqual(h.log.fetched, [`/api/media/download/${DRAFT.downloadId}/waveform`]);
+  const track = h.$("timelineTrack").innerHTML;
+  assert.ok(track.includes('class="tl-vclip tl-cut') && !track.includes("tl-film"));
+  assert.ok(track.includes('<div class="tl-wave"><svg'));
 });
 
 // -- the toolbar's own controls ---------------------------------------------
@@ -857,7 +898,8 @@ test("before a video is imported, one row says what to do; an imported one is on
   h.api.showDraft();
   let html = h.box.innerHTML;
   const track = () => h.$("timelineTrack").innerHTML;
-  assert.ok(track().includes("Drop videos here"), "even before any video is imported");
+  // What is dropped here starts a dubbing, which takes audio too.
+  assert.ok(track().includes('<span>Drop videos or audio here</span>'), "even before any video is imported");
   assert.equal(h.box.classes.has("tl-draftmode"), true);
   for (const id of ["tlUndo", "tlRedo", "tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]) {
     assert.ok(html.includes(`id="${id}"`), id);
@@ -869,7 +911,7 @@ test("before a video is imported, one row says what to do; an imported one is on
   // No + and no drag onto the strip (mockup edit-flow): imported is on it.
   setDraft(DRAFT);
   html = h.box.innerHTML;
-  assert.ok(!track().includes("Drop videos here"));
+  assert.ok(!track().includes("Drop videos"));
   assert.ok(html.includes('<span>Video</span>'), "the Video lane alone");
   assert.ok(!html.includes('<span>Original</span>'));
   // One clip, the whole video: 770px, less the 2px that shows where clips meet.
@@ -1161,6 +1203,20 @@ test("while an erase runs the cuts are locked, but the playhead and playback are
   assert.equal(h.log.toggled, 1);
 });
 
+test("the empty row says what a drop on it takes: videos or audio for a dubbing, videos alone on the Erase tab", (t) => {
+  clearDraft();
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.showDraft();
+  const row = () => /<div class="tl-empty" id="tlDrop">.*?<span>(.*?)<\/span><\/div>/.exec(h.$("timelineTrack").innerHTML)[1];
+  assert.equal(row(), "Drop videos or audio here");
+  h.api.showErase({ strip: null, lane: null, locked: true });
+  assert.equal(row(), "Drop videos here");
+  h.api.showErase(null);
+  assert.equal(row(), "Drop videos or audio here");
+});
+
 test("an erase job's strip is its own video, and giving the strip back restores what was there", async (t) => {
   clearDraft();
   const h = harness();
@@ -1174,7 +1230,8 @@ test("an erase job's strip is its own video, and giving the strip back restores 
   setDraft(DRAFT);
   h.api.showErase({ strip: null, lane: null, locked: true });
   assert.ok(h.box.classes.has("tl-draftmode"));
-  assert.ok(h.$("timelineTrack").innerHTML.includes("Drop videos here"));
+  // Erase subtitles works on the picture: its row asks for videos alone.
+  assert.ok(h.$("timelineTrack").innerHTML.includes('<span>Drop videos here</span>'));
   assert.ok(!h.$("timelineTrack").innerHTML.includes("tl-vclip"));
   clearDraft();
   // A finished dub's lines arriving meanwhile wait for the strip to come back.
@@ -1184,7 +1241,7 @@ test("an erase job's strip is its own video, and giving the strip back restores 
                     locked: true, lane: { text: "Erased", cls: "ok", pct: 0 } });
   await settle();
   assert.ok(h.log.fetched.includes("/api/media/job/E1/filmstrip"));
-  assert.ok(!h.$("timelineTrack").innerHTML.includes("Drop videos here"));
+  assert.ok(!h.$("timelineTrack").innerHTML.includes("Drop videos"));
   // Its time is the strip's own: 3s of the video is 3s along.
   h.api.paintTimeline(3, 8, "clock");
   assert.equal(h.$("timelinePlayhead").style.left, `${(3 * TL_PPS).toFixed(1)}px`);
@@ -1204,7 +1261,7 @@ test("a press on a lane moves the playhead there before dubbing, and the click s
   assert.equal(press.prevented, undefined, "the click that follows is not stopped");
   assert.equal(h.log.painted, 1);
   // A tool pressed with the mouse does not keep the focus the space bar needs.
-  const down = evt({ ".tl-head button": {} });
+  const down = evt({ ".tl-head button, .tl-spd button": {} });
   h.box.fire("mousedown", down);
   assert.equal(down.prevented, true);
 });
@@ -1448,4 +1505,556 @@ test("a video with its own subtitles shows the video and captions lanes only, an
   for (const kept of ["Voice length", "<span>Original</span>", "<span>Translated</span>", "tl-lane-org", "tl-lane-dub"]) {
     assert.ok(dub.includes(kept), kept);
   }
+});
+
+// -- what every strip without a brought-in video draws, pinned -----------------
+// A video brought into an audio project adds lanes to the same closure that
+// draws a finished video job, a plain audio job, a draft and the Erase strip.
+// Those four are pinned whole -- the head, the names, the track, the playhead
+// and the tools' states -- to what they drew before the brought-in video's
+// lanes were added (timeline.pins.json). WRITE_PINS=1 writes the file afresh
+// from what is drawn now, for a change to one of them that is meant.
+const PINS_FILE = new URL("./timeline.pins.json", import.meta.url);
+const PINS = existsSync(PINS_FILE) ? JSON.parse(readFileSync(PINS_FILE, "utf8")) : {};
+const written = {};
+function pinned(name, h) {
+  const tools = Object.fromEntries(["tlUndo", "tlRedo", "tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]
+    .map((id) => [id, [h.$(id).disabled, h.$(id).dataset.tip ?? null]]));
+  // The shortcut key's name is the computer's (Cmd or Ctrl): pinned as "Mod",
+  // so the file reads the same wherever the tests run.
+  const anyKey = (html) => html.replaceAll(`${modKey()}+`, "Mod+");
+  const seen = { box: anyKey(h.box.innerHTML), track: anyKey(h.$("timelineTrack").innerHTML),
+                 head: h.$("timelinePlayhead").style.left ?? null, clock: h.$("timelineClock").textContent, tools };
+  if (process.env.WRITE_PINS) { written[name] = seen; return; }
+  assert.deepEqual(seen, PINS[name], name);
+}
+test.after(() => {
+  if (process.env.WRITE_PINS) writeFileSync(PINS_FILE, JSON.stringify({ ...PINS, ...written }, null, 1) + "\n");
+});
+
+test("a finished video job draws what it drew before a video could be brought into an audio project", async (t) => {
+  const h = harness({ media: { kind: "job", id: "j1", name: "cat-talk.mp4" } });
+  t.after(h.log.restore);
+  h.api.renderTimeline(LINES, 10);
+  pinned("video job, drawn", h);
+  await settle();
+  h.video.currentTime = 1.5;
+  h.api.paintTimeline(1.5, 10, "00:00:01.5 / 00:00:10.0");
+  pinned("video job, pictures in, moved", h);
+});
+
+test("a plain audio job draws what it drew before", async (t) => {
+  const h = harness({ media: { kind: "job", id: "j1", name: "talk.wav", media: "audio" } });
+  t.after(h.log.restore);
+  h.api.renderTimeline(LINES, 10);
+  await settle();
+  h.video.currentTime = 4.5;
+  h.api.paintTimeline(4.5, 10, "00:00:04.5 / 00:00:10.0");
+  pinned("audio job", h);
+});
+
+test("a draft draws what it drew before, cut and picked", async (t) => {
+  const h = drafting();
+  t.after(h.log.restore);
+  await settle();
+  h.video.currentTime = 3.4;
+  h.box.fire("click", evt({ "#tlSplit": {} }));
+  h.box.fire("click", evt({ ".tl-cut": { dataset: { i: "1" } } }));
+  h.api.paintTimeline(3.4, 10, "clock");
+  pinned("draft", h);
+});
+
+test("the Erase strip draws what it drew before, the draft's and an erase job's own", async (t) => {
+  const h = drafting();
+  t.after(h.log.restore);
+  globalThis.document.body.dataset.screen = "erase";
+  h.api.showErase(AREA);
+  await settle();
+  h.video.currentTime = 4;
+  h.api.paintTimeline(4, 10, "clock");
+  pinned("erase, draft", h);
+  h.api.showErase({ strip: { media: { kind: "job", id: "E1", name: "street-food" }, duration: 10 },
+                    locked: true, lane: { text: "Erasing 35%", cls: "now", pct: 35 } });
+  await settle();
+  h.api.paintTimeline(4, 10, "clock");
+  pinned("erase, job", h);
+});
+
+// -- a video brought into a finished audio project -------------------------------
+// The join player's handle (ui/src/joinPlayer.mjs getJoin), as a fake that
+// keeps what it is told: each lane's ranges, the speed and where the playhead
+// is, in joined time. 10 s of picture and 8 s of sound unless a test says.
+function fakeJoin({ video = 10, audio = 8, ranges = {}, tempo = 1 } = {}) {
+  const cp = (r) => r.map(([a, b]) => [a, b]);
+  const s = { video: ranges.video || [[0, video]], audio: ranges.audio || [[0, audio]], tempo };
+  const log = { sets: [], tempos: [], seeks: [] };
+  let at = 0;
+  const end = () => s.video.reduce((n, [a, b]) => n + b - a, 0);
+  return {
+    log, video: { name: "walk.mp4", duration: video }, audio: { duration: audio },
+    clips: () => ({ video: cp(s.video), audio: cp(s.audio) }),
+    setClips: (c) => { s.video = cp(c.video); s.audio = cp(c.audio); log.sets.push({ video: cp(c.video), audio: cp(c.audio) }); },
+    tempo: () => s.tempo,
+    setTempo: (x) => { s.tempo = x; log.tempos.push(x); },
+    time: () => at,
+    seek: (j) => { log.seeks.push(j); at = Math.min(Math.max(0, j), end()); },
+    paused: () => true,
+  };
+}
+const TALK = { kind: "job", id: "j1", name: "talk.wav", media: "audio" };
+// A video that has just come in is fitted to the room. The room here is what
+// the lanes take at the usual scale and the tail, so fitted is 77px a second.
+function joining(opts = {}, h0 = {}) {
+  const join = fakeJoin(opts);
+  const kept = (ranges) => ranges.reduce((n, [x, y]) => n + y - x, 0);
+  const { video, audio } = join.clips();
+  const room = Math.max(kept(video), kept(audio) / join.tempo()) * TL_PPS + 80;
+  const h = harness({ media: TALK, join, room, ...h0 });
+  h.api.attach();
+  h.api.renderTimeline(LINES, opts.audio || 8);
+  return { ...h, join };
+}
+const tr = (h) => h.$("timelineTrack").innerHTML;
+const pick = (lane, i = 0) => evt({ ".tl-jclip": { dataset: { lane, i: String(i) } } });
+const NO_LANE = "Click the video or the audio lane first";
+
+test("a brought-in video is a Video lane over the Audio lane, each its kept parts laid end to end", async (t) => {
+  const h = joining({ ranges: { video: [[0, 4], [6, 10]] } });
+  t.after(h.log.restore);
+  const html = h.box.innerHTML;
+  const names = ["Video", "Audio", "Original", "Translated", "Captions"].map((n) => html.indexOf(`<span>${n}</span>`));
+  assert.ok(names.every((i) => i > 0), "every lane is named");
+  assert.deepEqual([...names].sort((a, b) => a - b), names, "Video over Audio, then the lines");
+  assert.ok(html.includes('<div class="tl-name tl-name-join">'));
+  assert.ok(html.includes('<button class="tl-swap" id="tlJoinSwap" type="button">Change the video</button>'));
+  // The picture's two kept parts, one after the other, a seam between them.
+  let track = tr(h);
+  assert.ok(track.includes('<div class="tl-lane tl-lane-join">'));
+  assert.ok(track.includes('class="tl-vclip tl-cut tl-jclip" data-lane="video" data-i="0"\n      style="left:0.0px;width:306.0px"'));
+  assert.ok(track.includes('class="tl-vclip tl-cut tl-jclip" data-lane="video" data-i="1"\n      style="left:308.0px;width:306.0px"'));
+  assert.equal((track.match(/class="tl-seam"/g) || []).length, 1);
+  // The sound: one part, its name and how long it plays.
+  assert.ok(track.includes('class="tl-vclip tl-cut tl-jclip" data-lane="audio" data-i="0"\n      style="left:0.0px;width:614.0px"><div class="tl-vcap">talk.wav<b>00:08</b></div>'));
+  assert.match(track, /class="tl-inner" style="width:696px"/, "8 s at 77px, and the tail");
+  // The picture's frames come from the brought-in video; the sound's loudness as today.
+  assert.ok(h.log.fetched.includes("/api/media/join/j1/filmstrip?v=1"));
+  assert.ok(h.log.fetched.includes("/api/media/job/j1/waveform"));
+  assert.ok(!h.log.fetched.includes("/api/media/job/j1/filmstrip"));
+  await settle();
+  track = tr(h);
+  assert.ok(track.includes("--strip:url('/api/media/join/j1/filmstrip?v=1')"));
+  assert.ok(track.includes('<div class="tl-wave"><svg'));
+  // The lines lie on the sound's time: nothing cut, so where they always were.
+  assert.ok(track.includes('data-start="5" data-end="6"\n    style="left:385.0px;width:77.0px"'));
+});
+
+test("with speed the audio lane and every line are narrower by the speed, and a line keeps its own times", (t) => {
+  const h = joining({ tempo: 2 });
+  t.after(h.log.restore);
+  const track = tr(h);
+  assert.ok(track.includes('data-lane="audio" data-i="0"\n      style="left:0.0px;width:306.0px"><div class="tl-vcap">talk.wav<b>00:04</b></div>'));
+  assert.ok(track.includes('class="tl-blk tl-org" tabindex="-1"\n    data-start="5" data-end="6"\n    style="left:192.5px;width:38.5px"'));
+  assert.ok(track.includes('<div class="tl-cap" data-idx="2"\n      style="left:192.5px;width:38.5px"'));
+  // Line 2's voice runs a second past its slot: half a second of red at 2x.
+  assert.ok(track.includes('<span class="tl-spill" style="left:154.0px;width:38.5px"'));
+});
+
+test("a line whose sound was cut away is not drawn, and one that straddles a cut is clipped to what is kept", (t) => {
+  const h = joining({ ranges: { audio: [[0, 1.5], [3, 8]] } });
+  t.after(h.log.restore);
+  let track = tr(h);
+  assert.ok(track.includes('data-start="0" data-end="2"\n    style="left:0.0px;width:115.5px"'), "line 1 loses its last half second");
+  assert.ok(track.includes('data-start="2" data-end="4"\n    style="left:115.5px;width:77.0px"'), "line 2 its first second");
+  assert.ok(track.includes('data-start="5" data-end="6"\n    style="left:269.5px;width:77.0px"'), "line 3 moves 1.5 s earlier");
+  // Captions follow the same sound, and are not pulled by their ends here.
+  assert.ok(track.includes('<div class="tl-cap" data-idx="1"\n      style="left:115.5px;width:77.0px"'));
+  assert.ok(!track.includes("tl-hdl"));
+
+  const g = joining({ ranges: { audio: [[0, 1.5], [4.5, 8]] } });
+  t.after(g.log.restore);
+  track = tr(g);
+  assert.ok(!track.includes('data-start="2" data-end="4"'), "line 2 is all cut away");
+  assert.equal((track.match(/class="tl-blk tl-org"/g) || []).length, 2);
+  assert.equal((track.match(/class="tl-cap"/g) || []).length, 2);
+});
+
+test("the cut tools are there, off and saying why until a lane's clip is clicked, then act on that lane only", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  const html = h.box.innerHTML;
+  for (const id of ["tlUndo", "tlRedo", "tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]) {
+    assert.ok(html.includes(`id="${id}"`), id);
+  }
+  assert.ok(!html.includes("Voice length"), "the tools take the legend's place, as on a draft");
+  h.join.seek(2);
+  h.api.paintTimeline(2, 8, "clock");
+  for (const id of ["tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]) {
+    assert.equal(h.$(id).disabled, true, id);
+    assert.equal(h.$(id).dataset.tip, NO_LANE, id);
+  }
+  assert.equal(h.$("tlUndo").dataset.tip, "Nothing to undo");
+  // Pressing a tool with no lane does nothing.
+  h.box.fire("click", evt({ "#tlSplit": {} }));
+  assert.deepEqual(h.join.log.sets, []);
+
+  // The sound's clip: the tools act on the sound.
+  h.box.fire("click", pick("audio"));
+  assert.ok(tr(h).includes('class="tl-vclip tl-cut tl-jclip sel" data-lane="audio" data-i="0"'));
+  assert.equal(h.$("tlSplit").disabled, false);
+  assert.equal(h.$("tlSplit").dataset.tip, "Split at playhead");
+  assert.equal(h.$("tlDelete").dataset.tip, "The last part stays");
+  h.box.fire("click", evt({ "#tlDelLeft": {} }));
+  assert.deepEqual(h.join.log.sets.at(-1), { video: [[0, 10]], audio: [[2, 8]] });
+  assert.equal(h.join.log.seeks.at(-1), 0, "the sound's moment that was under the playhead is now the start");
+  assert.ok(tr(h).includes('data-lane="audio" data-i="0"\n      style="left:0.0px;width:460.0px"'));
+
+  // The picture's clip: the tools act on the picture, and the sound stays as it is.
+  h.join.seek(4);
+  h.box.fire("click", pick("video"));
+  h.box.fire("click", evt({ "#tlSplit": {} }));
+  assert.deepEqual(h.join.log.sets.at(-1), { video: [[0, 10]], audio: [[2, 8]] }, "a split is saved whole");
+  assert.equal((tr(h).match(/data-lane="video"/g) || []).length, 2, "but drawn split");
+  h.box.fire("click", pick("video", 1));
+  h.box.fire("click", evt({ "#tlDelete": {} }));
+  assert.deepEqual(h.join.log.sets.at(-1), { video: [[0, 4]], audio: [[2, 8]] });
+  assert.equal(h.join.log.seeks.at(-1), 4);
+});
+
+test("one undo stack over both lanes, and Cmd+Z, Cmd+B and Delete work on the picked lane", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  h.join.seek(3);
+  h.box.fire("click", pick("audio"));
+  h.box.fire("click", evt({ "#tlDelRight": {} }));
+  assert.deepEqual(h.join.log.sets.at(-1).audio, [[0, 3]]);
+  h.box.fire("click", pick("video"));
+  h.log.fireDoc("keydown", key("b", { metaKey: true }));
+  assert.equal((tr(h).match(/data-lane="video"/g) || []).length, 2, "Cmd+B splits the picture");
+  h.box.fire("click", pick("video", 1));
+  const del = key("Delete");
+  h.log.fireDoc("keydown", del);
+  assert.equal(del.prevented, true);
+  assert.deepEqual(h.join.log.sets.at(-1), { video: [[0, 3]], audio: [[0, 3]] });
+  // Back through all three, across both lanes.
+  h.log.fireDoc("keydown", key("z", { metaKey: true }));
+  assert.equal((tr(h).match(/data-lane="video"/g) || []).length, 2, "the split is back");
+  h.box.fire("click", evt({ "#tlUndo": {} }));
+  assert.deepEqual(h.join.log.sets.at(-1), { video: [[0, 10]], audio: [[0, 3]] });
+  h.log.fireDoc("keydown", key("z", { ctrlKey: true }));
+  assert.deepEqual(h.join.log.sets.at(-1), { video: [[0, 10]], audio: [[0, 8]] });
+  assert.equal(h.$("tlUndo").disabled, true);
+  h.log.fireDoc("keydown", key("z", { metaKey: true, shiftKey: true }));
+  assert.deepEqual(h.join.log.sets.at(-1).audio, [[0, 3]]);
+  // A click away from every clip lets go of the clip, not of the lane.
+  h.box.fire("click", pick("audio"));
+  h.box.fire("click", evt({ ".tl-ruler": {} }));
+  assert.ok(!tr(h).includes(" sel"));
+  assert.equal(h.$("tlSplit").dataset.tip !== NO_LANE, true);
+});
+
+// The audio speed: a small button beside the Audio lane's name and the menu
+// it opens. The icons are taken out so the markup reads whole.
+const noIcons = (html) => html.replace(/<svg[^]*?<\/svg>/g, "<svg/>");
+const SPEED_STEPS = [["0.5", "0.5×"], ["1", "1×"], ["1.5", "1.5×"], ["2", "2×"], ["3", "3×"]];
+const speedCell = (now) => '<div class="tl-name tl-name-video"><svg/><span>Audio</span><span class="tl-spd">'
+  + `<button class="tl-spd-btn" id="tlSpeed" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Audio speed ${now}×">${now}×<svg/></button>`
+  + '<span class="tl-spd-menu" id="tlSpeedMenu" role="menu" aria-label="Audio speed" hidden>'
+  + SPEED_STEPS.map(([x, words], i) => `<button type="button" id="tlSpeed${i}" data-tempo="${x}" role="menuitemradio" aria-checked="${x === now}">${words}<svg/></button>`).join("")
+  + '</span></span></div><div class="tl-name tl-name-org">';
+// The page as the strip's HTML leaves it: the menu shut. Hands back a press
+// on the button, and what is open.
+function speedMenu(h) {
+  const btn = h.$("tlSpeed"), menu = h.$("tlSpeedMenu");
+  menu.hidden = true;
+  return { btn, menu, press: () => h.box.fire("click", evt({ "#tlSpeed": {} })),
+           open: () => [menu.hidden, btn.attrs["aria-expanded"]].join() === "false,true",
+           shut: () => [menu.hidden, btn.attrs["aria-expanded"]].join() === "true,false" };
+}
+
+test("Audio speed is a small button beside the Audio lane's name that says the speed, and the head keeps only the tools and the pill", (t) => {
+  const h = joining({ tempo: 1.5 });
+  t.after(h.log.restore);
+  const html = noIcons(h.box.innerHTML);
+  assert.ok(html.includes(speedCell("1.5")), "the Audio name, the button, then the menu of the five steps, shut");
+  assert.ok(h.box.innerHTML.includes('aria-label="Audio speed 1.5×">1.5×<svg class="lu" width="12" height="12"'), "the speed and a small chevron");
+  // After the picture's name and its Change the video, in the names.
+  assert.ok(html.indexOf('id="tlJoinSwap"') < html.indexOf('id="tlSpeed"'));
+  assert.ok(html.indexOf('<div class="tl-names">') < html.indexOf('id="tlJoinSwap"'));
+  // Nothing of the head's switch is left: the tools, then the pill, then the clock.
+  const head = html.slice(html.indexOf('<div class="tl-head">'), html.indexOf('<div class="tl-body">'));
+  assert.doesNotMatch(head, /tlSpeed|data-tempo|Audio speed/);
+  assert.doesNotMatch(html, /tl-speed|export-seg|radiogroup|role="radio"/);
+  assert.match(head, /id="tlDelete"[^]*?<\/button><\/span><span class="tl-pill warn" id="tlJoinPill"/);
+  assert.ok(head.indexOf('id="tlJoinPill"') < head.indexOf('id="timelineClock"'));
+});
+
+test("the speed button opens its menu; a step chosen sets the speed, shuts the menu and takes part in undo", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  const m = speedMenu(h);
+  const says = () => [noIcons(m.btn.innerHTML), m.btn.attrs["aria-label"]];
+  const ticked = () => SPEED_STEPS.map((_, i) => h.$(`tlSpeed${i}`).attrs["aria-checked"]).join();
+  m.press();
+  assert.ok(m.open());
+  assert.deepEqual(m.menu.shown, { block: "nearest" }, "a pane dragged short scrolls its menu into sight");
+  assert.deepEqual(h.join.log.tempos, [], "opening changes nothing");
+
+  h.join.seek(4);
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "2" } } }));
+  assert.deepEqual(h.join.log.tempos, [2]);
+  assert.equal(h.join.log.seeks.at(-1), 2, "the same word of the sound stays under the playhead");
+  assert.ok(tr(h).includes('data-lane="audio" data-i="0"\n      style="left:0.0px;width:306.0px"'));
+  assert.ok(m.shut());
+  assert.deepEqual(says(), ["2×<svg/>", "Audio speed 2×"]);
+  assert.equal(ticked(), "false,false,false,true,false");
+  assert.equal(h.$("tlUndo").disabled, false, "a speed can be undone with no lane picked");
+
+  // Undo and redo put the button's words and the tick back with the speed.
+  h.box.fire("click", evt({ "#tlUndo": {} }));
+  assert.deepEqual(h.join.log.tempos, [2, 1]);
+  assert.deepEqual(says(), ["1×<svg/>", "Audio speed 1×"]);
+  assert.equal(ticked(), "false,true,false,false,false");
+  h.log.fireDoc("keydown", key("z", { metaKey: true, shiftKey: true }));
+  assert.deepEqual(h.join.log.tempos, [2, 1, 2]);
+  assert.deepEqual(says(), ["2×<svg/>", "Audio speed 2×"]);
+  assert.ok(m.shut(), "neither opens it");
+
+  // The step it is on already: no change, and the menu shuts all the same.
+  m.press();
+  assert.ok(m.open());
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "2" } } }));
+  assert.deepEqual(h.join.log.tempos, [2, 1, 2]);
+  assert.ok(m.shut());
+  // The button again shuts what it opened.
+  m.press();
+  m.press();
+  assert.ok(m.shut());
+});
+
+test("the speed menu shuts on a press anywhere else and on Escape, and a strip drawn again has it shut", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  const m = speedMenu(h);
+  // A press on the button or in the menu is not a press elsewhere.
+  m.press();
+  h.log.fireDoc("click", evt({ ".tl-spd": {} }));
+  assert.ok(m.open());
+  h.log.fireDoc("click", evt({}));
+  assert.ok(m.shut());
+  assert.equal(m.btn.focused, undefined, "the focus is left where the press put it");
+
+  m.press();
+  h.log.fireDoc("keydown", key("Escape"));
+  assert.ok(m.shut());
+  assert.equal(h.log.toggled, 0, "and Escape does nothing else");
+
+  // Shut from the keyboard with the focus on one of its steps: the focus
+  // goes back to the button, not down with the menu.
+  m.press();
+  globalThis.document.activeElement = { closest: (sel) => (sel === "#tlSpeedMenu" ? {} : null) };
+  h.log.fireDoc("keydown", key("Escape"));
+  assert.ok(m.shut());
+  assert.equal(m.btn.focused, 1);
+  // Shut already: nothing to do.
+  h.log.fireDoc("keydown", key("Escape"));
+  assert.equal(m.btn.focused, 1);
+
+  // Drawn again, the strip's HTML has the menu shut and the speed as it is now.
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "3" } } }));
+  h.api.redraw();
+  assert.ok(noIcons(h.box.innerHTML).includes(speedCell("3")));
+});
+
+test("a press of the mouse on the speed button or a step does not take the focus the space bar needs", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  const down = evt({ ".tl-head button, .tl-spd button": {} });
+  h.box.fire("mousedown", down);
+  assert.equal(down.prevented, true);
+  const elsewhere = evt({ "#tlJoinSwap": {} });
+  h.box.fire("mousedown", elsewhere);
+  assert.equal(elsewhere.prevented, undefined);
+});
+
+test("the pill says which is longer, or that they match, and its tip what that means", (t) => {
+  const pill = (opts) => {
+    const h = joining(opts);
+    t.after(h.log.restore);
+    return /<span class="tl-pill (\w+)" id="tlJoinPill"( data-tip="([^"]*)")?>(?:<svg.*?<\/svg>)?([^<]*)<\/span>/.exec(h.box.innerHTML);
+  };
+  let m = pill({});
+  assert.deepEqual([m[1], m[4], m[3]], ["warn", "The video is 2s longer", "The last 2s play without sound."]);
+  m = pill({ ranges: { video: [[0, 5]] } });
+  assert.deepEqual([m[1], m[4], m[3]], ["warn", "The audio is 3s longer", "The audio is cut where the video ends."]);
+  m = pill({ video: 8 });
+  assert.deepEqual([m[1], m[4], m[3]], ["ok", "Same length · 00:08", undefined]);
+  assert.ok(m[0].includes("<svg"), "with a tick");
+
+  // A cut on the sound: the pill follows, and its tip says what stays whole.
+  const h = joining();
+  t.after(h.log.restore);
+  h.join.seek(6);
+  h.box.fire("click", pick("audio"));
+  h.box.fire("click", evt({ "#tlDelRight": {} }));
+  assert.equal(h.$("tlJoinPill").innerHTML, "The video is 4s longer");
+  assert.equal(h.$("tlJoinPill").className, "tl-pill warn");
+  assert.equal(h.$("tlJoinPill").dataset.tip, "The last 4s play without sound. "
+    + "Cuts here go into the dubbed video only. The dubbed audio and the script stay whole.");
+});
+
+test("the playhead, the ruler and a press on a lane read joined time, and the playhead snaps to a lane's end", (t) => {
+  const h = joining();
+  t.after(h.log.restore);
+  h.box.qs1[".tl-inner"] = { getBoundingClientRect: () => ({ left: 0 }) };
+  // A press on the ruler: 154px is 2 s joined.
+  h.box.fire("pointerdown", evt({ ".tl-ruler": {} }, { clientX: 154 }));
+  assert.equal(h.join.log.seeks.at(-1), 2);
+  assert.equal(h.video.currentTime, 0, "the sound element is the join player's to move");
+  assert.ok(h.log.painted > 0);
+  // The playhead is drawn at the join player's time, whatever the sound's own is.
+  h.video.currentTime = 7;
+  h.api.paintTimeline(7, 8, "00:00:02.0 / 00:00:10.0");
+  assert.equal(h.$("timelinePlayhead").style.left, "154.0px");
+  assert.equal(h.$("timelineClock").textContent, "00:00:02.0 / 00:00:10.0");
+  // A press on a lane's empty stretch goes there too.
+  h.box.fire("pointerdown", evt({ ".tl-lanes": {} }, { clientX: 231 }));
+  assert.equal(h.join.log.seeks.at(-1), 3);
+  // Within a few pixels of the sound's end (8 s = 616px) it lands on it.
+  h.box.fire("pointerdown", evt({ ".tl-ruler": {} }, { clientX: 612 }));
+  assert.equal(h.join.log.seeks.at(-1), 8);
+  h.box.fire("pointerdown", evt({ ".tl-ruler": {} }, { clientX: 600 }));
+  assert.ok(Math.abs(h.join.log.seeks.at(-1) - 600 / 77) < 1e-9, "farther off it does not");
+  // Dragged by its head, the same.
+  h.box.fire("pointerdown", evt({ ".tl-playhead": {} }, { clientX: 100 }));
+  h.box.fire("pointermove", { clientX: 619 });
+  assert.equal(h.join.log.seeks.at(-1), 8);
+  h.box.fire("pointerup", {});
+  // Enter plays the joined video from its start.
+  h.log.fireDoc("keydown", key("Enter"));
+  assert.equal(h.join.log.seeks.at(-1), 0);
+  assert.equal(h.log.toggled, 1);
+});
+
+test("a line pressed still plays in the sound's own time, and Change the video asks for another file", async (t) => {
+  const h = joining({ ranges: { audio: [[2, 8]] } });
+  t.after(h.log.restore);
+  h.box.fire("click", evt({ ".tl-blk": { classList: { contains: () => false }, dataset: { start: "5", end: "6" } } }));
+  await settle();
+  assert.deepEqual(h.log.played, [["doneVideo", 5, 6]]);
+  h.box.fire("click", evt({ "#tlJoinSwap": {} }));
+  assert.equal(h.log.swapped, 1);
+});
+
+test("another video, or the same project opened again, starts a fresh history; no video, the audio job's strip", (t) => {
+  let join = fakeJoin();
+  const h = harness({ media: TALK, join: () => join });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.renderTimeline(LINES, 8);
+  h.join = join;
+  join.seek(3);
+  h.box.fire("click", pick("audio"));
+  h.box.fire("click", evt({ "#tlDelRight": {} }));
+  assert.equal(h.$("tlUndo").disabled, false);
+  join = fakeJoin({ video: 20 });
+  h.api.redraw();
+  assert.equal(h.$("tlUndo").disabled, true);
+  assert.equal(h.$("tlSplit").dataset.tip, NO_LANE, "no lane picked on the new one");
+  assert.ok(h.log.fetched.includes("/api/media/join/j1/filmstrip?v=2"), "its own frames, not the last video's");
+  // The video taken out: the audio project's strip, as it always was.
+  join = null;
+  h.api.redraw();
+  assert.ok(h.box.innerHTML.includes("Voice length") && !h.box.innerHTML.includes("tlSplit"));
+  assert.ok(!h.box.innerHTML.includes("tlSpeed"), "and no speed to pick");
+  assert.ok(!tr(h).includes("tl-jclip"));
+});
+
+// The owner's capture (2026-11-13): a 10 s audio project sat fitted to the
+// room, a 20 s video came in, and the film strip ran off the right edge.
+test("a video that comes in or is changed is shown whole from 00:00, and a cut or a speed leaves the scale alone", (t) => {
+  let join = null;
+  const h = harness({ media: TALK, join: () => join, room: 1200 });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.renderTimeline(LINES, 8);
+  const track = h.$("timelineTrack");
+  assert.ok(track.innerHTML.includes('<div class="tl-vclip" style="left:0;width:616.0px">'), "the audio project at the usual scale");
+  h.box.fire("click", evt({ "#tlZoomIn": {} }));
+  track.scrollLeft = 90;
+  h.box.fire("scroll", { target: track });
+
+  // 20 s in 1200px less the 80px tail: 56px to the second.
+  join = fakeJoin({ video: 20 });
+  h.api.redraw();
+  assert.equal(track.scrollLeft, 0, "from 00:00");
+  assert.match(track.innerHTML, /class="tl-inner" style="width:1200px"/, "nothing left to scroll");
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:1118.0px"'));
+
+  // A cut and a speed are drawn at that same scale.
+  join.seek(10);
+  h.box.fire("click", pick("video"));
+  h.box.fire("click", evt({ "#tlDelRight": {} }));
+  assert.deepEqual(join.log.sets.at(-1).video, [[0, 10]]);
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:558.0px"'));
+  h.box.fire("click", evt({ "[data-tempo]": { dataset: { tempo: "2" } } }));
+  assert.deepEqual(join.log.tempos, [2]);
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:558.0px"'));
+
+  // Another video in its place: fitted again, 28px to the second.
+  join = fakeJoin({ video: 40 });
+  h.api.redraw();
+  assert.match(track.innerHTML, /class="tl-inner" style="width:1200px"/);
+  assert.ok(tr(h).includes('data-lane="video" data-i="0"\n      style="left:0.0px;width:1118.0px"'));
+});
+
+// The owner's capture (2026-11-13): with the picture's lane added, Translated
+// and Captions fell under the pane's foot. The lane is 55px and its 6px gap.
+test("with a video brought in the timeline pane is one lane taller, and the remembered size stays the ordinary one", (t) => {
+  let join = fakeJoin();
+  const h = harness({ media: TALK, join: () => join,
+                      stored: { "persodub.layout.timelineHeight": "250" } });
+  t.after(h.log.restore);
+  const box = h.$("timeline");
+  h.api.attach();
+  assert.equal(box.style.height, "250px", "no strip drawn yet: the remembered size");
+  h.api.renderTimeline(LINES, 8);
+  assert.equal(box.style.height, "311px");
+  assert.equal(box.classes.has("tl-joined"), true);
+
+  // Dragged with the video in: what is remembered is the size without its lane.
+  const grip = h.$("gripTimeline");
+  box.offsetHeight = 311;
+  grip.fire("pointerdown", evt({}, { clientY: 500 }));
+  grip.fire("pointermove", { clientY: 480 });
+  assert.equal(box.style.height, "331px");
+  // Never past the pane's ceiling: 40% of a 900px window, the lane included.
+  grip.fire("pointermove", { clientY: 100 });
+  assert.equal(box.style.height, "360px");
+  grip.fire("pointermove", { clientY: 480 });
+  box.offsetHeight = 331;
+  grip.fire("pointerup", {});
+  assert.equal(h.log.stored.get("persodub.layout.timelineHeight"), "270");
+
+  // The video gone: the lane's room is given back.
+  join = null;
+  h.api.redraw();
+  assert.equal(box.style.height, "270px");
+  assert.equal(box.classes.has("tl-joined"), false);
+  assert.equal(h.log.stored.get("persodub.layout.timelineHeight"), "270");
+});
+
+test("a remembered timeline height near the ceiling grows only as far as the window lets it, and none leaves it to the stylesheet", (t) => {
+  // A 700px window: 40% of it is 280px.
+  const h = harness({ media: TALK, join: fakeJoin(), innerHeight: 700,
+                      stored: { "persodub.layout.timelineHeight": "250" } });
+  t.after(h.log.restore);
+  h.api.attach();
+  h.api.renderTimeline(LINES, 8);
+  assert.equal(h.$("timeline").style.height, "280px");
+
+  // Nothing remembered: the class is the stylesheet's cue for the taller pane.
+  const fresh = joining();
+  t.after(fresh.log.restore);
+  assert.equal(fresh.$("timeline").style.height, undefined);
+  assert.equal(fresh.$("timeline").classes.has("tl-joined"), true);
 });

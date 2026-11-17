@@ -932,6 +932,26 @@ def test_rebuild_dub_rewrites_which_lines_were_cut_short(monkeypatch, tmp_path):
         "clipped": [{"line": 2, "cut_s": 0.3}], "clipped_count": 1}
 
 
+def test_rebuild_dub_of_an_audio_project_remakes_its_wav_and_muxes_nothing(monkeypatch, tmp_path):
+    """A remade line of an audio project: the result is dubbed.wav, and there
+    is no picture to put the new mix on or to check the length of."""
+    (tmp_path / "background.wav").write_bytes(b"")
+    built = []
+
+    class Ok:
+        returncode = 0
+    monkeypatch.setattr(qp, "place_lines", lambda *a, **kw: None)
+    monkeypatch.setattr(qp.media, "build_result", lambda *a: built.append(a) or Ok())
+    monkeypatch.setattr(qp.media, "mux", lambda *a: pytest.fail("no picture to mux onto"))
+    monkeypatch.setattr(qp.media, "ensure_video_length", lambda *a: pytest.fail("no video to measure"))
+
+    out = qp.rebuild_dub(str(tmp_path), {"lines": [{"i": 0, "start": 0}]},
+                         str(tmp_path / "input.mp4"), str(tmp_path / "dubbed.wav"))
+
+    assert out == str(tmp_path / "dubbed.wav")
+    assert built == [(str(tmp_path / "input.mp4"), str(tmp_path / "qwen_dub_48k.wav"), out)]
+
+
 
 def test_a_qwen_line_loses_the_stray_sound_before_its_sentence(tmp_path):
     # Qwen3-TTS opened 6.5% of lines with a short sound in the cloned voice,

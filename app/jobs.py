@@ -25,6 +25,7 @@ from app.memline import mem_line
 from app.netlog import CUT as _CUT
 from app.netlog import described as _described
 from app.netlog import no_query as _no_query
+from app.perso_client import EDITION
 from app.run_errors import stopped_by_quit
 
 logger = logging.getLogger("persodub.jobs")
@@ -110,7 +111,14 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
                 "held_again",
                 # The subtitle file a "captions" job was made from, by name:
                 # the Subtitle style tab shows it beside the video.
-                "srt_name")
+                "srt_name",
+                # "audio" for a dubbing of a file that has sound and no
+                # picture: asked of the file once, when it came in
+                # (app/media.py media_kind). The screens draw such a project
+                # without a video, and its result is dubbed.wav. Nothing
+                # writes "video": a record that says nothing is one, as
+                # every job was before audio was taken.
+                "media")
 
 # A key a record carries only at run time, left out on purpose. `started`
 # (app/separate_launch.py) is when a separation began, for the time the screen
@@ -682,7 +690,9 @@ class JobStore:
     def _restore_old_folders(self, root: str, loaded) -> None:
         """Rebuild a record for a finished folder that has no readable job.json.
 
-        Only what the folder itself says: it holds a dubbed.mp4, its name is
+        Only what the folder itself says: it holds a dubbed.mp4 (or, for an
+        audio project, a dubbed.wav, which is then the one thing left to say
+        it was audio), its name is
         <project>_<lang> (plus _001 when the name was taken) and its parent is
         the day. The id is derived from the path so a second restore finds the
         same job rather than a duplicate.
@@ -696,7 +706,8 @@ class JobStore:
             if work in loaded:
                 continue
             try:
-                out = os.path.join(work, "dubbed.mp4")
+                audio = not os.path.isfile(os.path.join(work, "dubbed.mp4"))
+                out = os.path.join(work, "dubbed.wav" if audio else "dubbed.mp4")
                 if not os.path.isfile(out):
                     continue
                 parts = os.path.basename(work).split("_")
@@ -712,6 +723,7 @@ class JobStore:
                     work_dir=work,
                     created=datetime.fromtimestamp(os.path.getmtime(out)).isoformat(timespec="seconds"),
                     result={"out_path": out},
+                    **({"media": "audio"} if audio else {}),
                 )
             except Exception as e:
                 # Same promise as above, and the same rule about the name:
@@ -868,10 +880,9 @@ class JobStore:
             try:
                 rec = self.get(jid) or {}
                 trace("JOB START (%s)" % kind_of(rec))
-                # The edition first: it decides where a dub runs when nothing
-                # is chosen (app/setup.py), and the desktop shell hands it over
-                # (desktop/src/orchestrator.js). A plain server run has none.
-                given = {"edition": os.environ.get("PERSODUB_EDITION") or "opensource",
+                # The edition first: the failure reports carry this line, and
+                # their readers tell builds apart by it.
+                given = {"edition": EDITION,
                          **{k: rec[k] for k in _INPUT_FIELDS if k in rec}}
                 trace("Inputs: " + json.dumps(given, ensure_ascii=False, default=str))
                 _trace_memory(trace)

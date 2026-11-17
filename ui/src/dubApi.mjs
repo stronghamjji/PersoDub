@@ -403,8 +403,8 @@ export async function saveDownloadClip(id, trim, { baseUrl = "", ratio = null } 
  * POST /api/downloads/{id}/save -- what the Export dialog saves of a draft:
  * the timeline's kept parts (`ranges`, [[start, end], ...], or null for the
  * whole video) joined into one video, in the canvas of `ratio` when one is
- * picked, or their sound alone when `audio` is "mp3" or "wav". Returns
- * {path, seconds}.
+ * picked, or their sound alone when `audio` is "mp3", "wav", "flac" or "m4a".
+ * Returns {path, seconds}.
  */
 export async function saveDownloadParts(id, { ranges = null, audio = "", ratio = null } = {}, { baseUrl = "" } = {}) {
   const body = {};
@@ -485,7 +485,7 @@ export function eraseVideoUrl(jid, which = "erased", { baseUrl = "" } = {}) {
 
 /** POST /api/erase/{jid}/save -- write the cleaned video into Downloads
     (inside the canvas of `ratio` when one is picked), or its sound alone when
-    `audio` is "mp3" or "wav". */
+    `audio` is "mp3", "wav", "flac" or "m4a". */
 export async function saveErased(jid, { baseUrl = "", audio = "", ratio = null } = {}) {
   const body = {};
   if (audio) body.audio = audio;
@@ -553,6 +553,44 @@ export async function dubAgainSource(jid, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/dub/jobs/${jid}/again`, { method: "POST" });
   if (!res.ok) throw await downloadError(res, t("Could not open this video."));
   return res.json();
+}
+
+// ---- A video brought into a finished audio project -------------------------
+// The audio project keeps its dubbed sound; the video is kept beside it with
+// each lane's kept parts and the sound's speed (app/api/join.py). The joined
+// file is built only when it is downloaded: the page plays the two together.
+
+/**
+ * GET /api/dub/jobs/{jid}/join -- {video: null}, or {video: {name, seconds},
+ * audio_seconds, ranges: {video, audio}, tempo, stamp}. `stamp` changes with
+ * every change.
+ */
+export async function fetchJoin(jid, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/dub/jobs/${jid}/join`);
+  if (!res.ok) throw await downloadError(res, t("Could not open this video."));
+  return res.json();
+}
+
+/** PUT /api/dub/jobs/{jid}/join -- each lane's kept ranges and the sound's speed. */
+export async function saveJoin(jid, { video, audio, tempo }, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/dub/jobs/${jid}/join`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ video, audio, tempo }),
+  });
+  if (!res.ok) throw await downloadError(res, t("Not saved"));
+}
+
+/** POST /api/dub/jobs/{jid}/join/video -- bring the video in; one already in is replaced. */
+export async function uploadJoinVideo(jid, file, { baseUrl = "" } = {}) {
+  const fd = new FormData();
+  fd.append("video", file);
+  const res = await fetch(`${baseUrl}/api/dub/jobs/${jid}/join/video`, { method: "POST", body: fd });
+  if (!res.ok) throw await downloadError(res, t("Could not bring the video in."));
+}
+
+/** Where the brought-in picture plays from. `stamp` makes a replaced video a new address. */
+export function joinVideoUrl(jid, stamp = "", { baseUrl = "" } = {}) {
+  return `${baseUrl}/api/dub/jobs/${jid}/join/video${stamp ? `?v=${encodeURIComponent(stamp)}` : ""}`;
 }
 
 /**

@@ -29,11 +29,13 @@ python tests/e2e/regress.py --base http://127.0.0.1:52252 \
 - `--perso`: also dub through Perso. Spends Perso credits; needs a Perso key in Settings.
 - `--srt`: step 11's subtitle file, cues in Korean (our fixture `paris-ko-3cues.srt`).
   Left out, the run writes three English cues of its own.
-- `--kit`: the app's kit folder, whose `kit.env` step 10 reads. Left out, that half
+- `--kit`: the app's kit folder, whose `kit.env` step 10 reads. Left out, that part
   of step 10 is not run.
-- `--logs`: the app's logs folder, whose `job-<id>.log` steps 15 and 16 read
+- `--logs`: the app's logs folder, whose `shell.log` step 10 reads and whose
+  `job-<id>.log` steps 15 and 16 read
   (`backend.log` beside it keeps only each stage's START and DONE). Left out,
-  they read the job record's log, which holds the same lines.
+  step 10 does not read `shell.log`, and steps 15 and 16
+  read the job record's log, which holds the same lines.
 
 ffprobe is `PERSODUB_FFPROBE` when that is set, else the kit's own copy
 (`<kit>/bin`) when the script runs on the kit's Python, else the one on PATH.
@@ -72,7 +74,7 @@ into `%USERPROFILE%\e2e-fixtures` first.
    the route. Saving it into Downloads is the desktop shell's half, and is not run.
 6. A Perso dubbing, only with `--perso`.
 7. The interface language is written, read back and put back. The API keys
-   and the privacy switches are never written.
+   and the Share usage data switch are never written.
 8. The finished dub's record has the times the usage count sends:
    `elapsed_seconds` and `stage_seconds` for separate, transcribe, translate
    and synthesize, each a whole number above 0, the four no more than the whole.
@@ -81,10 +83,10 @@ into `%USERPROFILE%\e2e-fixtures` first.
    a finished job of kind `captions`; its video in the Sticker look is as long
    as the clip and its .srt has 3 cues. A file with no subtitles is refused with
    422, a video that is not held with 404.
-10. The edition named by `--edition` (`opensource`, the default, or
-    `production`): `GET /api/setup`'s default Dubbing mode is `local` for the
-    open-source edition and `perso` for the production one, and with `--kit`
-    kit.env has a `PERSODUB_EDITION=production` line only for the production one.
+10. The edition, the open-source one: `GET /api/setup`'s default Dubbing mode
+    is `local`, with `--kit` kit.env has no `PERSODUB_EDITION=production` line,
+    and with `--logs` the last `PERSODUB_EDITION` line of `shell.log` reads
+    `PERSODUB_EDITION opensource stronghamjji/PersoDub`.
 11. A dub started with a subtitle file attached (the `srt` field, used as is):
     `stage_seconds.translate` 0 or absent, the script's lines equal the file's cues
     (3 for the fixture), and the video as long as the clip. Speech is still

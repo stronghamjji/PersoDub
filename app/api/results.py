@@ -31,7 +31,7 @@ from pydantic import BaseModel
 
 from app import engines_status, media, perso_client, state
 from app import ratio as ratio_lib
-from app.api._shared import free_path, ratio_errors_as_http, work_dir_of
+from app.api._shared import free_path, ratio_errors_as_http, require_video, work_dir_of
 from app.i18n import t
 from app.jobs import JobKind, JobStatus, kind_of
 from app.perso_client import (
@@ -251,12 +251,14 @@ def subtitles_burn(body: SubtitleBurnRequest):
     The srt defaults to the video's own name next to it -- exactly where
     /api/subtitles/extract leaves one. Rendering text onto frames forces a
     re-encode (same x264 settings as the clip route); the audio is untouched
-    and copied through.
+    and copied through. An audio file (a dubbing takes those) has no picture
+    to lay them on and is refused with 422.
     """
     preset = _norm_preset(body.preset)
     path = os.path.expanduser(body.video_path)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail=t("No such video: {path}", path=body.video_path))
+    require_video(path)
     base, ext = os.path.splitext(path)
     srt = os.path.expanduser(body.srt_path) if body.srt_path else base + ".srt"
     if not os.path.isfile(srt):
@@ -289,6 +291,25 @@ def _file_stem(job: dict) -> str:
     return "video" if kind_of(job) == JobKind.CAPTIONS else "dub_" + _target_code(job)
 
 
+def _is_audio(job: dict) -> bool:
+    """An audio project: sound with no picture, as its record says (`media`,
+    written once when the file came in). Its result is dubbed.wav and its
+    input.mp4 holds an audio file, so neither is served as a video."""
+    return job.get("media") == "audio"
+
+
+def _only_with_a_video() -> HTTPException:
+    """What an audio project answers to anything that needs a picture."""
+    return HTTPException(status_code=409, detail=t("Only for projects with a video."))
+
+
+def _listed(value: str, allowed) -> Optional[str]:
+    """`value` as `allowed` itself spells it, or None when it is not listed.
+    What goes into a file name below is then the list's own word, never the
+    caller's."""
+    return next((own for own in allowed if own == value), None)
+
+
 @router.get("/api/dub/result/{jid}")
 def dub_result(jid: str, ratio: Optional[str] = None):
     """Return the finished dubbed file -- inside a canvas of `ratio` when one
@@ -301,6 +322,13 @@ def dub_result(jid: str, ratio: Optional[str] = None):
     out = (j.get("result") or {}).get("out_path")
     if not out or not os.path.exists(out):
         raise HTTPException(status_code=404, detail=t("Result file not found"))
+    if _is_audio(j):
+        # The dubbed sound itself. There is no picture to put in a canvas.
+        with ratio_errors_as_http():
+            if ratio_lib.wanted(ratio):
+                raise _only_with_a_video()
+        return FileResponse(out, media_type=media.AUDIO_MIME["wav"],
+                            filename=f"dub_{_target_code(j)}.wav")
     with ratio_errors_as_http():
         out = ratio_lib.padded_copy(out, os.path.dirname(out), ratio)
     return FileResponse(out, media_type="video/mp4",
@@ -309,13 +337,16 @@ def dub_result(jid: str, ratio: Optional[str] = None):
 
 @router.get("/api/dub/result/{jid}/audio")
 def dub_result_audio(jid: str, format: str = "mp3", download: int = 0):
-    """The dubbed video's sound alone, as mp3 or wav, built on first ask.
+    """The dubbed video's sound alone, in one of the four formats of
+    media.AUDIO_CODECS (mp3, wav, flac, m4a), built on first ask. An audio
+    project's is its result in that format.
 
     Kept in the job's folder as dub-audio.<format> and made again when a remade
     line has changed the video it came from.
     """
-    if format not in media.AUDIO_CODECS:
-        raise HTTPException(status_code=422, detail=t("Audio is saved as mp3 or wav."))
+    fmt = _listed(format, media.AUDIO_CODECS)
+    if fmt is None:
+        raise HTTPException(status_code=422, detail=t("Audio is saved as MP3, WAV, FLAC or M4A."))
     j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=t("Unknown job: {jid}", jid=jid))
@@ -324,17 +355,16 @@ def dub_result_audio(jid: str, format: str = "mp3", download: int = 0):
     out = (j.get("result") or {}).get("out_path")
     if not out or not os.path.exists(out):
         raise HTTPException(status_code=404, detail=t("Result file not found"))
-    built = os.path.join(os.path.dirname(out), "dub-audio." + format)
+    built = os.path.join(os.path.dirname(out), "dub-audio." + fmt)
     if _stale(built, out):
         try:
-            media.run_new_file(media.audio_command(out, built, format), 0, t("Could not save the audio"))
+            media.run_new_file(media.audio_command(out, built, fmt), 0, t("Could not save the audio"))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
-    filename = "dub_%s.%s" % (_target_code(j), format)
+    filename = "dub_%s.%s" % (_target_code(j), fmt)
     headers = ({"Content-Disposition": 'attachment; filename="%s"' % filename}
                if download else None)
-    return FileResponse(built, media_type="audio/mpeg" if format == "mp3" else "audio/wav",
-                        headers=headers)
+    return FileResponse(built, media_type=media.AUDIO_MIME[fmt], headers=headers)
 
 
 # What the separation stage left in the job's folder (app/separate.py and
@@ -369,24 +399,26 @@ def dub_result_stems(jid: str):
 @router.get("/api/dub/result/{jid}/stem/{which}")
 def dub_result_stem(jid: str, which: str, format: str = "mp3"):
     """The original video's speech alone ("voice") or everything but the
-    speech ("background"), as mp3 or wav, built on first ask and kept in the
-    job's folder as stem-<which>.<format>."""
-    if format not in media.AUDIO_CODECS:
-        raise HTTPException(status_code=422, detail=t("Audio is saved as mp3 or wav."))
-    if which not in _STEMS:
+    speech ("background"), in one of the four formats of media.AUDIO_CODECS,
+    built on first ask and kept in the job's folder as stem-<which>.<format>."""
+    fmt = _listed(format, media.AUDIO_CODECS)
+    if fmt is None:
+        raise HTTPException(status_code=422, detail=t("Audio is saved as MP3, WAV, FLAC or M4A."))
+    stem = _listed(which, _STEMS)
+    if stem is None:
         raise HTTPException(status_code=404, detail=t("No such audio."))
     j, work = _stem_job(jid)
-    src = os.path.join(work, _STEMS[which])
+    src = os.path.join(work, _STEMS[stem])
     if not os.path.isfile(src):
         raise HTTPException(status_code=404, detail=t("This project no longer has that audio."))
-    built = os.path.join(work, "stem-%s.%s" % (which, format))
+    built = os.path.join(work, "stem-%s.%s" % (stem, fmt))
     if _stale(built, src):
         try:
-            media.run_new_file(media.audio_command(src, built, format), 0, t("Could not save the audio"))
+            media.run_new_file(media.audio_command(src, built, fmt), 0, t("Could not save the audio"))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
-    return FileResponse(built, media_type="audio/mpeg" if format == "mp3" else "audio/wav",
-                        filename="%s_%s.%s" % (j.get("project") or "project", which, format))
+    return FileResponse(built, media_type=media.AUDIO_MIME[fmt],
+                        filename="%s_%s.%s" % (j.get("project") or "project", stem, fmt))
 
 
 @router.get("/api/dub/result/{jid}/original")
@@ -412,6 +444,13 @@ def dub_result_original(jid: str, download: int = 0):
     original = os.path.join(work_dir, "input.mp4") if work_dir else ""
     if not original or not os.path.exists(original):
         raise HTTPException(status_code=404, detail=t("Original file not found"))
+    if _is_audio(j):
+        # input.mp4 keeps that name whatever it holds: the user's own file,
+        # or FLAC once it has been cut. A browser told video/mp4 that finds a
+        # WAV may refuse to play it, so the file is asked what it is.
+        fmt = media.audio_format(original)
+        if fmt:
+            return FileResponse(original, media_type=media.AUDIO_MIME[fmt], filename="org." + fmt)
     return FileResponse(original, media_type="video/mp4", filename="org.mp4")
 
 
@@ -458,10 +497,13 @@ def dub_result_srt(jid: str, download: int = 0):
 
 def _subtitled_sources(jid: str):
     """The finished video and the script to lay on it, or the HTTPException
-    that says why not. Shared by the subtitled export and its preview."""
+    that says why not. Shared by the subtitled export and its preview. An
+    audio project has no video to lay it on."""
     j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=t("Unknown job: {jid}", jid=jid))
+    if _is_audio(j):
+        raise _only_with_a_video()
     if j["status"] != JobStatus.DONE:
         raise HTTPException(status_code=409, detail=t("Job not finished yet"))
     out = (j.get("result") or {}).get("out_path")

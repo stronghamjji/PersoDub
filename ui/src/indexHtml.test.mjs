@@ -98,66 +98,45 @@ test("there is one dark theme, and its fonts are the app's own", () => {
     ["primary-ink", "#7aacf6"], ["timeline-fit", "#49a072"], ["destructive", "#f47b74"]]) {
     assert.match(html, new RegExp(`--${name}: ${value};`), `--${name} is not ${value}`);
   }
-  // The production edition's sheet is Perso's workspace dark under the same
-  // blue, and its type Pretendard (owner, 2026-10-27).
-  const prod = html.slice(html.indexOf(':root[data-edition="production"] {'));
-  for (const [name, value] of [["desk", "#121119"], ["background", "#17161f"], ["well", "#1f1e28"],
-    ["secondary", "#26252f"], ["border", "rgba\\(255, 255, 255, 0\\.07\\)"], ["control-line", "rgba\\(255, 255, 255, 0\\.2\\)"],
-    ["foreground", "#ededf0"], ["muted-foreground", "#a3a2ad"], ["success", "#0bc673"], ["warning", "#ffa31a"],
-    ["destructive", "#f03d3d"]]) {
-    assert.match(prod.slice(0, prod.indexOf("}")), new RegExp(`--${name}: ${value};`), `production --${name} is not ${value}`);
-  }
-  assert.ok(!prod.slice(0, prod.indexOf("}")).includes("--primary"), "the production edition keeps our blue");
-  assert.match(html, /:root\[data-edition="production"\] body \{\n    font-family: "Twemoji Country Flags", "Pretendard Variable", Onest,/);
   // Timeline bars that fit are green now, never the old violet.
   assert.ok(!/#8B5CF6/i.test(html), "the violet timeline colour is back");
   // Burned-in subtitles keep the font ffmpeg draws with.
   assert.match(html, /\.sub-ov-text \{[^}]*font-family: "Apple SD Gothic Neo"/);
 });
 
-// The production edition's Customer support is a Service inquiry form like
+// Send feedback's form is a Service inquiry form like
 // Perso's own, sent to the support inbox with a consent like Perso's (owner, 2026-10-27);
 // its words in Korean as approved.
-test("Customer support's form asks the kind, a subject, the details, a reply-to address and the consent", () => {
+test("Send feedback's form asks the kind, a subject, the details, a reply-to address and the consent", () => {
   const html = readPage();
-  assert.match(html, /<span data-i18n id="homeFeedbackLabel">Send feedback<\/span>/);
+  assert.match(html, /<span data-i18n>Send feedback<\/span>/);
   const at = html.indexOf('<div class="modal-overlay" id="feedbackOverlay">');
   const dialog = html.slice(at, html.indexOf('<div class="modal-overlay"', at + 1));
-  assert.match(dialog, /<h2 data-i18n id="feedbackTitle">Service inquiry<\/h2>/);
+  assert.match(dialog, /<h2 data-i18n id="feedbackTitle">Feedback<\/h2>/);
   // The values are the shell's kinds (desktop/src/report.js INQUIRY_TYPES), the words the form's.
-  // Payment or refund has an id: the open-source form hides it (ui/src/feedbackSheet.mjs).
-  assert.deepEqual([...dialog.matchAll(/<option value="([^"]+)"(?: id="feedbackTypePayment")? data-i18n>([^<]+)<\/option>/g)].map((m) => [m[1], m[2]]),
-    [["problem", "Problem or inconvenience"], ["bug", "Bug report"], ["payment", "Payment or refund"], ["other", "Other"]]);
-  assert.match(dialog, /<option value="payment" id="feedbackTypePayment" data-i18n>/);
+  assert.deepEqual([...dialog.matchAll(/<option value="([^"]+)" data-i18n>([^<]+)<\/option>/g)].map((m) => [m[1], m[2]]),
+    [["problem", "Problem or inconvenience"], ["bug", "Bug report"], ["other", "Other"]]);
   assert.match(dialog, /<label data-i18n for="feedbackSubjectInput">Subject<\/label><input type="text" id="feedbackSubjectInput" maxlength="120" required>/);
   assert.match(dialog, /<label data-i18n for="feedbackDetails">Details<\/label><textarea id="feedbackDetails" rows="5" maxlength="4000" required><\/textarea>/);
   assert.match(dialog, /<label data-i18n for="feedbackReplyTo">Reply-to email<\/label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email" maxlength="254">/);
-  // Left empty, the answer goes to the signed-in account's address (desktop/src/reporting.js accountForInquiry).
-  assert.match(dialog, /maxlength="254"><div data-i18n class="settings-hint" id="feedbackReplyToHint">Leave it empty to be answered at your account's address\.<\/div><\/div>/);
   assert.match(dialog, /<p data-i18n class="help-where">The app version and your computer are added automatically\.<\/p>/);
   assert.match(dialog, /<p class="help-where" id="feedbackLogsNote" hidden><span data-i18n>A bug report also sends the app's logs\.<\/span>/);
   assert.match(dialog, /<input type="checkbox" id="feedbackConsent"><label data-i18n for="feedbackConsent">I agree to the collection and use of my personal information for this inquiry\.<\/label> <a href="#" id="feedbackPrivacy" data-i18n>Privacy policy<\/a>/);
   assert.match(dialog, /<p class="help-where" id="feedbackStatus" role="status"><\/p>/);
   assert.match(dialog, /<button data-i18n class="btn btn-secondary" id="feedbackClose" type="button">Close<\/button>\s*<button data-i18n class="btn btn-primary" id="feedbackSend" type="button" disabled>Send<\/button>/);
-  assert.ok(!dialog.includes("github"), "no repository link in the production form");
+  assert.ok(!dialog.includes("github"), "no repository link in the form");
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.deepEqual(["Customer support", "Service inquiry", "Problem or inconvenience", "Bug report", "Payment or refund", "Other",
+  assert.deepEqual(["Feedback", "Problem or inconvenience", "Bug report", "Other",
                     "Subject", "Details", "Reply-to email", "Close", "Send",
-                    "I agree to the collection and use of my personal information for this inquiry.", "Received. Reference {id}",
-                    "Leave it empty to be answered at your account's address."].map((k) => ko[k]),
-    ["고객 지원센터", "서비스 문의", "불편사항", "버그 신고", "결제·환불", "기타", "제목", "문의 내용", "답장 받을 이메일", "닫기", "보내기",
-     "문의 처리를 위한 개인정보 수집·이용에 동의해요", "접수됐어요. 접수 번호 {id}", "비워 두면 계정 이메일로 답장해요."]);
+                    "I agree to the collection and use of my personal information for this inquiry.", "Received. Reference {id}"].map((k) => ko[k]),
+    ["피드백", "불편사항", "버그 신고", "기타", "제목", "문의 내용", "답장 받을 이메일", "닫기", "보내기",
+     "문의 처리를 위한 개인정보 수집·이용에 동의해요", "접수됐어요. 접수 번호 {id}"]);
 });
 
-// The production Home heads with the wordmark alone, white letters on the
-// sidebar's dark, 170px wide and to the left, with no box (owner, 2026-10-27);
-// the open-source one keeps its pale pill.
-test("the production sidebar's logo is the white-lettered wordmark with no box", () => {
+// The sidebar's logo is Perso's wordmark in a pale pill.
+test("the sidebar's logo is the wordmark in its pale pill", () => {
   const html = readPage();
   assert.match(html, /<button class="home-perso" id="homePerso" type="button" aria-label="Perso Dubbing"><img src="\/perso-dubbing\.svg" alt="Perso Dubbing"><\/button>/);
-  assert.match(html, /:root\[data-edition="production"\] \.home-gh \{ background: none; border: none; padding: 6px 0 4px; \}/);
-  assert.match(html, /:root\[data-edition="production"\] \.home-side \.home-perso \{ justify-content: flex-start; padding: 0; background: none; \}/);
-  assert.match(html, /:root\[data-edition="production"\] \.home-perso img \{ width: 170px; height: auto; content: url\(\/perso-dubbing-white\.svg\); \}/);
   assert.match(html, /\.home-side \.home-perso \{[^}]*background: linear-gradient\(90deg, #dfe8ff, #bfe3ff\); \}/);
 });
 
@@ -538,8 +517,20 @@ test("an erase screen exports only the video it shows", () => {
   const html = readPage();
   assert.match(html, /exportable = undefined \}\) \{/);
   assert.match(html, /\$\("exportBtn"\)\.disabled = exportable !== undefined \? !exportable/);
-  assert.match(html, /if \(document\.body\.dataset\.screen === "erase" && !eraseScreen\.exportsDraft\(\)\) return null;/);
+  assert.match(html, /if \(document\.body\.dataset\.screen === "erase" && !eraseScreen\.exportsDraft\(\) && !original\) return null;/);
   assert.match(html, /projectOpen: \(\) => !!state\.jobId,/);
+});
+
+// A dubbing project's Erase tab holds that project's video, which is not a
+// draft of the screen's own, so the screen had nothing to hand back and Save
+// video there did nothing: no dialog, no word (Windows test, 2026-11-14). It
+// is the project's original that tab saves, as from the project's other tabs,
+// until the screen has an erased video of its own.
+test("Save video on a dubbing project's Erase tab saves the project's original", () => {
+  const html = readPage();
+  assert.match(html, /async function exportContext\(only = null\) \{/);
+  assert.match(html, /const original = !!state\.jobId && \(only \|\| \[\]\)\.includes\("original"\);/);
+  assert.match(html, /const own = erase && \(eraseScreen\.erasedJob\(\) \|\| eraseScreen\.exportsDraft\(\)\);\n  const row = state\.jobId && !own \? \["original"\] : \["video"\];/);
 });
 
 // The agent lives in a right-hand column and the finished screen puts the
@@ -703,8 +694,8 @@ test("the update's dot is on the What's new card, not in the top bar; the key wi
   const html = readPage();
   assert.ok(!html.includes('id="updateBtn"'), "the top bar's update icon is gone (2026-10-21)");
   assert.match(html, /#homeWhatsNew\.live::after \{ content: ""; position: absolute;/);
-  // An update with no notes links to its release, Perso's desktop app page in production.
-  assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null,\n  \/\/[^\n]*\n  notesPage: isProduction\(\) \? \(\) => null : \(version\) => `\$\{REPO_URL\}\/releases\/tag\/v\$\{version\}` \}\);/);
+  // An update with no notes links to its release.
+  assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null,\n  notesPage: \(version\) => `\$\{REPO_URL\}\/releases\/tag\/v\$\{version\}` \}\);/);
   for (const id of ["updateOverlay", "updClose", "updTitle", "updCurrent", "updNext", "updGo", "updRunning", "updNotesBox", "updNotes", "updNotesLink"]) {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
@@ -788,12 +779,11 @@ test("there is no rail, and the logo in Settings > About is the way to the proje
   assert.ok(!/class="rail|id="(dubToggle|eraseToggle|historyToggle)"/.test(html),
     "the rail and its buttons are gone (mockup 2026-09-29)");
   assert.match(html, /<button class="about-logo-btn" id="brandBtn"[^>]*title="PersoDub on GitHub"[^>]*><img class="about-logo" src="\/logo.png"/);
-  // ...and Perso's desktop app page in the production edition, which has no repository.
-  assert.match(html, /\$\("brandBtn"\)\.addEventListener\("click", \(\) => window\.open\(isProduction\(\) \? persoLink\(DESKTOP_APP_URL, "about", savedSettings\(\)\?\.perso_utm\) : REPO_URL, "_blank", "noopener"\)\)/);
+  assert.match(html, /\$\("brandBtn"\)\.addEventListener\("click", \(\) => window\.open\(REPO_URL, "_blank", "noopener"\)\)/);
 });
 
-// Which repository the project's links open is the shell's to say: the build's
-// edition (desktop/src/edition.js), handed over as persodubShell.repo. A plain
+// Which repository the project's links open is the shell's to say, handed
+// over as persodubShell.repo. A plain
 // browser has no shell and opens the public repository.
 test("the project's page is the repository the shell names, or the public one without a shell", () => {
   const html = readPage();
@@ -896,7 +886,7 @@ test("the left panel is a row of tabs, each over a body of its own", () => {
   assert.match(words, /\['#leftTabs \[data-tab="captions"\]', t\("Burn in subtitles"\)\]/);
   assert.match(words, /\['#leftTabs \[data-tab="save"\]', t\("Save video"\)\]/);
   // It opens the Download dialog with the project's own video alone.
-  assert.match(html, /const row = state\.jobId && document\.body\.dataset\.screen !== "erase" \? \["original"\] : \["video"\];\n\s*exportDialog\.open\(row, row\);/);
+  assert.match(html, /const row = state\.jobId && !own \? \["original"\] : \["video"\];\n\s*exportDialog\.open\(row, row\);/);
   assert.ok(!/tabMedia|mediaTab|media-thumb|mediaSearch|mediaImpBtn/.test(html), "nothing of the Media tab is left");
   assert.ok(!html.includes('id="tabAudio"'), "no Audio tab body");
   assert.match(pane, /<button class="left-tab on"[^>]*data-tab="dubbing" aria-selected="true">/, "Dubbing is on to begin with");
@@ -1059,7 +1049,7 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
     keys: ["persoKeyInput", "persoKeyHint", "persoSignupLink", "persoSpaceSelect", "persoSpaceWarning", "geminiKeyInput",
            "geminiKeyHint", "chatgptState", "chatgptSignInBtn", "chatgptHint", "showKeysToggle"],
     storage: ["revealOutputBtn", "storageHint"],
-    privacy: ["analyticsToggle", "analyticsHint", "reportsToggle", "reportsHint"],
+    privacy: ["shareToggle", "shareHint"],
     about: ["brandBtn", "aboutVersion", "ackToggle", "ackList"],
   };
   for (const [name, ids] of Object.entries(home)) {
@@ -1124,35 +1114,40 @@ test("the models dialog keeps its line break, and is wider than the other confir
   assert.ok(en >= 351 + 34 && ko >= 299 + 34, `${en} and ${ko} are too narrow`);
 });
 
-// Settings > Privacy: each switch says in one sentence what goes, what never
-// goes and why, in the words the owner chose (2026-10-27); the rest is in
-// docs/privacy.md. It used to say it in four sentences, a line each.
-test("each privacy switch says in one sentence what goes, what never goes and why", () => {
+// Settings > Privacy is one switch and one sentence, in the words the owner
+// chose (2026-11-12). It used to be three switches, each with a sentence of
+// its own; what each kind of record holds is in docs/privacy.md.
+test("Privacy is one switch, Share usage data, with one sentence under it", () => {
   const html = readPage();
-  const hintOf = (id) => [...html.match(new RegExp(`<div class="settings-hint" id="${id}">([\\s\\S]*?)<\\/div>`))[1]
-    .matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
-  const labels = [...html.matchAll(/<label data-i18n for="(analyticsToggle|eventsToggle|reportsToggle)">([^<]*)<\/label>/g)].map((m) => m[2]);
-  assert.deepEqual(labels, ["Anonymous usage counts", "Share App Analytics", "Help improve {app}"]);
-  const sentences = [...hintOf("analyticsHint"), ...hintOf("eventsHint"), ...hintOf("reportsHint")];
-  assert.deepEqual(sentences, [
+  const a = html.indexOf('id="settingsPanel-privacy"');
+  const panel = html.slice(a, html.indexOf('<div class="set-panel"', a));
+  assert.equal((panel.match(/class="set-row"/g) || []).length, 1, "one row");
+  assert.deepEqual([...panel.matchAll(/<input[^>]*>/g)].map((m) => m[0]),
+    ['<input type="checkbox" class="switch" id="shareToggle" checked>']);
+  const labels = [...panel.matchAll(/<label data-i18n for="shareToggle">([^<]*)<\/label>/g)].map((m) => m[1]);
+  const sentences = [...panel.matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ["Share usage data"]);
+  assert.deepEqual(sentences, ["It helps improve the {app} project."]);
+  assert.match(panel, /<div class="settings-hint" id="shareHint"><span data-i18n>It helps improve the \{app\} project\.<\/span><\/div>/);
+  assert.doesNotMatch(panel, /<a\b|<button\b/, "no link and no button");
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual([...labels, ...sentences].map((s) => ko[s]),
+    ["사용 기록 보내기", "{app} 프로젝트 개선에 큰 힘이 돼요."]);
+  // The three switches it replaces are gone: their ids from the page and its
+  // styles, their words from both tables.
+  for (const id of ["analyticsToggle", "analyticsHint", "eventsToggle", "eventsHint", "reportsToggle", "reportsHint"]) {
+    assert.equal(html.includes(id), false, `${id} is still in the page`);
+  }
+  const old = [
+    "Anonymous usage counts", "Share App Analytics", "Help improve {app}",
     "Helps improve {app} by sending only how often the app is used, anonymously.",
     "Helps improve {app} by sending only which screens and buttons you used, never what you type.",
     "Helps improve {app} by sending only job records, never titles, files or dialogue.",
-  ]);
-  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.deepEqual([...labels, ...sentences].map((s) => ko[s]), [
-    "익명 사용 통계", "앱 분석 공유", "앱 개선에 참여",
-    "앱을 쓴 횟수만 익명으로 보내 {app} 개선을 도와요.",
-    "입력한 내용 없이 어떤 화면과 버튼을 썼는지만 보내 {app} 개선을 도와요.",
-    "제목·파일·대사 없이 작업 기록만 보내 {app} 개선을 도와요.",
-  ]);
-  // The label stays by the switch, beside a hint of its own.
-  assert.match(html, /#reportsHint > span \{ display: block; \}/);
-  assert.match(html, /\.set-row:has\(> \.set-ctl > #reportsHint\) \{ align-items: start; \}/);
-  const old = "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.";
+    "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.",
+  ];
   for (const code of ["en", "ko"]) {
     const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
-    assert.equal(Object.hasOwn(table, old), false, `the old sentence is still in ui.${code}.json`);
+    for (const s of old) assert.equal(Object.hasOwn(table, s), false, `"${s}" is still in ui.${code}.json`);
   }
 });
 
@@ -1361,7 +1356,6 @@ test("a Perso dubbing's greyed stage rows read Perso, and say Perso handles them
   assert.match(html, /\$\("advancedBody"\)\.classList\.toggle\("by-perso", cloud\);/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["Perso handles this."], "Perso가 처리해요.");
-  assert.equal(ko["The video is uploaded to Perso."], "영상이 Perso로 올라가요.");
 });
 
 test("the confirms keep their corner X for its listeners, but hidden", () => {
@@ -1613,16 +1607,23 @@ test("Dubbing, Erase, Burn in subtitles and Save video with no video draw one em
   const html = readPage();
   const { emptyTabHtml, EMPTY_TABS } = await import("./importBlock.mjs");
   assert.deepEqual(EMPTY_TABS, {
-    dubbing: ["Dubbing", "Voice a video in another language."],
+    dubbing: ["Dubbing", "Voice a video or an audio file in another language."],
     erase: ["Erase subtitles", "Takes burned-in subtitles out."],
     // Burn in subtitles starting a project (owner, 2026-10-22, 2026-10-23).
     captions: ["Burn in subtitles", "Burns subtitles into a video."],
     // Save video saves a video from a link (owner, 2026-10-24).
     save: ["Save video", "Saves a video from a link."],
   });
+  // Dubbing takes audio too and its block says so; the tools that work on
+  // the picture ask for videos alone.
+  const DROP = /(<div class="import-sub">)([^<]*)</;
+  const drop = (tab) => DROP.exec(emptyTabHtml(tab, "z", "l"))[2];
+  assert.equal(drop("dubbing"), "Drop videos or audio here, or click to choose");
+  assert.equal(drop("erase"), "Drop videos here, or click to choose");
+  assert.equal(drop("captions"), "Drop videos here, or click to choose");
   // The same three pieces in the same order, whatever the tab.
   const shape = (tab) => emptyTabHtml(tab, "z", "l")
-    .replace(EMPTY_TABS[tab][0], "H").replace(EMPTY_TABS[tab][1], "S");
+    .replace(EMPTY_TABS[tab][0], "H").replace(EMPTY_TABS[tab][1], "S").replace(DROP, "$1D<");
   assert.equal(shape("erase"), shape("dubbing"));
   assert.equal(shape("captions"), shape("dubbing"));
   assert.match(shape("dubbing"), /^<div class="tab-empty-title">H<\/div><div class="tab-empty-sub">S<\/div><div class="import-block" id="z"/);
@@ -1653,7 +1654,8 @@ test("Dubbing, Erase, Burn in subtitles and Save video with no video draw one em
 
 test("with no video there is no play sign over the panel and the foot's play is off", async () => {
   const html = readPage();
-  assert.match(html, /\.video-wrap:has\(> video:not\(\[src\]\)\) \.video-bigplay \{ display: none; \}/);
+  // The player, by name: the element beside it is a brought-in video's picture, empty on most projects.
+  assert.match(html, /\.video-wrap:has\(> #doneVideo:not\(\[src\]\)\) \.video-bigplay \{ display: none; \}/);
   assert.match(readFileSync(PLAYER, "utf8"), /btn\.disabled = !doneVideo\.getAttribute\("src"\);/);
   const { initPlayerFoot } = await import("./playerFoot.mjs");
   const on = {};
@@ -1704,8 +1706,8 @@ test("a script line pressed stops the video at its start and the strip is brough
 // sidebar (owner, 2026-10-23), and the banner's line naming what a video
 // can be made into.
 // A screen reader names the sidebar as the screen shows the app: PersoDub,
-// or PersoDubbing in the production edition (the shell's name, {app}).
-test("Home's sidebar is labelled with the edition's own name", () => {
+// or the name the shell gives ({app}).
+test("Home's sidebar is labelled with the app's own name", () => {
   const tag = readPage().match(/<aside class="home-side"[^>]*>/)[0];
   assert.equal(tag, '<aside class="home-side" aria-label="PersoDub" data-i18n-aria-label="{app}">');
   const attrs = new Map([["aria-label", "PersoDub"]]);
@@ -1732,11 +1734,14 @@ test("Home's cards and sidebar are Dubbing, Erase subtitles, Burn in subtitles a
   assert.match(cards, /id="homeCaptionsCard" type="button">\s*<span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"\/>[^]*?<div data-i18n class="home-card-title">Burn in subtitles<\/div>\s*<div data-i18n class="home-card-desc">Put a subtitle file on a video in the style you choose<\/div>/);
   assert.match(cards, /<div data-i18n class="home-card-desc">Saves a video from a link<\/div>/);
   assert.match(html, /<span data-i18n class="home-banner-title">Create project<\/span>/);
-  assert.match(html, /<div data-i18n class="home-banner-sub">Upload a video to dub it, erase or burn in subtitles, or save it from a link\. Drop it here or click to choose<\/div>/);
+  // The banner starts a dubbing, which takes audio too: it says so, and which files (2026-11-13).
+  assert.match(html, /<div data-i18n class="home-banner-sub">Drop a video or an audio file here, or click to choose<\/div>\s*<div data-i18n class="home-banner-formats">Video MP4 · MOV \| Audio WAV · FLAC · MP3 · M4A<\/div>/);
+  assert.match(cards, /<div data-i18n class="home-card-title">Dubbing<\/div>\s*<div data-i18n class="home-card-desc">Voice a video or an audio file in another language<\/div>/);
   assert.match(html, /onCaptions: \(\) => draftSetup\.openDraft\(null, \{ tab: "captions" \}\),/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.equal(ko["Upload a video to dub it, erase or burn in subtitles, or save it from a link. Drop it here or click to choose"],
-    "영상을 올리면 더빙 · 자막 지우기 · 자막 입히기 · 링크 저장을 할 수 있어요. 끌어 놓거나 눌러서 골라 주세요");
+  assert.equal(ko["Drop a video or an audio file here, or click to choose"], "영상이나 오디오를 끌어 놓거나 눌러서 골라요");
+  assert.equal(ko["Video MP4 · MOV | Audio WAV · FLAC · MP3 · M4A"], "영상 MP4 · MOV | 오디오 WAV · FLAC · MP3 · M4A");
+  assert.equal(ko["Voice a video or an audio file in another language"], "영상이나 오디오를 다른 언어로 더빙");
   assert.equal(ko["Burn in subtitles"], "자막 입히기");
   assert.equal(ko["Put a subtitle file on a video in the style you choose"], "영상과 자막 파일을 넣으면 원하는 스타일로 자막을 입혀요");
   assert.equal(ko["Saves a video from a link"], "링크로 올린 영상을 저장해요");
@@ -1754,18 +1759,14 @@ test("Home's Help sits above Send feedback and opens its tools and the Dub Agent
   const names = [...dialog.matchAll(/<div class="help-item"><b>([^<]+)<\/b>(?:<p>[^<]+<\/p>)+<div class="help-where">[^<]+<\/div><\/div>/g)].map((m) => m[1]);
   // Separate audio is no tool of its own (owner, 2026-10-23).
   assert.deepEqual(names, ["Dubbing", "Erase subtitles", "Save video", "Dub Agent"]);
-  assert.match(dialog, /<p class="help-links"><a href="#" id="helpGuide">User guide<\/a><span id="helpFaqItem"> · <a href="#" id="helpFaq">FAQ<\/a><\/span><\/p>/);
+  assert.match(dialog, /<p class="help-links"><a href="#" id="helpGuide">User guide<\/a> · <a href="#" id="helpFaq">FAQ<\/a><\/p>/);
   assert.match(dialog, /<div class="modal-foot"><button class="btn btn-primary" id="helpOk" type="button">OK<\/button><\/div>/);
   assert.ok(!dialog.includes("modal-close"), "no corner X");
   assert.ok(!dialog.includes("—"), "no em dash in the copy");
   // The links open the repo's docs and stay off the page's own "#".
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
-  assert.match(html, /e\.preventDefault\(\);\n    window\.open\(isProduction\(\) \? persoLink\(DESKTOP_APP_URL, "help", savedSettings\(\)\?\.perso_utm\) : `\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
-  // The production edition has no repository: its User guide is Perso's desktop
-  // app page, and it has no FAQ link.
-  assert.match(html, /\$\("helpFaqItem"\)\.hidden = isProduction\(\);/);
-  // ...and its Help opens that page in the browser instead of the dialog.
-  assert.match(html, /function openHelp\(\) \{\n  if \(isProduction\(\)\) window\.open\(persoLink\(DESKTOP_APP_URL, "help", savedSettings\(\)\?\.perso_utm\), "_blank", "noopener"\);\n  else \$\("helpOverlay"\)\.classList\.add\("open"\);\n\}/);
+  assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+  assert.match(html, /function openHelp\(\) \{\n  \$\("helpOverlay"\)\.classList\.add\("open"\);\n\}/);
 });
 
 // Help's Erase subtitles says why, how and how long, a line each (owner,
@@ -1938,4 +1939,231 @@ test("a project card's menu is drawn over the update banner", () => {
   const html = readPage();
   const z = (sel) => Number(new RegExp(sel.replace(".", "\\.") + " \\{[^}]*z-index: (\\d+)").exec(html)[1]);
   assert.ok(z(".proj-menu") > z(".update-banner"));
+});
+
+// ---- Audio projects ---------------------------------------------------------
+// A project made from a sound file has no picture (ui/src/mediaKind.mjs). The
+// layout stays as it is; what needs a picture is dimmed or left out.
+
+test("the ways into dubbing take the six kinds of file; Erase and Burn in subtitles take video alone", async () => {
+  const html = readPage();
+  const { fileKind } = await import("./mediaKind.mjs");
+  const accept = (id) => new RegExp(`<input type="file" id="${id}" accept="([^"]*)"`).exec(html)[1];
+  for (const id of ["videoInput", "draftFileInput", "newProjFileInput"]) {
+    assert.equal(accept(id), ".mp4,.mov,.wav,.flac,.mp3,.m4a", id);
+  }
+  // What the picker lists is what the page's own check takes.
+  assert.deepEqual(accept("videoInput").split(",").map((ext) => fileKind(`a${ext}`)),
+    ["video", "video", "audio", "audio", "audio", "audio"]);
+  for (const id of ["capVideoInput", "eraseInput"]) assert.equal(accept(id), "video/*", id);
+  // Each way in is checked by its own rule, under the one size limit.
+  assert.match(html, /function dubFileProblem\(file\) \{ return dubFormatProblem\(file\) \|\| tooBig\(file\); \}/);
+  assert.match(html, /function videoProblem\(file\) \{ return videoFormatProblem\(file\) \|\| tooBig\(file\); \}/);
+  assert.match(html, /const bad = dubFileProblem\(f\);/, "Home's banner");
+  assert.match(html, /checkFile: \(file\) => dubFileProblem\(file\),/, "the Dubbing tab's block, Replace and the timeline");
+  assert.match(html, /initNewProjectWindow\(\{\n  \$, checkFile: dubFileProblem,/);
+  assert.match(html, /initEraseScreenUi\(\{\n  \$, showScreen, setTopbar, checkFile: videoProblem,/);
+  // Burn in subtitles brings its video in as the draft, whose own check takes
+  // audio: it is turned away first, on that tab's line.
+  assert.match(html, /const bad = source\.file \? videoProblem\(source\.file\) : null;\n\s*if \(bad\) \{ draftImport\.say\(bad, true\); return Promise\.resolve\(\); \}\n\s*return draftImport\.importSource\(source\);/);
+});
+
+test("a file over the size limit is told so in words that fit a video and an audio file alike", () => {
+  const html = readPage();
+  const sentence = "This file is {size}. The limit is {limit}. Please use a shorter or smaller file.";
+  assert.ok(html.includes(`function tooBig(file) {\n  if (file.size > MAX_VIDEO_MB * 1024 * 1024) {\n    return t("${sentence}",`));
+  assert.ok(!html.includes("This video is {size}"));
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko[sentence], "이 파일은 {size}예요. 최대 {limit}까지 돼요. 더 짧거나 작은 파일을 골라요.");
+  assert.ok(!Object.keys(ko).some((k) => k.startsWith("This video is {size}")));
+});
+
+test("an audio project's video box is the sound sign and the word Audio, with no play sign over it", () => {
+  const html = readPage();
+  const badge = `<div class="video-audio">${lucide("volume-2", 22)}<span data-i18n>Audio</span></div>`;
+  // In the finished screen's box, right after the video and under the subtitles...
+  assert.ok(html.includes(`<video id="doneVideo" playsinline></video>\n                  ${badge}`));
+  assert.ok(html.indexOf('<video id="doneVideo"') < html.indexOf('id="subOverlay"'));
+  // ...and in the one a running or stopped dubbing shows.
+  assert.ok(html.includes(`<video id="runningVideo" playsinline></video>\n                  ${badge}`));
+  assert.equal(html.split('class="video-audio"').length - 1, 2, "the erase screen's video is always a video");
+  // Shown by the body's mark alone; a press goes through it to the player.
+  assert.match(html, /\.video-audio \{ display: none; position: absolute; left: 50%; top: 50%; transform: translate\(-50%, -50%\);[^}]*pointer-events: none;[^}]*\}/);
+  assert.match(html, /body\.audio-project \.video-audio \{ display: flex; \}/);
+  // The <video> has no picture to size it: it takes the box, which is where the subtitles are drawn.
+  assert.match(html, /body\.audio-project :is\(\.video-wrap, \.running-video\) video \{ width: 100%; height: 100%; \}/);
+  assert.match(html, /body\.audio-project \.video-bigplay \{ display: none; \}/);
+});
+
+test("an audio project locks Erase, Burn in subtitles and Save video, and dims full screen", () => {
+  const html = readPage();
+  const at = html.indexOf("function paintMediaKind() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  // What is open: the job, never the one before it still in hand, or the draft before a job.
+  assert.match(html, /function openProject\(\) \{\n  return state\.jobId \? \(state\.job && state\.job\.id === state\.jobId \? state\.job : null\) : getDraft\(\);\n\}/);
+  assert.match(body, /const audio = isAudio\(openProject\(\)\);/);
+  assert.match(body, /document\.body\.classList\.toggle\("audio-project", audio\);/);
+  // An empty erase screen opened from Home, an audio draft still held behind it, keeps its own tab.
+  assert.match(body, /const locked = document\.body\.dataset\.screen === "erase" \? \["captions", "save"\] : \["erase", "captions", "save"\];/);
+  assert.match(body, /leftTabs\.lock\(audio \? locked : \[\], joined \? t\("Not for a video brought into an audio project\."\)\n {4}: t\("Only for projects with a video\."\)\);/);
+  // Full screen of a box with no picture is of nothing; a brought-in video is one.
+  assert.match(body, /\$\("fullscreenBtn"\)\.disabled = audio && !joined;\n {2}\$\("runFs"\)\.disabled = audio;/);
+  // Painted when the draft, the open job or the screen changes.
+  assert.match(html, /onDraftChange\(paintMediaKind\);/);
+  assert.match(html, /new MutationObserver\(paintMediaKind\)\.observe\(document\.body, \{ attributes: true, attributeFilter: \["data-screen"\] \}\);/);
+  assert.match(html, /if \(newlyOpen\) \{ draftSetup\.paint\(\); paintMediaKind\(\); \}/);
+  assert.match(html, /state\.job = null;\n  paintMediaKind\(\);/);
+  // The dim is the tabs' and the foot's own.
+  assert.match(html, /\.left-tab:disabled, \.left-tab\[aria-disabled="true"\], \.vtab:disabled \{ opacity: 0\.4; cursor: default; \}/);
+  assert.match(html, /\.video-fs:disabled \{ opacity: 0\.4; cursor: default; background: none; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Only for projects with a video."], "영상이 있는 프로젝트에서만 쓸 수 있어요");
+  assert.equal(ko["This tool takes video files only."], "이 도구는 영상 파일만 받아요.");
+  assert.equal(ko["Only MP4 or MOV video and WAV, FLAC, MP3 or M4A audio can be used."], "MP4, MOV 영상과 WAV, FLAC, MP3, M4A 오디오만 받아요.");
+  assert.equal(ko["Dubbed audio, subtitles and script files"], "더빙 오디오, 자막, 대본 파일로 나와요");
+  assert.equal(ko["Drop videos or audio here, or click to choose"], "영상이나 오디오를 여기에 끌어 놓거나 눌러서 골라요");
+});
+
+test("the open project's kind goes with it to the Ratio buttons, the timeline and the draft made from it", () => {
+  const html = readPage();
+  assert.match(html, /if \(state\.jobId\) return \{ kind: "job", id: state\.jobId, media: \(openProject\(\) \|\| \{\}\)\.media \};/);
+  assert.match(html, /return d \? \{ kind: "draft", id: d\.downloadId, ratio: d\.ratio, media: d\.media \} : null;/);
+  assert.match(html, /getMedia: \(\) => \(state\.job \? \{ kind: "job", id: state\.job\.id, name: jobLabel\(state\.job\), media: state\.job\.media \} : null\),/);
+  // A draft opened again from Home, and one made from the open job (Add language).
+  assert.match(html, /videoUrl: downloadVideoUrl\(downloadId\), ratio: kept\.ratio, media: kept\.media \}\);/);
+  assert.match(html, /const media = state\.job && state\.job\.id === from \? state\.job\.media : undefined;/);
+  assert.match(html, /return draftSetup\.openDraft\(source && \{ \.\.\.source, media \}, opts\)\.then\(/);
+});
+
+// ---- A video brought into a finished audio project ----
+
+test("a finished audio project's box has the way to bring a video in, under the word Audio", () => {
+  const html = readPage();
+  // After the badge and before the subtitles, so it is over the player and under the words.
+  const at = html.indexOf('<video id="joinVideo" muted playsinline></video>');
+  assert.ok(at > html.indexOf('<video id="doneVideo" playsinline></video>'));
+  assert.ok(at < html.indexOf('id="subOverlay"'));
+  assert.ok(html.includes(`<div class="video-bring" id="joinBring" hidden>
+                    <div class="video-bring-row"><button data-i18n class="btn btn-outline" id="joinBringBtn" type="button">Bring in a video</button><span>MP4 · MOV</span></div>
+                    <div class="video-bring-note" id="joinBringNote" role="status"></div>
+                    <input type="file" id="joinFile" accept=".mp4,.mov" hidden>
+                  </div>`));
+  // Only the finished screen's box: a running dubbing has nothing to join yet.
+  assert.equal(html.split('class="video-bring"').length - 1, 1);
+  // Under the badge, the two centred together; hidden means hidden.
+  assert.match(html, /\.video-bring \{ position: absolute; left: 50%; top: 50%; transform: translate\(-50%, 14px\);[^}]*\}/);
+  assert.match(html, /\.video-bring\[hidden\] \{ display: none; \}/);
+  assert.match(html, /\.video-wrap:has\(> \.video-bring:not\(\[hidden\]\)\) \.video-audio \{ transform: translate\(-50%, calc\(-50% - 19px\)\); \}/);
+  assert.match(html, /\.video-bring-note:empty \{ display: none; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Bring in a video"], "영상 가져오기");
+  assert.equal(ko["Bringing the video in…"], "영상을 가져오는 중이에요…");
+  assert.equal(ko["Could not bring the video in."], "영상을 가져오지 못했어요.");
+});
+
+test("with a video brought in the box shows its picture: no badge, no bring-in row, the sound's element out of the way", () => {
+  const html = readPage();
+  // The picture's element is there only while a video is in.
+  assert.match(html, /#joinVideo \{ display: none; \}/);
+  assert.match(html, /body\.joined-video #joinVideo \{ display: block; width: auto; height: auto; \}/);
+  // The sound goes on playing from #doneVideo, which takes no room.
+  assert.match(html, /body\.joined-video #doneVideo \{ position: absolute; width: 0; height: 0; \}/);
+  assert.match(html, /body\.joined-video \.video-audio \{ display: none; \}/);
+  assert.ok(html.indexOf("body.joined-video .video-audio") > html.indexOf("body.audio-project .video-audio { display: flex; }"),
+            "after the rule it overrides");
+  // Of the bring-in row, only its line stays (another video coming in, a
+  // refusal, a picture the browser cannot show): at the top of the picture,
+  // clear of the play sign, on the badge that reads on any picture.
+  assert.match(html, /body\.joined-video \.video-bring-row \{ display: none; \}/);
+  assert.match(html, /body\.joined-video \.video-bring \{ top: 10px; transform: translateX\(-50%\);/);
+  assert.match(html, /body\.joined-video \.video-bring-note \{[^}]*background: var\(--thumb-badge\); color: var\(--thumb-foreground\); \}/);
+  // A picture standing still has its play sign back.
+  assert.match(html, /body\.joined-video \.video-bigplay:not\(\[hidden\]\) \{ display: inline-flex; \}/);
+  // "No video in the panel" asks the player, not the picture's element, which is empty on every other project.
+  assert.match(html, /\.video-wrap:has\(> #doneVideo:not\(\[src\]\)\) \.video-bigplay \{ display: none; \}/);
+  assert.ok(!html.includes(".video-wrap:has(> video:not([src]))"));
+});
+
+test("a finished audio project asks once whether a video was brought in, and the page is painted from the answer", () => {
+  const html = readPage();
+  const at = html.indexOf("function paintMediaKind() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  // Only a finished audio project; a draft, a running or stopped dubbing, or no project lets the picture go.
+  assert.match(body, /const finished = audio && !!state\.jobId && state\.job\.status === "done";\n {2}joinPlayer\.open\(finished \? state\.jobId : null\);/);
+  assert.match(body, /const joined = !!joinPlayer\.getJoin\(\);\n {2}document\.body\.classList\.toggle\("joined-video", joined\);/);
+  // The join player takes videos by the picture tools' rule, and tells the page what changed.
+  assert.match(html, /const joinPlayer = initJoinPlayer\(\{\n {2}\$, sound: \$\("doneVideo"\), picture: \$\("joinVideo"\), checkFile: videoProblem,/);
+  assert.ok(html.indexOf("const joinPlayer = initJoinPlayer({") < at, "wired before the first paint");
+  assert.match(html, /onChange: \(\) => \{\n {4}paintMediaKind\(\);/);
+  assert.match(html, /onTick: \(\) => donePlayer\.paintJoined\(\),/);
+  // The player and the subtitles are handed it.
+  assert.match(html, /join: joinPlayer, picture: \$\("joinVideo"\),/);
+  assert.match(html, /getPicture: \(\) => \(joinPlayer\.getJoin\(\) \? \$\("joinVideo"\) : doneVideo\),/);
+  assert.match(html, /new ResizeObserver\(subtitles\.syncVideoChrome\)\.observe\(\$\("joinVideo"\)\);/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Not for a video brought into an audio project."], "오디오 프로젝트에 가져온 영상에는 쓸 수 없어요");
+});
+
+test("the timeline reads the brought-in video's lanes from the join player, and is drawn again when a video comes in", () => {
+  const html = readPage();
+  assert.match(html, /getJoin: \(\) => joinPlayer\.getJoin\(\),\n {2}changeJoinVideo: \(\) => joinPlayer\.change\(\),/);
+  const at = html.indexOf("const joinPlayer = initJoinPlayer({");
+  const wiring = html.slice(at, html.indexOf("\n});", at));
+  assert.match(wiring, /subtitles\.syncVideoChrome\(\);\n {4}timeline\.redraw\(\);/);
+});
+
+test("the picked clip of a brought-in video's lanes has a ring of the primary colour round the white one", () => {
+  // White alone is lost on a bright film strip. The white ring is the
+  // draft's own (.tl-cut.sel), which stays as it was.
+  const html = readPage();
+  assert.match(html, /\.tl-cut\.sel \{ outline: 2px solid #fff; outline-offset: -1px; z-index: 1; \}/);
+  assert.match(html, /\.tl-jclip\.sel \{ box-shadow: 0 0 0 3px var\(--primary\); \}/);
+  assert.match(readFileSync(TIMELINE, "utf8"), /class="tl-vclip tl-cut tl-jclip\$\{which === jlane && i === jsel \? " sel" : ""\}"/);
+});
+
+test("the audio speed is a small button at the right of the Audio lane's name, its menu hung under it", () => {
+  // Owner, 2026-11-14: out of the head, which keeps the cut tools and the
+  // pill. 20px high where Change the video sits on the lane above; the menu
+  // 78px wide with 19px rows, the step playing on the pill colour with a tick.
+  const html = readPage();
+  assert.match(html, /\.tl-spd \{ position: relative; margin-left: auto; margin-right: 8px; \}/);
+  assert.match(html, /\.tl-spd-btn, \.tl-spd-menu button \{[^}]*font: inherit; font-size: 10\.5px; font-variant-numeric: tabular-nums;[^}]*color: var\(--foreground\);/);
+  assert.match(html, /\.tl-spd-btn \{[^}]*height: 20px;[^}]*background: var\(--secondary\); box-shadow: 0 0 0 1px var\(--divider\);/);
+  assert.match(html, /\.tl-spd-menu \{ position: absolute; top: calc\(100% \+ 3px\); right: 0; z-index: 6; width: 78px;[^}]*background: var\(--head-bg\); border: 1px solid var\(--divider\);/);
+  assert.match(html, /\.tl-spd-menu\[hidden\] \{ display: none; \}/);
+  assert.match(html, /\.tl-spd-menu button \{[^}]*height: 19px;/);
+  assert.match(html, /\.tl-spd-menu button:hover, \.tl-spd-menu button\[aria-checked="true"\] \{ background: var\(--secondary\); \}/);
+  assert.match(html, /\.tl-spd-menu \.lu \{[^}]*visibility: hidden; \}\n\s*\.tl-spd-menu \[aria-checked="true"\] \.lu \{ visibility: visible; \}/);
+  // The lane names' icons are padded 4px; the chevron and the tick are not.
+  assert.match(html, /\.tl-name \.tl-spd \.lu \{ padding: 0; color: inherit; \}/);
+  // The head's switch is gone, and the Download dialog's is its own again.
+  assert.doesNotMatch(html, /\.tl-speed\b/);
+  assert.doesNotMatch(html, /\.export-seg[^{]*data-tempo/);
+  assert.match(html, /\.export-seg \[data-fmt\] \{ border-radius: 5px; padding: 3px 6px; font-size: var\(--font-label\);/);
+  assert.match(html, /\.export-seg \[data-fmt\]\.on \{ background: var\(--primary\); color: var\(--primary-foreground\); \}/);
+  // Its mouse press leaves the focus where it was, as the head's tools do.
+  assert.ok(readFileSync(TIMELINE, "utf8").includes('if (e.target.closest(".tl-head button, .tl-spd button")) e.preventDefault();'));
+});
+
+test("with a video brought in the timeline pane is the picture's lane taller", () => {
+  // The lane is 55px and its 6px gap: Translated and Captions fell under the
+  // pane's foot without them (owner, 2026-11-13). A height the grip
+  // remembered is added to by ui/src/timeline.mjs instead.
+  const html = readPage();
+  assert.match(html, /\.tl-name-join, \.tl-lane-join, \.tl-lane-join \.tl-vclip, \.tl-lane-join \.tl-seam \{ height: 55px; \}/);
+  assert.match(html, /\.timeline\.tl-joined \{ height: clamp\(301px, 100vh - 499px, 355px\); \}/);
+  const src = readFileSync(TIMELINE, "utf8");
+  assert.ok(src.includes('box.classList.toggle("tl-joined", !!joined());\n      fitTimelineHeight();'));
+  assert.ok(src.includes("const JOIN_LANE_PX = 61;"));
+});
+
+test("the New project dialog's box has the sound sign and the word Audio for a batch with no video", () => {
+  // Three audio files left the box plain black (owner, 2026-11-13).
+  const html = readPage();
+  assert.ok(html.includes(`<video id="projectVideo" muted playsinline></video><div class="project-audio">${lucide("volume-2", 22)}<span data-i18n>Audio</span></div>`));
+  assert.match(html, /\.project-audio \{ display: none; position: absolute; inset: 0;[^}]*pointer-events: none; \}/);
+  assert.match(html, /\.project-thumb\.audio \.project-audio \{ display: flex; \}/);
+  // The finished screen's own sign answers to the body's mark; this one must
+  // not, or an audio project open behind the dialog would put it over a video.
+  assert.equal(html.split('class="video-audio"').length - 1, 2);
 });

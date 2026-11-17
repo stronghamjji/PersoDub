@@ -229,9 +229,6 @@ const lines = (s) => String(s || "").split("\n").filter((l) => l.trim()).length;
 export const steps = [
   { name: "H1-H5 GitHub and Send feedback", looks: [".home-side", "#settingsOverlay"],
     async run(app) {
-      // The production edition has no repository button, and its Send
-      // feedback opens the Service inquiry form (ui/src/feedbackSheet.mjs).
-      if (app.production) throw new Skip("the production edition has no GitHub button, and Send feedback opens the inquiry form");
       await toHome(app);
       // Every press lands in a list instead of the system browser.
       await app.js(`(() => { window.__e2eOpen = window.open; window.__e2eUrls = [];
@@ -664,8 +661,6 @@ export const steps = [
     async run(app, ctx) {
       await ensurePrep(app, ctx);
       const engines = await app.api("/api/engines");
-      // Signed in, the production edition always has the account's key: the app is behind its sign-in screen without one.
-      if (app.production) throw new Skip("the production edition is signed in with the account's key, so Perso API never asks for one");
       if (engines.perso_available) throw new Error("this kit has a Perso key saved; the step needs none");
       const read = () => app.inPage(() => {
         const el = document.querySelector("#draftResult");

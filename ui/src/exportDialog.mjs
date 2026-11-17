@@ -13,6 +13,13 @@
 //   a video and its    Video with subtitles (the look picked burned in),
 //   own subtitles      Subtitles (.srt) -- a Burn in subtitles project
 //
+// An audio project (sound with no picture, ui/src/mediaKind.mjs) has no video
+// to hand back, so no row of it is one: a finished dubbing's are Audio --
+// Dubbed audio, Original voice, Background -- and then Subtitles & script; a
+// draft's is its Audio alone. Once a video is brought into a finished one
+// (ui/src/joinPlayer.mjs), Video -- Dubbed video, that video with the dubbed
+// sound -- comes first and the rest stay as they were.
+//
 // Every row has a checkbox; the foot's Download saves each ticked row in turn
 // (owner, 2026-09-30). The ticks are remembered for each of the three kinds,
 // and the first row is ticked until the user says otherwise. A saved row shows
@@ -25,8 +32,8 @@
 //
 // A dubbing's rows are links the browser (or the desktop shell) downloads; a
 // draft's and an erased video's are written by the app itself into Downloads.
-// Every sound row carries the MP3 / WAV switch, one pick for all of them,
-// remembered.
+// Every sound row carries the format switch -- MP3, WAV, FLAC, M4A -- one
+// pick for all of them, remembered.
 //
 // A finished dubbing has three sounds, so none of them is called "Audio only"
 // there: Dubbed audio is the new voices over the background, Original voice is
@@ -46,14 +53,31 @@ import { downloadsLabel, escapeHtml, errorText, folderName } from "./format.mjs"
 import { withRatio } from "./ratio.mjs";
 import { t } from "./i18n.mjs";
 import { record as recordStep } from "./events.mjs";
+import { isAudio } from "./mediaKind.mjs";
+import { audioTouched } from "./joinCuts.mjs";
 
 export const AUDIO_KEY = "persodub.exportAudio";
 export const TICKS_KEY = "persodub.exportTicks";
 
-/** "mp3" unless what was remembered is "wav". */
+// What a sound can be saved as, in the switch's order: the four the app
+// writes (app/media.py AUDIO_CODECS).
+const FORMATS = ["mp3", "wav", "flac", "m4a"];
+
+/** "mp3" unless what was remembered is another of the four. */
 export function audioFormat(stored) {
-  return stored === "wav" ? "wav" : "mp3";
+  return FORMATS.includes(stored) ? stored : "mp3";
 }
+
+// The name a project's ticks are remembered under. An audio project's are
+// its own: its rows are not a video project's, and ticks shared between the
+// two would open each dialog on what was ticked in the other. So are one's
+// with a video brought in, which then opens on Dubbed video.
+const ticksKind = (ctx) => (!isAudio(ctx) ? ctx.kind : ctx.joined ? `${ctx.kind}-joined` : `${ctx.kind}-audio`);
+
+// The subtitles file keeps the dubbed audio's own times. Audio taken out of
+// its lane, or another speed, moves the joined video's away from them (the
+// timeline's own answer, ui/src/joinCuts.mjs).
+const retimed = (join) => audioTouched({ audio: join.ranges.audio, tempo: join.tempo }, join.audio_seconds);
 
 /**
  * The rows ticked when the dialog opens: the ones remembered for this kind
@@ -107,6 +131,8 @@ const GROUPS = {
  *
  * @param {object} ctx
  * @param {"draft"|"dub"|"erase"|"captions"} ctx.kind
+ * @param {string} [ctx.media]      "audio" for an audio project (the job's or
+ *        the draft's own `media`); nothing for a project with a picture
  * @param {string} [ctx.jobId]      a dub or a burn-in project: the job
  * @param {string} [ctx.target]     a dub: its language code, in the file names
  * @param {string} [ctx.videoHref]  a dub: the URL the player is on
@@ -128,11 +154,16 @@ const GROUPS = {
  * @param {string[]} [ctx.only]  the rows asked for, the rest left out
  * @param {string} [ctx.ratio]     the shape the player shows the project in:
  *        "original" (or nothing) or "9:16", "16:9", "1:1", "4:5"
- * @param {"mp3"|"wav"} fmt
+ * @param {object|null} [ctx.joined]  a finished audio project with a video
+ *        brought in: the app's answer about it (app/api/join.py), with the
+ *        `stamp` it gave after the last save, each lane's `ranges`, `tempo`
+ *        and `audio_seconds`
+ * @param {"mp3"|"wav"|"flac"|"m4a"} fmt
  * @returns {Array<{id: string, icon: string, label: string, href?: string,
- *   name?: string, audio?: boolean, group?: string}>}  a row with an href is
- *   downloaded; one without is saved by the app (ctx.save). A dubbing's rows
- *   carry the heading they stand under (GROUPS), in that order.
+ *   name?: string, audio?: boolean, group?: string, note?: string}>}  a row
+ *   with an href is downloaded; one without is saved by the app (ctx.save).
+ *   A dubbing's rows carry the heading they stand under (GROUPS), in that
+ *   order; a `note` is a line said under its row.
  */
 export function exportRows(ctx, fmt) {
   const all = allRows(ctx, fmt);
@@ -152,11 +183,13 @@ function allRows(ctx, fmt) {
                           href: `/api/dub/result/${ctx.jobId}/original`, name: "org.mp4" }].filter(Boolean);
   }
   if (ctx.kind !== "dub") {
-    return [{ id: "video", icon: "film", label: t("Video") }, audio];
+    // An audio draft has no picture to save as a video: its sound alone.
+    return isAudio(ctx) ? [{ ...audio, label: t("Audio") }]
+      : [{ id: "video", icon: "film", label: t("Video") }, audio];
   }
   const base = `/api/dub/result/${ctx.jobId}`;
   const mark = ctx.mark || "";
-  return [
+  const videos = () => [
     { id: "video", group: "video", icon: "film", label: t("Dubbed video"),
       href: withRatio(ctx.videoHref, ctx.ratio), name: `dub_${ctx.target}.mp4` },
     // There whenever the project has subtitles (owner, 2026-09-30).
@@ -166,6 +199,8 @@ function allRows(ctx, fmt) {
     // A local file is already on the machine it would be saved to.
     (ctx.fromLink || original) && { id: "original", group: "video", icon: "film", label: t("Original video"),
                                     href: `${base}/original${ctx.fromLink ? "?download=1" : ""}`, name: "org.mp4" },
+  ];
+  const subtitles = [
     ctx.hasSrt && { id: "srt", group: "subtitles", icon: "subs", label: t("Subtitles (.srt)"),
                     href: `${base}/srt?download=1`, name: `dub_${ctx.target}.srt` },
     // Perso's own name for the file. The route sends the same name, with what
@@ -175,29 +210,46 @@ function allRows(ctx, fmt) {
                        href: `/api/dub/jobs/${ctx.jobId}/script.xlsx`,
                        name: `${ctx.title}_${(ctx.source || "auto").toUpperCase()}to${ctx.target.toUpperCase()}`
                          + "_OriginalTranslatedScript.xlsx" },
+  ];
+  const sounds = [
     { ...audio, group: "audio", label: t("Dubbed audio"),
       href: `${base}/audio?format=${fmt}&download=1${mark}`, name: `dub_${ctx.target}.${fmt}` },
     ...[["voice", t("Original voice")], ["background", t("Background")]].map(([which, label]) =>
       (ctx.stems || {})[which] && { id: which, group: "audio", icon: "audio", label, audio: true, tip: STEM_TIPS[which],
                                     href: `${base}/stem/${which}?format=${fmt}`,
                                     name: `${ctx.project || "project"}_${which}.${fmt}` }),
-  ].filter(Boolean);
+  ];
+  // Any project with a picture has its rows in the owner's order of
+  // 2026-10-22: the videos, the subtitles, then the sounds.
+  if (!isAudio(ctx)) return [...videos(), ...subtitles, ...sounds].filter(Boolean);
+  // An audio project's dubbing is its sound: that comes first, and there is
+  // no video among the rows -- but a video brought in, joined with the dubbed
+  // sound and built when it is asked for (app/api/join.py). The stamp changes
+  // with every cut, so a file built before one is never served from cache.
+  const join = ctx.joined;
+  const subs = subtitles.filter(Boolean);
+  if (join && retimed(join) && subs.length) {
+    subs.push({ ...subs.pop(), note: t("The audio lane is cut, so the subtitle file's times differ from the dubbed video's.") });
+  }
+  return [join && { id: "video", group: "video", icon: "film", label: t("Dubbed video"),
+                    href: `${base}/joined?download=1&v=${join.stamp}`, name: `dub_${ctx.target}.mp4` },
+          ...sounds, ...subs].filter(Boolean);
 }
 
 /**
  * The rows as the dialog draws them: a checkbox, the icon, the name, a "?"
  * with what the file is on a row that has a tip (the two separated sounds),
- * the MP3 / WAV switch on a sound row, and the place the saved check appears.
+ * the format switch on a sound row, and the place the saved check appears.
  * A row that starts a group has its heading over it.
  *
  * @param {Array} rows   exportRows' answer
- * @param {"mp3"|"wav"} fmt
+ * @param {"mp3"|"wav"|"flac"|"m4a"} fmt
  * @param {string[]} [ticked]  ids of the ticked rows
  * @param {string[]} [saved]   ids of the rows saved since the dialog opened
  */
 export function rowsHtml(rows, fmt, ticked = [], saved = []) {
   const seg = `<span class="export-seg" role="radiogroup" aria-label="${t("Audio format")}">`
-    + ["mp3", "wav"].map((f) => `<span role="radio" tabindex="0" data-fmt="${f}" aria-checked="${f === fmt}"`
+    + FORMATS.map((f) => `<span role="radio" tabindex="0" data-fmt="${f}" aria-checked="${f === fmt}"`
       + `${f === fmt ? ' class="on"' : ""}>${f.toUpperCase()}</span>`).join("") + "</span>";
   return rows.map((r, i) => {
     const done = saved.includes(r.id);
@@ -210,7 +262,8 @@ export function rowsHtml(rows, fmt, ticked = [], saved = []) {
       // The same hover-or-focus tip the timeline's tools carry ([data-tip]).
       + (r.tip ? `<span class="export-help" data-tip="${escapeHtml(r.tip)}" tabindex="0" role="img" aria-label="${escapeHtml(r.tip)}">?</span>` : "")
       + `${r.audio ? seg : ""}`
-      + `<span class="export-state">${done ? SAVED_ICON : ""}</span></a>`;
+      + `<span class="export-state">${done ? SAVED_ICON : ""}</span></a>`
+      + (r.note ? `<div class="export-note">${escapeHtml(r.note)}</div>` : "");
   }).join("");
 }
 
@@ -253,7 +306,7 @@ function followLink(href, name) {
 /**
  * @param {object} deps
  * @param {(id: string) => any} deps.$
- * @param {() => Promise<object|null>} deps.getContext  what is on screen, as
+ * @param {(only: string[]|null) => Promise<object|null>} deps.getContext  what is on screen, as
  *        exportRows reads it, plus `where` (the line under the rows, naming
  *        Downloads), for a dubbing `day` (its files' dated folder, with
  *        `project`) and, for a draft or an erased video,
@@ -318,7 +371,7 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
       if (storage && !ctx.only) {
         let all = {};
         try { all = JSON.parse(storage.getItem(TICKS_KEY) || "{}") || {}; } catch { /* not ours */ }
-        storage.setItem(TICKS_KEY, JSON.stringify({ ...all, [ctx.kind]: ticked }));
+        storage.setItem(TICKS_KEY, JSON.stringify({ ...all, [ticksKind(ctx)]: ticked }));
       }
     } catch { /* private window */ }
     paint();
@@ -439,7 +492,7 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
   // video's own opening ticks Video), remembering nothing. `only`: the rows
   // to offer, the rest left out (the Save video tab's original).
   async function open(tick = null, only = null) {
-    const next = await getContext();
+    const next = await getContext(only);
     if (!next) return;
     ctx = only ? { ...next, only } : next;
     folder = shell && shell.downloadFolder ? await shell.downloadFolder().catch(() => null) : null;
@@ -447,7 +500,7 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     let kept = null;
     try { kept = storage && storage.getItem(TICKS_KEY); } catch { /* private window */ }
     const ids = rows().map((r) => r.id);
-    ticked = tick ? ids.filter((id) => tick.includes(id)) : ticksFor(kept, ctx.kind, ids);
+    ticked = tick ? ids.filter((id) => tick.includes(id)) : ticksFor(kept, ticksKind(ctx), ids);
     paint();
     where.textContent = whereText();
     $("exportOverlay").classList.add("open");

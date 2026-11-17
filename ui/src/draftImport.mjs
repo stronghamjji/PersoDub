@@ -2,7 +2,7 @@
 // mockup, owner 2026-09-30): one project holds one video, so there is no bin
 // to keep it in. With no video the Dubbing tab shows the one shared
 // Import block (ui/src/importBlock.mjs) over the timeline's empty row "Drop
-// videos here"; a file, a drop or a link lands as the draft
+// videos or audio here"; a file, a drop or a link lands as the draft
 // (ui/src/draft.mjs), on the timeline at once, and the tab that was open
 // stays open. What the import is doing ("Importing…", "Reading the link…",
 // "Downloading… 40%", why it failed) is said on the line under each block.
@@ -34,8 +34,8 @@ const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus
  * Wire importing to a page. The page needs: #dubbingImport, the Dubbing tab's
  * face with no video, holding #dubbingImportSlot (the block is drawn there)
  * and #dubbingImportStatus; #saveImport, the Save video tab's, with
- * #saveImportSlot and #saveImportStatus; and a hidden `<input type=file accept="video/*">`
- * at #draftFileInput.
+ * #saveImportSlot and #saveImportStatus; and a hidden `<input type=file>` at
+ * #draftFileInput, which lists the video and audio files dubbing takes.
  *
  * @param {object} deps
  * @param {(id: string) => any} deps.$
@@ -50,7 +50,7 @@ const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus
  * @param {() => void} [deps.onSaveLinkReady]  told once a link pasted on the
  *        Save video tab is the draft, so the page can save it
  * @returns {{ render: () => void, importSource: (source: {file?, link?,
- *   onReady?, downloadId?, name?, duration?}) => Promise<void>, cancelImport: () => void,
+ *   onReady?, downloadId?, name?, duration?, media?}) => Promise<void>, cancelImport: () => void,
  *   say: (text: string, isError?: boolean) => void }}
  */
 export function initDraftImport({ $, state = {}, getScreen = () => "done",
@@ -141,7 +141,8 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     }
     if (seq !== importSeq) return;
     setStatus("");
-    setDraft({ downloadId: rec.id, name: file.name, duration, videoUrl: downloadVideoUrl(rec.id) });
+    // `media`: which it is, video or sound alone, as the app found on looking inside.
+    setDraft({ downloadId: rec.id, name: file.name, duration, videoUrl: downloadVideoUrl(rec.id), media: rec.media });
     if (replacing) onReplaced(replacing.downloadId);
   }
 
@@ -175,7 +176,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
         stopWatching();
         linkOnItsWay = "";
         setStatus("");
-        setDraft({ downloadId: d.id, name: d.title || url, duration: d.duration_sec || 0, videoUrl: downloadVideoUrl(d.id) });
+        setDraft({ downloadId: d.id, name: d.title || url, duration: d.duration_sec || 0, videoUrl: downloadVideoUrl(d.id), media: d.media });
         if (onReady) onReady();
         return;
       }
@@ -188,7 +189,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     if (source.downloadId) {
       cancelImport();
       setDraft({ downloadId: source.downloadId, name: source.name || "", duration: source.duration || 0,
-                 videoUrl: downloadVideoUrl(source.downloadId), speech: source.speech || null });
+                 videoUrl: downloadVideoUrl(source.downloadId), speech: source.speech || null, media: source.media });
       return;
     }
     if (source.file) return holdFile(source.file);

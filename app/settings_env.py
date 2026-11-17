@@ -9,28 +9,28 @@ TrustedHost middleware only rejects foreign Host headers (DNS rebinding) on
 top of that. A saved key takes effect on the next dub, not the next app start:
 everything that needs one reads it back through current_value() below.
 """
+import contextlib
 import os
 import shutil
-from typing import Dict, Optional
+from typing import Dict, Iterator, Optional, Tuple
 
 MANAGED_KEYS = ("GEMINI_API_KEY", "PERSO_API_KEY", "PERSO_SPACE_SEQ")
 
-# Not an API key, so not in MANAGED_KEYS: it is the same line the desktop shell
-# reads out of kit.env before every usage count (see desktop/src/analytics.js).
-# The Settings switch writes here so the switch and the environment variable
-# are one value rather than two that could disagree.
+# Settings > Privacy is one switch, Share usage data, kept as the three lines
+# the desktop shell already reads out of kit.env before every send. They are
+# not API keys, so not in MANAGED_KEYS, and the switch writes all three at once
+# so the screen and the shell cannot disagree.
+#
+# Usage counts (desktop/src/analytics.js): "1" means off.
 ANALYTICS_OFF_KEY = "PERSODUB_NO_ANALYTICS"
 
-# The other switch the desktop shell reads out of kit.env before every send:
-# whether an automatic failure report may leave (desktop/src/report.js). A
-# separate line from the counts, because they are separate promises -- someone
-# who does not want to be counted may still want their crash fixed, and
-# someone who does not want their logs sent still shows up in the count.
+# Job records and automatic failure reports (desktop/src/report.js): "1" means
+# off.
 REPORTS_OFF_KEY = "PERSODUB_NO_REPORTS"
 
-# Whether the buttons pressed and screens shown are recorded and sent
-# (desktop/src/events.js reads the same line before every batch). "1" or "0";
-# with no line the edition decides: on for production, off for open source.
+# The buttons pressed and screens shown (desktop/src/events.js): "1" or "0";
+# with no line they are recorded. The shell also holds them back whenever the
+# counts are off, whatever this line says.
 EVENTS_KEY = "PERSODUB_EVENTS"
 
 # The app's language ("auto", "en" or "ko"), from Settings > About. One line
@@ -83,21 +83,46 @@ def update_env_text(text: str, values: Dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _assignments(path: str) -> Iterator[Tuple[str, str]]:
+    """Every KEY=value line of kit.env, as (key, value), read the way the
+    desktop shell reads it (kitEnv.js parseEnvFile) so the two cannot disagree
+    about what a line says: a byte-order mark at the top of the file is not
+    part of the first key, a leading `export ` is dropped, and one pair of
+    quotes around a value is taken off. A kit.env saved by Notepad with a mark,
+    or one with PERSODUB_NO_ANALYTICS="1", read here as having no such line,
+    so a computer that had turned everything off looked partly on.
+
+    Nor does a byte that is not UTF-8 stop the reading, as it does not stop the
+    shell's: a kit.env saved in the computer's own encoding (cp949, a Korean
+    note or folder name in it) reads with U+FFFD where those bytes are and
+    every other line as written. Refusing the whole file answered 500 to every
+    route that reads a setting, and the page then showed Share usage data on
+    for a computer that had turned it off."""
+    with open(path, encoding="utf-8-sig", errors="replace") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            yield key.strip(), value
+
+
 def read_key_status() -> Optional[Dict[str, bool]]:
     """{key_set booleans} from kit.env, or None when there is no kit."""
     path = env_path()
     if not path or not os.path.exists(path):
         return None
     status = dict.fromkeys(MANAGED_KEYS, False)
-    with open(path, encoding="utf-8") as f:
-        lines = f.readlines()
-    for raw in lines:
-        line = raw.strip()
-        if line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() in status and value.strip():
-            status[key.strip()] = True
+    for key, value in _assignments(path):
+        if key in status and value:
+            status[key] = True
     return status
 
 
@@ -108,14 +133,9 @@ def read_value(key: str) -> Optional[str]:
     if not path or not os.path.exists(path):
         return None
     value = None
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            if k.strip() == key and v.strip():
-                value = v.strip()
+    for k, v in _assignments(path):
+        if k == key and v:
+            value = v
     return value
 
 
@@ -132,14 +152,9 @@ def defined_value(key: str) -> Optional[str]:
     if not path or not os.path.exists(path):
         return None
     value = None
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            if k.strip() == key:
-                value = v.strip()
+    for k, v in _assignments(path):
+        if k == key:
+            value = v
     return value
 
 
@@ -162,7 +177,8 @@ def current_value(key: str) -> str:
 
 
 def _write_env(to_set: Dict[str, str]) -> None:
-    """Write KEY=value lines into kit.env, backing it up first.
+    """Write KEY=value lines into kit.env, backing it up first (kit.env.bak is
+    the file as it was before this write).
 
     Raises FileNotFoundError without a kit, even when there is nothing to
     write: a caller that thinks it saved something must not be told it did."""
@@ -177,10 +193,38 @@ def _write_env(to_set: Dict[str, str]) -> None:
             raise ValueError(t("API keys must be a single line of printable text"))
     if to_set:
         shutil.copy2(path, path + ".bak")
-        with open(path, encoding="utf-8") as f:
+        # A byte that is not UTF-8 is carried through the rewrite as the byte
+        # it was (surrogateescape, in and out), so a line this write does not
+        # set -- a note or a folder name in the computer's own encoding -- is
+        # still what its owner saved.
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
             text = f.read()
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(update_env_text(text, to_set))
+        new_text = update_env_text(text, to_set)
+        # Written beside it and moved over it, as the shell's writer does
+        # (kitEnv.js setKitEnvValue): kit.env is never seen half-written, and a
+        # write that stops part way leaves the file as it was.
+        tmp = path + ".tmp"
+        try:
+            # Owner-only from the moment it exists, not once the keys are in it.
+            # One left by a run that was killed goes first: opening a file that
+            # is already there would keep whatever mode it had.
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(tmp)
+            with open(tmp, "w", encoding="utf-8", errors="surrogateescape",
+                      opener=lambda name, flags: os.open(name, flags, 0o600)) as f:
+                f.write(new_text)
+            try:
+                os.replace(tmp, path)
+            except OSError:
+                # Windows will not replace a file another program has open at
+                # that moment (the shell reading it, a virus scanner): then it
+                # is written in place, as it always was before.
+                with open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
+                    f.write(new_text)
+        finally:
+            # No copy of the keys is left lying beside them, whatever happened.
+            with contextlib.suppress(OSError):
+                os.remove(tmp)
         # Keys live here now -- keep both files owner-only.
         os.chmod(path, 0o600)
         os.chmod(path + ".bak", 0o600)
@@ -211,38 +255,36 @@ def write_keys(values: Dict[str, Optional[str]]) -> Dict[str, bool]:
     return read_key_status() or {}
 
 
-def read_analytics_off() -> bool:
-    """Whether the user turned usage counts off. Absent means on."""
-    return read_value(ANALYTICS_OFF_KEY) == "1"
+def read_share_usage() -> bool:
+    """Whether the Share usage data switch is on. Off only when the usage counts
+    and the failure reports are both off: the shell holds the button events back
+    whenever the counts are off, so those two lines together mean nothing
+    leaves, with or without an events line. Absent means on."""
+    return not (read_value(ANALYTICS_OFF_KEY) == "1" and read_value(REPORTS_OFF_KEY) == "1")
 
 
-def write_analytics_off(off: bool) -> None:
-    """Turn usage counts off, or back on. Takes effect on the next count --
-    the shell re-reads kit.env every time, so nothing waits for a restart."""
-    _write_env({ANALYTICS_OFF_KEY: "1" if off else "0"})
+def write_share_usage(on: bool) -> None:
+    """Turn the three lines on or off together, in one write. Takes effect on
+    the next send -- the shell re-reads kit.env every time, so nothing waits
+    for a restart."""
+    _write_env({ANALYTICS_OFF_KEY: "0" if on else "1",
+                REPORTS_OFF_KEY: "0" if on else "1",
+                EVENTS_KEY: "1" if on else "0"})
 
 
-def read_reports_off() -> bool:
-    """Whether the user turned automatic failure reports off. Absent means on."""
-    return read_value(REPORTS_OFF_KEY) == "1"
+def settle_share_usage() -> None:
+    """Bring a kit.env from the versions with three switches to one answer.
 
-
-def write_reports_off(off: bool) -> None:
-    """Turn automatic failure reports off, or back on. Like the counts' switch,
-    it takes effect on the next failure rather than the next restart."""
-    _write_env({REPORTS_OFF_KEY: "1" if off else "0"})
-
-
-def read_events_enabled() -> bool:
-    """Whether button and screen events are recorded: kit.env's line, or on
-    with none, in both editions, as the desktop shell decides (events.js)."""
-    return read_value(EVENTS_KEY) != "0"
-
-
-def write_events_enabled(on: bool) -> None:
-    """Turn button and screen events on or off. The shell re-reads kit.env
-    with every batch, so the next one already obeys it."""
-    _write_env({EVENTS_KEY: "1" if on else "0"})
+    A computer that had only some of them off reads as on (read_share_usage),
+    so its three lines are all written as on; otherwise the screen would say
+    on while one line still held something back. Everything on and everything
+    off are left exactly as they are, file untouched, which is also what makes
+    a second call do nothing. Without a kit (a run from source) no line reads
+    as off, so nothing is written."""
+    any_off = (read_value(ANALYTICS_OFF_KEY) == "1" or read_value(REPORTS_OFF_KEY) == "1"
+               or read_value(EVENTS_KEY) == "0")
+    if any_off and read_share_usage():
+        write_share_usage(True)
 
 
 def write_language(value: str) -> None:

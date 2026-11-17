@@ -24,7 +24,6 @@ import { record, startEvents } from "./events.mjs";
 // (ui/src/events.mjs). Early, so no press goes unseen.
 startEvents();
 import { initSettingsUi } from "./settingsDialog.mjs";
-import { initSignIn } from "./signIn.mjs";
 import { initWhatsNew } from "./whatsNew.mjs";
 import { initKeyWindow } from "./keyWindow.mjs";
 import { initChatgptSignIn } from "./chatgptSignIn.mjs";
@@ -34,7 +33,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, persoLink, persoResultLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { persoResultLink } from "./persoLinks.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -43,6 +42,7 @@ import { scriptChecker } from "./scriptWatch.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "./timeline.mjs";
 import { playRange, cancelRange } from "./playRange.mjs";
 import { initDonePlayer } from "./donePlayer.mjs";
+import { initJoinPlayer } from "./joinPlayer.mjs";
 import { initLeftTabs } from "./leftTabs.mjs";
 import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
@@ -61,6 +61,7 @@ import { createDubTracker, startedFromForm, startedFromJob } from "./dubTrack.mj
 import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines, restartFailure, restartRanOutOfMemory } from "./format.mjs";
 import { currentLanguage, languageName, pageLanguage, savedSettings, t } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
+import { isAudio, dubFormatProblem, videoFormatProblem } from "./mediaKind.mjs";
 
 // The language before anything is drawn, so the first paint is already in it
 // (ui/src/i18n.mjs; capped, so a slow answer only means starting in English).
@@ -192,27 +193,20 @@ window.addEventListener("resize", () => {
 // ---------------- Settings modal ----------------
 // The sheet itself is ui/src/settingsDialog.mjs -- it owns everything inside
 // #settingsOverlay: the API keys, the Perso workspace picker, Storage, the
-// usage-counts switch and the About lines. What stays on this page are the
+// Privacy switch and the About lines. What stays on this page are the
 // ways IN (the gear below, the Advanced-options keys link, the models dialog
 // and the out-of-credits popup all call settings.openSettings()) and the two
 // things the sheet reaches back for: re-checking which engines a saved key
 // makes usable, and the Models catalog, which modelsDialog.mjs paints.
-// The production edition's Perso sign-in screen (ui/src/signIn.mjs), over the
-// whole window while signed out. The open-source edition never shows it.
-// The window's title is the name this edition shows (desktop/src/edition.js); a plain browser keeps the page's own.
+// The window's title is the name the shell gives the app; a plain browser keeps the page's own.
 if (window.persodubShell?.name) document.title = window.persodubShell.name;
-const signIn = initSignIn({ $, shell: window.persodubShell || null });
 const settings = initSettingsUi({
   $,
   onSaved: () => applyEngineAvailabilityToForm(),
   refreshModelCatalog: () => models.refreshModels(),
   // Storage says where downloads go; only the desktop shell knows.
   shell: window.persodubShell || null,
-  // The Perso account row and its buttons, production edition only.
-  account: signIn,
 });
-// Home's account line (ui/src/signIn.mjs paints it) opens the account's own tab.
-$("homeAccount").addEventListener("click", () => settings.openSettings("keys"));
 
 $("settingsBtn").addEventListener("click", settings.openSettings);
 
@@ -223,20 +217,15 @@ initWhatsNew({ $ });
 
 // Help, from the Home sidebar: what each tool does and where it runs. Escape
 // and the backdrop press OK (ui/src/escapeKey.mjs). The two links open the
-// repo's docs in the system browser, the way the sidebar's links do. The
-// production edition has no repository: its User guide is Perso's desktop app
-// page, and it has no FAQ link. And its Home's Help is that page itself, in
-// the browser, with no dialog first (owner, 2026-10-27).
+// repo's docs in the system browser, the way the sidebar's links do.
 function openHelp() {
-  if (isProduction()) window.open(persoLink(DESKTOP_APP_URL, "help", savedSettings()?.perso_utm), "_blank", "noopener");
-  else $("helpOverlay").classList.add("open");
+  $("helpOverlay").classList.add("open");
 }
 $("helpOk").addEventListener("click", () => $("helpOverlay").classList.remove("open"));
-$("helpFaqItem").hidden = isProduction();
 for (const [id, doc] of [["helpGuide", "usage"], ["helpFaq", "faq"]]) {
   $(id).addEventListener("click", (e) => {
     e.preventDefault();
-    window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "help", savedSettings()?.perso_utm) : `${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
+    window.open(`${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
   });
 }
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
@@ -440,12 +429,11 @@ $("voiceSelect").addEventListener("change", () => applyEngineAvailabilityToForm(
 // the hint slots render these with pre-line whitespace. Getters, so each is
 // read in the language of the moment. The Perso API dubbing hint names the
 // free first minute (owner, 2026-10-21): it is what gets people to sign up.
-// And that the video leaves this computer (owner, 2026-10-22): the intro
-// page promises it stays, for the local path.
+// It stops there (owner, 2026-11-14): the line saying the video is uploaded
+// read wrong over a sound file, and docs/privacy.md is where that is said.
 const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
-             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that."),
-                                   t("The video is uploaded to Perso.")]; } },
+             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
   sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get roformer() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
@@ -697,9 +685,10 @@ const newProject = initNewProjectUi({
 // The Erase tab and the video its box is drawn on (#tabErase, #erasePane)
 // belong to
 // ui/src/eraseScreen.mjs. What the page hands it is what is the page's: the
-// one way screens are swapped, the one top bar, and the one rule about which
-// files this app takes -- videoProblem, shared with the home drop zone, so a
-// file refused on one screen is refused on the other in the same words.
+// one way screens are swapped, the one top bar, and the rule about which
+// files a tool that works on the picture takes -- videoProblem: a video,
+// under the size limit every way in shares. (Dubbing's ways in take audio
+// too: dubFileProblem.)
 const eraseScreen = initEraseScreenUi({
   $, showScreen, setTopbar, checkFile: videoProblem,
   getScreen: () => document.body.dataset.screen,
@@ -753,7 +742,10 @@ onSave: () => {
     leftTabs.show("save");
     return;
   }
-  const row = state.jobId && document.body.dataset.screen !== "erase" ? ["original"] : ["video"];
+  // A project's Erase tab holds the project's video, not one of its own, until
+  // it has erased it: Save video there is the project's original still.
+  const own = erase && (eraseScreen.erasedJob() || eraseScreen.exportsDraft());
+  const row = state.jobId && !own ? ["original"] : ["video"];
   exportDialog.open(row, row);
 } });
 // A dub that is open (running, finished or stopped): its Erase tab starts
@@ -808,6 +800,58 @@ initPlayerFoot({ video: $("runningVideo"), time: $("runTime"), play: $("runPlay"
 initPlayerFoot({ video: $("eraseVideo"), time: $("eraseTime"), play: $("erasePlay"),
                  fullscreen: $("eraseFs"), stage: $("eraseStage") });
 
+// ---------------- An audio project ----------------
+// What is open -- the job, or the draft before it -- is sound with no picture
+// (ui/src/mediaKind.mjs). The layout stays as it is: the video box says
+// "Audio" (the stylesheet, off the body's "audio-project"), the tabs that
+// work on a picture are locked, and full screen, which would be of nothing,
+// is off. The Ratio buttons, the timeline and the Before dubbing card ask the
+// same question for themselves.
+// What is open: the job, once its record is the one in hand, or the draft.
+function openProject() {
+  return state.jobId ? (state.job && state.job.id === state.jobId ? state.job : null) : getDraft();
+}
+// A finished audio project takes a video (ui/src/joinPlayer.mjs): the way to
+// bring one in sits in the box that says "Audio", and once it is in the box
+// shows its picture, playing with the dubbed sound. The player, the subtitles
+// and the timeline are wired further down, so they are reached when called.
+// joinPlayer.getJoin() is what the timeline's lanes and the Download dialog
+// read; joinPlayer.saved() sends a change still waiting.
+const joinPlayer = initJoinPlayer({
+  $, sound: $("doneVideo"), picture: $("joinVideo"), checkFile: videoProblem,
+  // A video came in or was let go: the box, the pane's shape, the clock,
+  // where the subtitles sit and the timeline's lanes all follow it.
+  onChange: () => {
+    paintMediaKind();
+    donePlayer.sizeVideoPane();
+    donePlayer.paintPlayhead();
+    subtitles.syncVideoChrome();
+    timeline.redraw();
+  },
+  onTick: () => donePlayer.paintJoined(),
+});
+function paintMediaKind() {
+  const audio = isAudio(openProject());
+  document.body.classList.toggle("audio-project", audio);
+  // Whether a video was brought in is asked of the app once per finished
+  // audio project, and its answer paints this again (onChange above).
+  const finished = audio && !!state.jobId && state.job.status === "done";
+  joinPlayer.open(finished ? state.jobId : null);
+  const joined = !!joinPlayer.getJoin();
+  document.body.classList.toggle("joined-video", joined);
+  // The erase screen opened from Home asks for a video of its own, whatever
+  // draft is held behind it: its tab is not locked while it is up. The other
+  // two would still start from that draft.
+  const locked = document.body.dataset.screen === "erase" ? ["captions", "save"] : ["erase", "captions", "save"];
+  leftTabs.lock(audio ? locked : [], joined ? t("Not for a video brought into an audio project.")
+    : t("Only for projects with a video."));
+  // Full screen of the brought-in picture is of something.
+  $("fullscreenBtn").disabled = audio && !joined;
+  $("runFs").disabled = audio;
+}
+onDraftChange(paintMediaKind);
+new MutationObserver(paintMediaKind).observe(document.body, { attributes: true, attributeFilter: ["data-screen"] });
+
 // ---------------- The draft state of the work screen ----------------------
 // A video imported for a new project that is not dubbed yet: how it comes in
 // (ui/src/draftImport.mjs) and the Dubbing tab's "Before dubbing" card and
@@ -817,7 +861,7 @@ initPlayerFoot({ video: $("eraseVideo"), time: $("eraseTime"), play: $("erasePla
 const draftImport = initDraftImport({
   $, state,
   getScreen: () => document.body.dataset.screen,
-  checkFile: (file) => videoProblem(file),
+  checkFile: (file) => dubFileProblem(file),
   // A video replaced on the draft is let go the way one an erase was started
   // on is: its Draft card leaves Home, so drafts do not pile up (owner, 2026-10-22).
   onReplaced: (downloadId) => forgetDraft(downloadId),
@@ -872,7 +916,7 @@ async function openSeparatedJob(job) {
 // (resetForNewJob: its id, script and timeline lanes); a job still running
 // carries on, and a dub started meanwhile waits its turn.
 initNewProjectWindow({
-  $, checkFile: videoProblem,
+  $, checkFile: dubFileProblem,
   leaveJob: () => resetForNewJob(),
   openDraft: (source) => draftSetup.openDraft(source),
   openNewProject: (source) => newProject.openNewProject(source),
@@ -900,6 +944,9 @@ function openDraftHere(source, opts, project = null) {
   // resetForNewJob passes through Home, which forgets the dub to go back
   // to: note it first and put it back after.
   const from = state.jobId || null;
+  // The draft is the open job's own file held again (+ Add language), so it
+  // is what that job is: a video, or sound alone.
+  const media = state.job && state.job.id === from ? state.job.media : undefined;
   // From an erased video the way back is to that erase, not to a dubbing;
   // the same from a video with the user's own subtitles.
   const fromErase = document.body.dataset.screen === "erase"
@@ -913,7 +960,7 @@ function openDraftHere(source, opts, project = null) {
   // was already a card before this opened it is never forgotten that way.
   const had = !!source && keptDrafts.some((k) => k.downloadId === source.downloadId);
   state.draftOpened = null;
-  return draftSetup.openDraft(source, opts).then(() => {
+  return draftSetup.openDraft(source && { ...source, media }, opts).then(() => {
     const d = getDraft();
     if (d && !had) state.draftOpened = { downloadId: d.downloadId, mark: draftMark(d), touched: false };
   });
@@ -954,22 +1001,10 @@ const languageRow = initLanguageRow({
 // The project's own page, from the logo in Settings > About. window.open
 // rather than an <a>: the shell hands every http(s) open to the OS browser
 // (desktop/src/windowFactory.js), and in a plain browser it is a new tab either way.
-// The shell's edition decides it (desktop/src/edition.js); a plain browser has
-// no shell and shows the public repository. The production edition's logo
-// opens Perso's desktop app page, and is named after the app rather than the
-// repository.
+// The shell names the repository; a plain browser has no shell and shows the
+// public one.
 const REPO_URL = `https://github.com/${window.persodubShell?.repo || "stronghamjji/PersoDub"}`;
-$("brandBtn").addEventListener("click", () => window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "about", savedSettings()?.perso_utm) : REPO_URL, "_blank", "noopener"));
-// OmniVoice is the open-source edition's only (app/setup.py's voice stage):
-// the production edition does not offer it, so its row leaves the list.
-if (isProduction()) $("voiceSelect").querySelector('option[value="omnivoice"]')?.remove();
-if (isProduction()) {
-  const brand = $("brandBtn");
-  brand.removeAttribute("data-i18n-title");
-  brand.removeAttribute("data-i18n-aria-label");
-  brand.title = t("{app}");
-  brand.setAttribute("aria-label", t("{app}"));
-}
+$("brandBtn").addEventListener("click", () => window.open(REPO_URL, "_blank", "noopener"));
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -982,16 +1017,18 @@ const MAX_VIDEO_LABEL = MAX_VIDEO_MB >= 1024 ? `${MAX_VIDEO_MB / 1024} GB` : `${
 
 // The zone itself never reports "video ready" any more: a good file opens the
 // New project dialog straight away, and that dialog is the confirmation.
-function videoProblem(file) {
-  if (!/\.(mp4|mov)$/i.test(file.name)) {
-    return t("Please choose an MP4 or MOV video file.");
-  }
+// Why a file is not taken, or null. Dubbing takes video and audio; the tools
+// that work on the picture (Erase subtitles, Burn in subtitles) take video
+// alone (ui/src/mediaKind.mjs). The size limit is the same for all of them.
+function tooBig(file) {
   if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
-    return t("This video is {size}. The limit is {limit}. Please use a shorter or smaller file.",
+    return t("This file is {size}. The limit is {limit}. Please use a shorter or smaller file.",
       { size: formatBytes(file.size), limit: MAX_VIDEO_LABEL });
   }
   return null;
 }
+function dubFileProblem(file) { return dubFormatProblem(file) || tooBig(file); }
+function videoProblem(file) { return videoFormatProblem(file) || tooBig(file); }
 
 function setVideoFiles(fileList) {
   $("formError").textContent = "";
@@ -1000,7 +1037,7 @@ function setVideoFiles(fileList) {
   // One bad file stops the whole drop: silently dubbing the rest would leave
   // the user thinking every video they dropped is in line.
   for (const f of files) {
-    const bad = videoProblem(f);
+    const bad = dubFileProblem(f);
     if (bad) {
       $("formError").textContent = files.length > 1 ? `${f.name}: ${bad}` : bad;
       return;
@@ -1039,11 +1076,9 @@ uploadZone.addEventListener("drop", (e) => {
 // The top bar's update icon and the update window (ui/src/updateWindow.mjs).
 // Outside Electron (plain browser, tests) persodubShell is absent: the icon
 // stays grey and the window says the app is up to date.
-// An update with no notes links to its release page, Perso's desktop app page
-// in the production edition.
+// An update with no notes links to its release page.
 wireUpdates({ $, shell: window.persodubShell || null,
-  // The production edition has no release page: the window's own list is enough (owner, 2026-10-26).
-  notesPage: isProduction() ? () => null : (version) => `${REPO_URL}/releases/tag/v${version}` });
+  notesPage: (version) => `${REPO_URL}/releases/tag/v${version}` });
 
 // ---------------- Link source (paste a URL) ----------------
 // Probing is cheap (seconds, no download), so it runs as soon as a URL looks
@@ -1278,6 +1313,7 @@ function resetForNewJob() {
   rememberLastJob();
   state.jobId = null;
   state.job = null;
+  paintMediaKind();
   delete document.body.dataset.jobId;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
   $("formError").textContent = "";
@@ -1455,7 +1491,7 @@ async function reopenDraft(downloadId) {
   const live = getDraft();
   if (!live || live.downloadId !== downloadId) {
     setDraft({ downloadId, name: kept.name, duration: kept.duration,
-               videoUrl: downloadVideoUrl(downloadId), ratio: kept.ratio });
+               videoUrl: downloadVideoUrl(downloadId), ratio: kept.ratio, media: kept.media });
     setRanges(kept.ranges);
     // And on the remembered choices, as a new draft starts: after a restart
     // nothing else had put them back, and the card opened on the page's own
@@ -1480,18 +1516,16 @@ async function reopenDraft(downloadId) {
 
 // The Home sidebar and the cards under the banner (the mockup's first screen,
 // user 2026-09-30): each one opens a way in this page already has.
-// Customer support (production) and Send feedback (open source): a Service
-// inquiry form, sent through the shell to the support web app
-// (ui/src/feedbackSheet.mjs) -- when the build has its address.
+// Send feedback: a Service inquiry form, sent through the shell to the
+// support web app (ui/src/feedbackSheet.mjs) -- when the build has its address.
 const shellInfo = window.persodubShell || {};
 const openFeedback = shellInfo.inquiry && shellInfo.sendInquiry ? initFeedbackSheet({
-  $, send: (form) => shellInfo.sendInquiry(form), production: isProduction(),
+  $, send: (form) => shellInfo.sendInquiry(form),
   language: currentLanguage,
   openUrl: (url) => window.open(url, "_blank", "noopener"),
-  account: () => signIn.status().account,
 }) : null;
 initHomeSidebar({
-  $, body: document.body, repoUrl: REPO_URL, production: isProduction(), onFeedback: openFeedback,
+  $, body: document.body, repoUrl: REPO_URL, onFeedback: openFeedback,
   // The UTM-tagged link from the start-up's GET /api/settings; the plain page
   // until that has answered.
   persoUrl: () => savedSettings()?.perso_workspace_link || "https://perso.ai/workspace/vt",
@@ -1821,7 +1855,7 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // screen, not on every report of the same one.
   const newlyOpen = !state.job || state.job.id !== job.id;
   state.job = job;
-  if (newlyOpen) draftSetup.paint();
+  if (newlyOpen) { draftSetup.paint(); paintMediaKind(); }
   // The script assistant runs in its own module and cannot see `state`. Parking
   // the id here lets it answer "this job" without asking the user for a number
   // they have no way of knowing.
@@ -2092,6 +2126,7 @@ $("doneResume").addEventListener("click", () => { if (state.job) resumeStopped(s
 // the Original / Dubbing tabs, the pane's size -- is ui/src/donePlayer.mjs.
 const donePlayer = initDonePlayer({
   $, state, doneVideo,
+  join: joinPlayer, picture: $("joinVideo"),
   // Reached for when called: the timeline is wired further down this file.
   timeline: { paintTimeline: (t, total, clock) => timeline.paintTimeline(t, total, clock) },
 });
@@ -2101,7 +2136,7 @@ const donePlayer = initDonePlayer({
 // parts, a finished dub's files, an erased video. The dialog, its rows and
 // the receipt each row gives are ui/src/exportDialog.mjs; this is only what
 // is on screen right now, in the shape that file reads.
-async function exportContext() {
+async function exportContext(only = null) {
   // The shape the Ratio button is on: every video row is saved in it
   // (ui/src/exportDialog.mjs puts it on the links and hands it to save).
   const ratio = ratioUi.current();
@@ -2112,11 +2147,15 @@ async function exportContext() {
     return { kind: "erase", ratio: (getDraft() || {}).ratio || "original", where: t("Saved in Downloads"), save: (what) => eraseScreen.exportErased(what) };
   }
   // Any other erase screen hands back only the draft it shows: an empty one
-  // saved whatever draft was still held (Windows test E9).
-  if (document.body.dataset.screen === "erase" && !eraseScreen.exportsDraft()) return null;
-  // A draft with a video on the timeline, before any dub.
+  // saved whatever draft was still held (Windows test E9). An open project's
+  // original, asked for by name (Save video), is the project's to give
+  // whichever tab is up.
+  const original = !!state.jobId && (only || []).includes("original");
+  if (document.body.dataset.screen === "erase" && !eraseScreen.exportsDraft() && !original) return null;
+  // A draft with a video on the timeline, before any dub. An audio draft
+  // says so (`media`), and the dialog offers its sound alone.
   if (!state.jobId && draftSetup.canExport()) {
-    return { kind: "draft", ratio, where: t("Saved in Downloads"), save: (what) => draftSetup.saveDraft(what) };
+    return { kind: "draft", media: getDraft().media, ratio, where: t("Saved in Downloads"), save: (what) => draftSetup.saveDraft(what) };
   }
   const job = state.job;
   if (!job) return null;
@@ -2140,6 +2179,16 @@ async function exportContext() {
   // still has it (a dubbing made wholly on Perso has neither).
   const stems = await fetch(`/api/dub/result/${job.id}/stems`)
     .then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  // A video brought into an audio project: a cut still waiting goes out first,
+  // then the app is asked, so the Dubbed video link carries the stamp of what
+  // the timeline shows now. No answer leaves the audio project's own rows.
+  let joined = null;
+  if (joinPlayer.getJoin()) {
+    await joinPlayer.saved();
+    const d = await fetch(`/api/dub/jobs/${job.id}/join`)
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    joined = d && d.video ? d : null;
+  }
   // The subtitled video downloads in the look chosen on the work screen: the
   // same subStyle the player edits (preset, position, size). Nothing to pick
   // here -- the dialog only hands files over (user, 2026-09-03). The remake
@@ -2150,6 +2199,9 @@ async function exportContext() {
   const { preset: subPreset, query: posQ } = subtitles.exportParams();
   return {
     kind: "dub", jobId: job.id, target, mark, hasSrt, hasScript, stems, project: job.project, fromLink: !!job.from_link, ratio,
+    // "audio" for an audio project, whose rows are its sounds and no video,
+    // and the video brought into it, when there is one.
+    media: job.media, joined,
     // The script's file name: the project as the screens show it, and both languages.
     title: shownName(job), source: job.source_lang,
     // The same URL the player is on, remake mark and all: without it a download
@@ -2264,11 +2316,19 @@ const subtitles = initSubtitleOverlay({
   },
   getDoneSource: donePlayer.getDoneSource,
   showVideoSource: donePlayer.showVideoSource,
+  // A brought-in video's picture is on an element of its own.
+  getPicture: () => (joinPlayer.getJoin() ? $("joinVideo") : doneVideo),
   // The Captions tab with no project open: the video comes in as the draft,
   // and the video with its subtitle file is opened as a finished project,
   // the way Projects opens a dub, on this tab.
   alone: {
-    importSource: (source) => draftImport.importSource(source),
+    // Burning subtitles in needs a picture. The video comes in as the draft,
+    // whose own check takes audio, so an audio file is turned away here first.
+    importSource: (source) => {
+      const bad = source.file ? videoProblem(source.file) : null;
+      if (bad) { draftImport.say(bad, true); return Promise.resolve(); }
+      return draftImport.importSource(source);
+    },
     say: (text, isError) => draftImport.say(text, isError),
     // A project's own video, held again the way + Add language holds it; an
     // erased video, held the way its Dubbing button holds it.
@@ -2309,9 +2369,9 @@ const ratioUi = initRatioUi({
   ratioBtn: $("ratioBtn"), ratioMenu: $("ratioMenu"),
   previewBtn: $("previewBtn"), previewMenu: $("previewMenu"),
   getProject: () => {
-    if (state.jobId) return { kind: "job", id: state.jobId };
+    if (state.jobId) return { kind: "job", id: state.jobId, media: (openProject() || {}).media };
     const d = getDraft();
-    return d ? { kind: "draft", id: d.downloadId, ratio: d.ratio } : null;
+    return d ? { kind: "draft", id: d.downloadId, ratio: d.ratio, media: d.media } : null;
   },
   saveDraftRatio: setDraftRatio,
   onLayout: subtitles.syncVideoChrome,
@@ -2329,6 +2389,8 @@ onDraftChange(() => ratioUi.refresh());
 // (user, 2026-09-09).
 new ResizeObserver(subtitles.syncVideoChrome).observe(doneVideo);
 new ResizeObserver(subtitles.syncVideoChrome).observe(doneVideo.parentElement);
+// A brought-in video's picture takes its size when its file opens.
+new ResizeObserver(subtitles.syncVideoChrome).observe($("joinVideo"));
 
 // ---------------- Done: the timeline ----------------
 // The strip under the script table -- the ruler, the three lanes over it, the
@@ -2363,7 +2425,7 @@ const timeline = initTimelineUi({
   getPlayerClock: () => $(onEraseTab() ? "eraseTime" : "videoTime"),
   videos: () => [doneVideo, $("eraseVideo")],
   // The video lane's name, film strip and waveform: the open job's original.
-  getMedia: () => (state.job ? { kind: "job", id: state.job.id, name: jobLabel(state.job) } : null),
+  getMedia: () => (state.job ? { kind: "job", id: state.job.id, name: jobLabel(state.job), media: state.job.media } : null),
   getSubStyle: subtitles.getSubStyle,
   subCueOf: subtitles.subCueOf,
   saveSubStyle: subtitles.saveSubStyle,
@@ -2376,6 +2438,9 @@ const timeline = initTimelineUi({
   toggleDonePlay: () => (onEraseTab() ? toggleErasePlay() : donePlayer.toggleDonePlay()),
   markClippedNames: projects.markClippedNames,
   ownSubtitles: () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions",
+  // A video brought into this audio project: its lanes, cuts and speed.
+  getJoin: () => joinPlayer.getJoin(),
+  changeJoinVideo: () => joinPlayer.change(),
 });
 // The keyboard, the observer that re-measures the track and the window resize
 // that puts the remembered pane sizes back -- everything that listens outside

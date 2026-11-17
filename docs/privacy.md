@@ -8,10 +8,10 @@ CAM++, key or no key. One step can still leave by default: translation sends the
 transcript text through your own ChatGPT account on a new install (a computer that
 already has the Hunyuan model translates locally). With **Whisper** and a local translator (Hunyuan or
 Gemma), nothing from the video leaves at all. Set **Choose a model** to
-**Perso API** and the video is uploaded to Perso, which makes the whole
-dub; that needs a Perso API key.
+**Perso API** and the video, or the audio file you added, is uploaded to Perso, which
+makes the whole dub; that needs a Perso API key.
 
-Perso is a service of ESTsoft Inc. What it does with an uploaded video is set out in
+Perso is a service of ESTsoft Inc. What it does with an uploaded file is set out in
 its own [privacy policy](https://perso.ai/privacy) and
 [terms of use](https://info.perso.ai/policy-perso-saas/policy/terms-of-service-en/docs/260526.html).
 
@@ -19,7 +19,7 @@ What each dubbing service receives, precisely:
 
 | If you add | What is sent | Where |
 |---|---|---|
-| **Perso API key** | **The video file itself** (the part you kept) is uploaded. With Perso API dubbing, Perso transcribes, translates and voices it and sends back the finished video; the project's name goes with it, as its title on your Perso workspace. Dubbing on this computer, the default, can set **Speech-to-text** and **Voice separation** to Perso; each of those uploads the video too, with the project's name, as does **Separate audio** on Perso. | Perso |
+| **Perso API key** | **The video or audio file itself** (the part you kept) is uploaded. With Perso API dubbing, Perso transcribes, translates and voices it and sends back the finished dub; the project's name goes with it, as its title on your Perso workspace. Dubbing on this computer, the default, can set **Speech-to-text** and **Voice separation** to Perso; each of those uploads the file too, with the project's name, as does **Separate audio** on Perso. | Perso |
 | **Google Gemini key** | **The transcript text only** — not the video, not the audio. | Google |
 | **ChatGPT sign-in** (the default translator) | **The transcript text**, with the translation instructions, sent through your own ChatGPT account, under that account's own data settings. The program that carries it (OpenAI's Codex) runs in a folder of PersoDub's own with every tool switched off, so it reads nothing else on your computer and none of your own Codex settings go along; OpenAI's program may send its own usage statistics. The sign-in is OpenAI's own flow and stays on your computer; PersoDub never sees the password or token. | OpenAI |
 
@@ -58,6 +58,22 @@ The conversation carries on from one job to the next, and the thread is kept by 
 assistant's own CLI on your machine — closing PersoDub does not end it. Picking no
 assistant means nothing runs and nothing is sent.
 
+## Share usage data
+
+One switch, **Share usage data** in **Settings → Privacy**, covers the three things the
+next sections describe: the usage counts, which screens and buttons were used, and the
+job logs with their failure reports. It is on to begin with. It can be turned off at any
+time in **Settings → Privacy** and takes effect without a restart.
+
+These used to be three switches; they are one now. On a computer where only one or two
+of them had been turned off, the one switch starts on. Where the usage counts and the
+failure reports had both been turned off, it stays off.
+
+The switch writes three lines in the kit's `kit.env`, named in the sections below. By
+hand, `PERSODUB_NO_ANALYTICS=1` and `PERSODUB_NO_REPORTS=1` together turn everything
+off. Any other mix of the three lines lasts only until the app is next opened, which
+puts all three back on.
+
 ## Usage counts
 
 PersoDub reports eight events — app launch, dub finished, dub failed, subtitles erased,
@@ -74,28 +90,27 @@ language, each as a short code such as `en` or `pt-BR`. Burning in subtitles say
 whether it finished or failed, and on a failure its short code. A launch says whether a Perso key is set, as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
 workspace or balance; no IP address is stored.
 
-A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
-with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no
-restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
-The random install ID is made the first time the app starts, whether the counts are on
-or off, and kept on this computer. With the counts off it is not sent here; its first 12
-characters still go with the job logs below while they are on.
+A launch counts once a day; every dub counts. Turn them off with **Share usage data** in
+**Settings → Privacy**; its line in the kit's `kit.env` is `PERSODUB_NO_ANALYTICS=1`. It
+applies to the next event, no restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
+The random install ID is made the first time the app starts, whether Share usage data is
+on or off, and kept on this computer. With it off the ID is not sent here, nor with the job
+logs below; while it is on, its first 12 characters also go with those logs.
 
-## Share App Analytics
+## Screens and buttons
 
 From 0.9.2 the app can record which buttons, links, tabs and menu items you press and which
 screens you open, to see which parts of it people use. Each press is a name taken from the
 app's own markup (for example `home_nav_settings`), the screen's name and the time; each
 batch also carries the random install ID, the app version, the edition, and your operating
-system and its version, and, signed in to the production edition, the account as a one-way
-hash of its Perso number that cannot be turned back into the account. Never what you type,
-your video, files, filenames, paths, links, scripts, the account's number or its address. The batches go to the same relay as the job logs, every 30
+system and its version. Never what you type,
+your video, files, filenames, paths, links or scripts. PersoDub has no account of its own:
+the place for one in each batch is always empty. The batches go to the same relay as the job logs, every 30
 seconds, which passes them to Google Analytics (and later Amplitude) and keeps nothing itself.
 
-The same switch records the steps of your way through the app: the app opened (and whether
-it is this computer's first time) and closed (on which screen, signed in or not, after how
-many seconds), the install, the sign-in (started, handed to the browser, finished, cancelled
-or failed, whether the account was just made, whether it has an API key), a video brought in
+It also records the steps of your way through the app: the app opened (and whether
+it is this computer's first time) and closed (on which screen and after how many seconds; its
+`signed_in` is always `false`, PersoDub having no sign-in of its own), the install, a video brought in
 (picked, dropped or a link, video or sound), a dubbing started (local or Perso API, the
 language it goes into, the video's length in minutes and seconds, the speakers asked for), its
 stages and how long each took, how it ended and, for a failure, the one error code a failure
@@ -106,17 +121,16 @@ the app from a fixed list: never a title, a file name, a link, what an inquiry s
 address. The last batch is sent as the app closes, waiting three seconds at most; what does
 not get through goes the next time the app opens.
 
-It is on to begin with in both editions (before 1.0.1, in the production edition only), and
-each batch names its edition, production or open source, so the two are counted apart. Turn
-it on or off in **Settings → Privacy**, or with `PERSODUB_EVENTS=1` or `0` in `kit.env`; it
-applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing
+It is on to begin with (from 1.0.1), and each batch names its edition. **Share usage
+data** in **Settings → Privacy** turns it on or off; its line in `kit.env` is
+`PERSODUB_EVENTS=1` or `0`. It applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing
 leaves, and `PERSODUB_EVENTS_DEBUG=1` writes how many would have been sent into the app's
 log instead of sending them. `PERSODUB_EVENTS_SEND=1` is the opposite, for checking the road end to end from a
 from-source run: it sends even where a developer's run would only count. No build sets it.
 
 ## Job logs
 
-With this switch on, the full logs of every job, finished or failed, are kept for 30 days
+With **Share usage data** on, the full logs of every job, finished or failed, are kept for 30 days
 on a private dashboard and never put in a public issue. When a dub, a subtitle erase or
 an audio separation finishes, its logs go there with a short record: which kind of job it
 was, the machine and the app version as a report below carries them, and how many whole
@@ -165,9 +179,9 @@ not its words, and a Perso job by the credits it used, never your balance (from 
 earlier versions could quote a translation in an error sentence). The relay that posts the
 issue does not store your IP address, and applies the same rules a second time.
 
-Turn it off in **Settings → Privacy** (**Help improve PersoDub**) or with `PERSODUB_NO_REPORTS=1`
-in the kit's `kit.env`; it applies to the next job, no restart. This is a separate switch from
-the usage counts above — turning one off leaves the other alone.
+Turn it off with **Share usage data** in **Settings → Privacy**; its line in the kit's
+`kit.env` is `PERSODUB_NO_REPORTS=1`. It applies to the next job, no restart. This is the
+same switch as the usage counts above: turning it off stops both.
 `PERSODUB_REPORTS_DEBUG=1` prints what would be sent instead of sending it, and a
 PersoDub run from source never reports at all.
 

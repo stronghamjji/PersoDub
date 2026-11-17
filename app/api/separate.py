@@ -11,7 +11,8 @@ stamped on the record.
 
 The two files are handed out by the routes a dubbing's stems already use
 (app/api/results.py: /api/dub/result/{jid}/stems and /stem/{which}), so
-playing them and exporting them as mp3 or wav is one code path for both.
+playing them and exporting them as MP3, WAV, FLAC or M4A is one code path
+for both.
 
 On this computer the separation needs the engine pack; a start without it
 answers 409 with the same payload a dubbing's start does, and the screen
@@ -28,7 +29,7 @@ from app import engines_status, media, media_preview, separate_launch, state
 from app.api import _launch as launch_api
 from app.api import downloads as downloads_api
 from app.api._launch import check_space, goes_beside_the_line, job_dir, launch_job, require_perso_workspace
-from app.api._shared import check_ranges_fit, check_trim, parse_ranges, work_dir_of
+from app.api._shared import check_ranges_fit, check_trim, parse_ranges, same_media, work_dir_of
 from app.api.erase import _source
 from app.i18n import t
 from app.jobs import JobKind, JobStatus, kind_of
@@ -103,6 +104,8 @@ def separate_start(
     engine is "local" (this computer) or "perso" (Perso's API, which spends
     credits). trim_start/trim_end or ranges cut the video down first, exactly
     as they do for a dubbing and an erase; a trim or kept parts, not both.
+    A file that is sound only is separated the same way, and its record says
+    media "audio", as a dubbing's does.
 
     Answers as soon as the job is on the queue; GET /api/separate/{job_id} is
     what follows it.
@@ -124,6 +127,10 @@ def separate_start(
     work = job_dir(project, "audio")
     video_path = os.path.join(work, "input.mp4")
     copy_into(video_path)
+    # "audio" for sound with no picture, as a dubbing's record says it: a held
+    # file's own record knows, and one sent straight here is asked now.
+    held = downloads_api.download_store.get((download_id or "").strip())
+    kind = held.media if held else downloads_api.held_media(video_path)
     try:
         if trim_start is not None:
             _cut_video(video_path, trim_start, trim_end)
@@ -153,6 +160,7 @@ def separate_start(
         # The held video this was cut from: a dubbing of the same video and
         # the same parts takes these two files instead of separating again.
         **({"download_id": (download_id or "").strip()} if (download_id or "").strip() else {}),
+        **same_media({"media": kind}),
     }
     return _launch(work, fields, project)
 
@@ -180,6 +188,7 @@ def separate_retry(jid: str):
         "separation": engine, "from_link": False,
         "trim": job.get("trim"), "ranges": job.get("ranges"),
         **({"download_id": job["download_id"]} if job.get("download_id") else {}),
+        **same_media(job),
     }
     return _launch(work, fields, project)
 
@@ -245,10 +254,10 @@ def separate_open(jid: str):
         raise HTTPException(409, t("This project's video is no longer on disk."))
     again = downloads_api.download_store.add_file(
         state.WORKSPACE, title, downloads_api.seconds_of(source),
-        lambda dest: shutil.copyfile(source, dest))
+        lambda dest: shutil.copyfile(source, dest), media=job.get("media"))
     state.job_store.update(jid, held_again=again.id)
     # Into job.json at once: a finished job's file is not written again, so a
     # restart would forget the copy and the next reopen would make another.
     state.job_store.persist(jid, work_dir_of(job))
     return {"download_id": again.id, "title": again.title, "duration_sec": again.duration_sec,
-            "ranges": None}
+            "ranges": None, **same_media(job)}

@@ -13,13 +13,6 @@ name: Build Windows installer
 
 on:
   workflow_dispatch:
-    inputs:
-      edition:
-        description: Edition to build
-        required: false
-        default: opensource
-        type: choice
-        options: [opensource, production]
   push:
     branches: [feature/windows-support]
 
@@ -52,14 +45,10 @@ jobs:
         env:
           CAMPPLUS_SRC: ${{ github.workspace }}\campplus.onnx
           CSC_IDENTITY_AUTO_DISCOVERY: "false"  # no certificate: do not go looking for one
-          # Open source unless a hand-started run picks production
-          # (desktop/src/edition.js); a release build is the open-source one.
-          PERSODUB_EDITION: ${{ github.event.inputs.edition || 'opensource' }}
           # The support web app (desktop/src/edition.js BUILD_KEYS), from the
-          # repository's secret, for either edition.
+          # repository's secret.
           PERSODUB_INQUIRY_URL: ${{ secrets.PERSODUB_INQUIRY_URL }}
-        # The production build is PersoDubbing on screen (desktop/src/edition.js displayName).
-        run: npm run ${{ github.event.inputs.edition == 'production' && 'dist:win:prod' || 'dist:win' }}
+        run: npm run dist:win
 
       - uses: actions/upload-artifact@v4
         with:

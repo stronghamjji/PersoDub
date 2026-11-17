@@ -19,6 +19,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from app import media, state
 from app.api import _launch as launch_api
 from app.api._launch import check_space, job_dir
+from app.api._shared import require_video
 from app.api.erase import _source
 from app.dub_script import DUB_NAME
 from app.i18n import t
@@ -36,6 +37,7 @@ def captions_import(download_id: str = Form(...), srt: UploadFile = File(...),
 
     The subtitles are read before anything is copied: a file with no line
     the app can read is refused with 422, a video that is not held with 404.
+    A held audio file is refused with 422: there is no picture to lay them on.
     Lines past the end of the video are cut there (clamp_cues).
     """
     try:
@@ -52,6 +54,13 @@ def captions_import(download_id: str = Form(...), srt: UploadFile = File(...),
     work = job_dir(project, "captions")
     video = os.path.join(work, "input.mp4")
     copy_into(video)
+    # Asked outright: an audio file has a length too (media.video_duration),
+    # so the length below no longer tells it from a video.
+    try:
+        require_video(video)
+    except HTTPException:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
     try:
         seconds = media.video_duration(video)
     except Exception:

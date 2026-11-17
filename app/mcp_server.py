@@ -702,7 +702,11 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
               translator: str = "", confirm: bool = False,
               stt: str = "", separation: str = "", voice: str = "",
               perso_model: str = "") -> dict:
-    """Put ONE video into PersoDub's dubbing queue.
+    """Put ONE video or audio file into PersoDub's dubbing queue.
+
+    video_path is the file: a video, or audio in WAV, FLAC, MP3 or M4A. An
+    audio file is dubbed the same way in both modes and comes back as dubbed
+    audio, with no video; anything else is refused with a sentence.
 
     target_language (and optional source_language, else auto-detected) are
     codes: en ko zh fr de it ja pt ru es. A local dub spoken by the omnivoice
@@ -745,8 +749,8 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     dub from then on.
 
     voice picks, FOR THIS DUB ONLY, the engine that speaks a local dub:
-    "qwen3" or "omnivoice" (both free, this machine; omnivoice in the
-    open-source edition only); empty keeps the app's default.
+    "qwen3" or "omnivoice" (both free, this machine); empty keeps the app's
+    default.
 
     perso_model picks the voice model of a perso dub when the user names one
     -- any model Perso lists for the language, such as "linnet_4" (the default,
@@ -901,8 +905,8 @@ def _dub_start_fields(code, dub_mode, source_language, num_speakers, translator,
     field names (tests/test_mcp_dub_contract.py holds the two sides together).
     `voice` is the engine named for this dub and is posted; `speaks` is the
     one the language's name is read from (the app's default when none was named)."""
-    # Always said, local included: the server's own default is Perso in the
-    # production edition (app/setup.py), and a local dub that left it unsaid went to
+    # Always said, local included: the server's own default can be Perso
+    # (app/setup.py), and a local dub that left it unsaid went to
     # Perso and spent credits the agent had promised were not needed (Windows F10, 2026-10-07).
     fields = {"language": languages.lookup(dub_mode, code, speaks)["name"], "language_code": code,
               "dub_mode": dub_mode}
@@ -1039,26 +1043,32 @@ def download_model(model_id: str) -> dict:
 
 @mcp.tool()
 def list_videos(folder: str) -> dict:
-    """List the video files in ONE folder on this computer, newest first.
+    """List the video and audio files in ONE folder on this computer, newest
+    first.
 
     folder is a path the user names (e.g. "~/Downloads"). Only video files
-    are listed (.mp4 .mov .mkv .webm .avi), nothing is opened or changed, and
-    subfolders are not entered. Each entry carries name, path (hand this to
-    the other tools), size_mb and modified. This plus the user's word is how
-    "the second one" or "the newest one" becomes a real file path.
+    (.mp4 .mov .mkv .webm .avi) and the audio files a dubbing takes (WAV,
+    FLAC, MP3, M4A) are listed, nothing is opened or changed, and subfolders
+    are not entered. Each entry carries name, path (hand this to the other
+    tools), size_mb and modified. This plus the user's word is how "the
+    second one" or "the newest one" becomes a real file path. An audio file
+    can be dubbed (queue_dub); the tools that work on a picture (cut_clip,
+    erase_subtitles, burn_subtitles) refuse it.
 
-    The videos PersoDub is holding are listed first, marked held=true: a link
+    The files PersoDub is holding are listed first, marked held=true: a link
     the user fetched on the New project screen is a real file on this computer,
     sitting where they would never think to look for it.
     """
     root = os.path.expanduser(folder)
     if not os.path.isdir(root):
         raise Refusal("No such folder: %s" % folder)
-    exts = (".mp4", ".mov", ".mkv", ".webm", ".avi")
+    # The audio a dubbing takes is the backend's own list, so a format added
+    # there is listed here too.
+    exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", *("." + fmt for fmt in media.AUDIO_CODECS))
     videos = []
     for entry in os.scandir(root):
         # "._x" is macOS metadata litter, "." anything is hidden -- neither is
-        # a video the user means.
+        # a file the user means.
         if not entry.is_file() or entry.name.startswith("."):
             continue
         if not entry.name.lower().endswith(exts):

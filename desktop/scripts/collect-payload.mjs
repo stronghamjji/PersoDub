@@ -4,7 +4,7 @@ import { cpSync, rmSync, mkdirSync, existsSync, readFileSync, writeFileSync } fr
 import { basename, join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { EDITIONS, BUILD_ENV, BUILD_KEYS, PRODUCTION_UPDATE_URL, buildEdition, buildEnvText } from "../src/edition.js";
+import { BUILD_ENV, BUILD_KEYS, buildEnvText } from "../src/edition.js";
 
 const DESKTOP = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO = dirname(DESKTOP);
@@ -25,10 +25,6 @@ export function buildKitVersion(version, gitSha) {
   return gitSha ? `${version}+${gitSha}` : version;
 }
 
-// `--edition <name>` (or `--edition=<name>`) on the command line, which wins
-// over PERSODUB_EDITION in the environment: package.json's dist:*:prod
-// scripts pass it, so a production build never depends on how the shell sets
-// a variable. Undefined when not given; a flag without a name stops the build.
 // What of the app goes in the payload: not the tests beside the code nor their
 // helpers, which app.asar leaves out too (electron-builder.js, 1.0.1). `rel` is
 // the path under the repo, in either slash.
@@ -38,24 +34,8 @@ export function shipped(rel) {
     && !/^ui\/(testlib|check-inline\.mjs)(\/|$)/.test(p);
 }
 
-export function editionFromArgs(args) {
-  for (const [i, arg] of args.entries()) {
-    let name;
-    if (arg === "--edition") name = args[i + 1];
-    else if (arg.startsWith("--edition=")) name = arg.slice("--edition=".length);
-    else continue;
-    if (!name || name.startsWith("--")) throw new Error("--edition needs a name: opensource or production.");
-    return name;
-  }
-  return undefined;
-}
-
 function main() {
   const campplusSrc = resolveCampplusSrc(process.env);
-  // Checked before the old payload is deleted: an unknown edition stops the
-  // build here.
-  const named = editionFromArgs(process.argv.slice(2));
-  const edition = buildEdition(named === undefined ? process.env : { ...process.env, PERSODUB_EDITION: named });
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(join(OUT, "app-repo"), { recursive: true });
 
@@ -83,21 +63,12 @@ function main() {
     gitSha = null;
   }
   writeFileSync(join(OUT, "KIT_VERSION"), buildKitVersion(version, gitSha));
-  // EDITION carries the edition into the packaged app, where the environment
-  // it runs in cannot change it (src/edition.js readEdition).
-  writeFileSync(join(OUT, "EDITION"), edition);
-  console.log(`payload: ${edition} edition, ${EDITIONS[edition] || "no repository"}`);
   // The support web app, from this command's environment (src/edition.js
   // BUILD_KEYS): a build without PERSODUB_INQUIRY_URL cannot send an inquiry,
-  // and sends the open-source Send feedback to the issues page instead. The
-  // production build's update address is in the code (src/edition.js
-  // PRODUCTION_UPDATE_URL), and without one it never checks.
+  // and sends Send feedback to the issues page instead.
   const built = buildEnvText(process.env);
   if (built) writeFileSync(join(OUT, BUILD_ENV), built);
   for (const k of BUILD_KEYS) console.log(`payload: ${k} ${process.env[k] ? "set" : "NOT set"}`);
-  if (edition === "production") {
-    console.log(`payload: PRODUCTION_UPDATE_URL ${PRODUCTION_UPDATE_URL ? "set" : "NOT set: no update checks"}`);
-  }
 
   console.log(`payload ready at ${OUT}`);
 }

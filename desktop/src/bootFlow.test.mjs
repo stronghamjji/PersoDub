@@ -80,7 +80,7 @@ test("an install that stops names its step on the error screen, and shell.log te
   const lines = [];
   const app = { getVersion: () => "1.2.3", getPath: () => join(base, "userData") };
   const boot = createBoot({
-    app, ctx: {}, appDir, edition: "opensource", shellLog: (line, level = "INFO") => lines.push(`${level} ${line}`),
+    app, ctx: {}, appDir, shellLog: (line, level = "INFO") => lines.push(`${level} ${line}`),
     countUsage: () => {}, sendReport: () => {}, flushReports: async () => {}, startUpdater: () => {},
   });
   await boot(win);
@@ -128,7 +128,7 @@ test("an install that stops records its start, its end with the reason, and the 
   const win = { loadFile: async () => {}, webContents: { send: () => {} } };
   const app = { getVersion: () => "1.2.3", getPath: () => join(base, "userData") };
   const boot = createBoot({
-    app, ctx: {}, appDir, edition: "production", shellLog: () => {}, countUsage: () => {}, sendReport: () => {},
+    app, ctx: {}, appDir, shellLog: () => {}, countUsage: () => {}, sendReport: () => {},
     flushReports: async () => {}, startUpdater: () => {}, track: (name, props) => steps.push([name, props]),
   });
   await boot(win);

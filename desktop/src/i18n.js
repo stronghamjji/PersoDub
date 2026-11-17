@@ -24,7 +24,7 @@ let language = "en";
 let systemLanguage = "en";
 
 /** "ko" for a Korean system locale (ko, ko-KR), "en" for every other. */
-export function localeLanguage(osLocale) {
+function localeLanguage(osLocale) {
   return String(osLocale || "").toLowerCase().startsWith("ko") ? "ko" : "en";
 }
 
@@ -73,8 +73,8 @@ export function useLanguage({ osLocale, kitDir } = {}) {
 }
 
 /** The sentence `key` in the current language, `{name}` filled from `vars`. */
-// The product's name in every sentence that says {app}: set once from the
-// edition (src/edition.js displayName), "PersoDub" until then.
+// The product's name in every sentence that says {app}: set once at launch
+// (main.js, src/edition.js PRODUCT), "PersoDub" until then.
 let appName = "PersoDub";
 export function setAppName(name) { appName = name || "PersoDub"; }
 

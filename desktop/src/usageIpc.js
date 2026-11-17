@@ -1,5 +1,6 @@
 import { analyticsFile, classifyError, countEvent, dubFacts, resolveAnalyticsMode } from "./analytics.js";
 import { envWithKit } from "./kitEnv.js";
+import { EDITION } from "./edition.js";
 import { IS_WIN } from "./platform.js";
 
 // Usage counts. What leaves, and the switches that stop it, are decided in
@@ -16,8 +17,8 @@ export const hasPersoKey = (kitDir) => (envWithKit(kitDir).PERSO_API_KEY || "").
 // before it goes anywhere near a URL: the page is a web page.
 export const isJobId = (id) => /^[0-9a-f]{6,32}$/.test(String(id || ""));
 
-/** countUsage(event, kitDir, errorCode, step, facts), for this app and its edition. */
-export function usageCounter(app, edition) {
+/** countUsage(event, kitDir, errorCode, step, facts), for this app. */
+export function usageCounter(app) {
   function analyticsMode(kitDir) {
     return resolveAnalyticsMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
   }
@@ -32,7 +33,7 @@ export function usageCounter(app, edition) {
         url: COUNT_ENDPOINT,
         os: IS_WIN ? "windows" : "mac",
         version: app.getVersion(),
-        edition,
+        edition: EDITION,
         errorCode,
         step,
         // A dub's Perso facts (dubFacts) or a launch's key flag; analytics.js

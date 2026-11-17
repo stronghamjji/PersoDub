@@ -340,6 +340,20 @@ test("a kept draft is the first card: marked Draft, with how much its cuts kept"
   assert.doesNotMatch(h.$("projectsGrid").innerHTML, /No projects yet/);
 });
 
+// A video element shows nothing for a sound file (ui/src/mediaKind.mjs).
+test("an audio draft's card is a waveform tile where a video's is a frame of it", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.renderDrafts([{ ...KEPT[0], name: "talk.wav", media: "audio" }]);
+  const card = h.$("projectsGrid").innerHTML;
+  assert.match(card, /<div class="proj-thumb">\s*<div class="proj-img proj-wave"><svg class="lu" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 10v3"\/>/);
+  assert.doesNotMatch(card, /<video|\/api\/downloads\//);
+  // Everything else a draft's card says is still on it.
+  assert.match(card, /<span class="proj-chip proj-chip-muted">Draft<\/span>/);
+  assert.match(card, /<span class="proj-dur">00:41<\/span>/);
+  assert.match(card, /<div class="proj-name">talk\.wav<\/div><div class="proj-meta">Not dubbed yet<\/div>/);
+});
+
 // A draft left on the Erase tab read "Not dubbed yet" (2026-10-21).
 test("a draft left on the Erase tab says what it was being made into, with the eraser", (t) => {
   const h = harness();

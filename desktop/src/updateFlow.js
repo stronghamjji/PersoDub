@@ -16,13 +16,11 @@ import { homeText, secondsSince, sizeText, urlText } from "./logLine.js";
 //
 // ctx.updateState is the update as last announced, which the window re-sends
 // on every page load; ctx.engines and ctx.win are read when they are needed.
-// `edition` is the build's (edition.js), whose updates are read: its
-// repository's releases, or the production edition's PRODUCTION_UPDATE_URL.
 // `load` imports electron-updater and electron; a test hands it stand-ins.
 // `track` records an update found as a step (events.js track), and
 // `beforeQuit` is waited for before Restart to update quits (the last batch
 // of events, which quitAndInstall may not give will-quit the time to send).
-export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (name) => import(name),
+export function createUpdater({ app, dialog, ctx, shellLog, load = (name) => import(name),
                                 track = () => {}, beforeQuit = async () => {} }) {
   let updaterStarted = false;
   let updateDownloaded = false;
@@ -39,15 +37,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (nam
       shellLog(`UPDATE CHECK OFF: ${app.isPackaged ? "PERSODUB_DISABLE_UPDATE_CHECK=1" : "not a packaged app"}`);
       return;
     }
-    const feed = resolveFeed(process.env, edition);
-    if (!feed) {
-      shellLog("UPDATE CHECK OFF: this production build has no update address (desktop/src/edition.js PRODUCTION_UPDATE_URL is empty)");
-      // The page's update window then names the version and nothing more: it
-      // cannot say the app is up to date (ui/src/updateWindow.mjs).
-      ctx.updateState = { phase: "check-off" };
-      if (!win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
-      return;
-    }
+    const feed = resolveFeed(process.env);
     // Whether the error event below has said what went wrong: a failed check
     // also rejects checkForUpdates, and the catch at the end must not say it twice.
     let reported = false;

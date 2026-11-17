@@ -60,7 +60,7 @@ const SAVED_STYLE = { enabled: true, preset: "sticker", pos: null, size: null, c
  * The browser's globals stay until restore().
  */
 function harness({ answer = async () => ({ ok: true }), state = { job: null, jobId: null },
-                   lines = [{ start: 0, end: 5, text: "Hello there" }] } = {}) {
+                   lines = [{ start: 0, end: 5, text: "Hello there" }], getPicture = undefined } = {}) {
   const shown = [];
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
@@ -93,6 +93,7 @@ function harness({ answer = async () => ({ ok: true }), state = { job: null, job
                 drawTimelineTrack: () => { calls.drawTimelineTrack++; } },
     getDoneSource: () => "dubbed",
     showVideoSource: async () => {},
+    getPicture,
   });
   const restore = () => {
     for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
@@ -324,5 +325,30 @@ test("a press on a dub's subtitle selects nothing and brings up no tab; a burn-i
     } finally {
       h.restore();
     }
+  }
+});
+
+// A video brought into an audio project is shown on an element of its own
+// (ui/src/joinPlayer.mjs); the sound, and so the subtitles' timing, stays on
+// the player.
+test("the subtitles are placed on the element the picture is on, and timed by the player", async () => {
+  // A 16:9 picture in a 400 x 400 element that starts 50 px in: letterboxed
+  // to 400 x 225, 87.5 px down.
+  const picture = { offsetLeft: 50, offsetTop: 0, offsetWidth: 400, offsetHeight: 400, videoWidth: 1920, videoHeight: 1080 };
+  let on = picture;
+  const lines = [{ start: 0, end: 5, text: "Hello there" }, { start: 5, end: 9, text: "Second line" }];
+  const h = harness({ lines, getPicture: () => on });
+  try {
+    await h.subs.loadSubStyle("j1");
+    h.video.currentTime = 6;
+    h.subs.updateSubtitleNow();
+    assert.equal(h.$("subOverlayText").textContent, "Second line", "the line of the sound's moment");
+    assert.deepEqual({ ...h.$("subOverlay").style }, { left: "50px", top: "87.5px", width: "400px", height: "225px" });
+    // No video brought in: the player's own box, as before.
+    on = h.video;
+    h.subs.updateSubtitleNow();
+    assert.deepEqual({ ...h.$("subOverlay").style }, { left: "0px", top: "0px", width: "200px", height: "100px" });
+  } finally {
+    h.restore();
   }
 });

@@ -11,7 +11,7 @@ import { currentLanguage, useLanguage } from "./i18n.js";
 
 const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition, inquiry } = {}) {
+function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", inquiry } = {}) {
   const opened = [];
   const on = {};
   class BrowserWindow {
@@ -35,7 +35,7 @@ function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "
   }
   const win = createWindow({
     app: { isPackaged: true }, BrowserWindow, ctx, appDir: "/app", repo: "owner/PersoDub", locale: "ko", platform,
-    edition, inquiry,
+    inquiry,
     screen: { getPrimaryDisplay: () => ({ workAreaSize: workArea }) },
     shell: { openExternal: (url) => opened.push(url) },
   });
@@ -55,24 +55,13 @@ test("the window opens at 1280 by 800, or at the screen's size when that is smal
   const small = setup({ workArea: { width: 1100, height: 600 } }).win.options;
   assert.deepEqual([small.width, small.height, small.minWidth, small.minHeight], [1100, 600, 960, 600]);
   assert.deepEqual(big.webPreferences, { preload: join("/app", "preload.cjs"), contextIsolation: true, nodeIntegration: false,
-    // The page's GitHub links follow the build's edition (preload.cjs repo).
+    // The page's GitHub links follow the app's repository (preload.cjs repo).
     // ...and Auto's language follows the computer's (preload.cjs locale).
     // ...and the page is told which system it is on (preload.cjs platform).
-    // ...and its edition (preload.cjs edition), and the name it shows (preload.cjs name).
+    // ...and the name it shows (preload.cjs name).
     additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko", "--persodub-platform=darwin",
-      "--persodub-edition=opensource", "--persodub-name=PersoDub"] });
-  assert.equal(big.title, undefined, "the open-source window takes each page's title");
-});
-
-test("the production window is PersoDubbing whatever its page is called, and tells the page its edition and name", () => {
-  const { win, on } = setup({ edition: "production", platform: "win32" });
-  assert.equal(win.options.title, "PersoDubbing");
-  let kept = false;
-  on["win:page-title-updated"]({ preventDefault: () => { kept = true; } });
-  assert.ok(kept, "a page's own title does not replace it");
-  const args = win.options.webPreferences.additionalArguments;
-  assert.ok(args.includes("--persodub-edition=production"));
-  assert.ok(args.includes("--persodub-name=PersoDubbing"));
+      "--persodub-name=PersoDub"] });
+  assert.equal(big.title, undefined, "the window takes each page's title");
 });
 
 // Send feedback is the inquiry form only when the build has somewhere to
@@ -111,8 +100,6 @@ test("the preload stamps the system on the page, and the bundled screens can be 
   const preload = readFileSync(join(DESKTOP, "preload.cjs"), "utf8");
   assert.match(preload, /const PLATFORM_ARG = "--persodub-platform=";/);
   assert.match(preload, /document\.documentElement\.dataset\.platform = platform;/);
-  // ...and the edition, for the production edition's palette and type.
-  assert.match(preload, /if \(edition\) document\.documentElement\.dataset\.edition = edition;/);
   for (const name of ["loading", "installing", "not-installed", "error"]) {
     const html = readFileSync(join(DESKTOP, "screens", `${name}.html`), "utf8");
     assert.match(html, /\.drag \{ position: fixed; top: 0; left: 0; right: 0; height: 36px; -webkit-app-region: drag; \}/, name);
