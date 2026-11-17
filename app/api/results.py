@@ -303,6 +303,13 @@ def _only_with_a_video() -> HTTPException:
     return HTTPException(status_code=409, detail=t("Only for projects with a video."))
 
 
+def _listed(value: str, allowed) -> Optional[str]:
+    """`value` as `allowed` itself spells it, or None when it is not listed.
+    What goes into a file name below is then the list's own word, never the
+    caller's."""
+    return next((own for own in allowed if own == value), None)
+
+
 @router.get("/api/dub/result/{jid}")
 def dub_result(jid: str, ratio: Optional[str] = None):
     """Return the finished dubbed file -- inside a canvas of `ratio` when one
@@ -337,7 +344,8 @@ def dub_result_audio(jid: str, format: str = "mp3", download: int = 0):
     Kept in the job's folder as dub-audio.<format> and made again when a remade
     line has changed the video it came from.
     """
-    if format not in media.AUDIO_CODECS:
+    fmt = _listed(format, media.AUDIO_CODECS)
+    if fmt is None:
         raise HTTPException(status_code=422, detail=t("Audio is saved as MP3, WAV, FLAC or M4A."))
     j = state.job_store.get(jid)
     if j is None:
@@ -347,16 +355,16 @@ def dub_result_audio(jid: str, format: str = "mp3", download: int = 0):
     out = (j.get("result") or {}).get("out_path")
     if not out or not os.path.exists(out):
         raise HTTPException(status_code=404, detail=t("Result file not found"))
-    built = os.path.join(os.path.dirname(out), "dub-audio." + format)
+    built = os.path.join(os.path.dirname(out), "dub-audio." + fmt)
     if _stale(built, out):
         try:
-            media.run_new_file(media.audio_command(out, built, format), 0, t("Could not save the audio"))
+            media.run_new_file(media.audio_command(out, built, fmt), 0, t("Could not save the audio"))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
-    filename = "dub_%s.%s" % (_target_code(j), format)
+    filename = "dub_%s.%s" % (_target_code(j), fmt)
     headers = ({"Content-Disposition": 'attachment; filename="%s"' % filename}
                if download else None)
-    return FileResponse(built, media_type=media.AUDIO_MIME[format], headers=headers)
+    return FileResponse(built, media_type=media.AUDIO_MIME[fmt], headers=headers)
 
 
 # What the separation stage left in the job's folder (app/separate.py and
@@ -393,22 +401,24 @@ def dub_result_stem(jid: str, which: str, format: str = "mp3"):
     """The original video's speech alone ("voice") or everything but the
     speech ("background"), in one of the four formats of media.AUDIO_CODECS,
     built on first ask and kept in the job's folder as stem-<which>.<format>."""
-    if format not in media.AUDIO_CODECS:
+    fmt = _listed(format, media.AUDIO_CODECS)
+    if fmt is None:
         raise HTTPException(status_code=422, detail=t("Audio is saved as MP3, WAV, FLAC or M4A."))
-    if which not in _STEMS:
+    stem = _listed(which, _STEMS)
+    if stem is None:
         raise HTTPException(status_code=404, detail=t("No such audio."))
     j, work = _stem_job(jid)
-    src = os.path.join(work, _STEMS[which])
+    src = os.path.join(work, _STEMS[stem])
     if not os.path.isfile(src):
         raise HTTPException(status_code=404, detail=t("This project no longer has that audio."))
-    built = os.path.join(work, "stem-%s.%s" % (which, format))
+    built = os.path.join(work, "stem-%s.%s" % (stem, fmt))
     if _stale(built, src):
         try:
-            media.run_new_file(media.audio_command(src, built, format), 0, t("Could not save the audio"))
+            media.run_new_file(media.audio_command(src, built, fmt), 0, t("Could not save the audio"))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
-    return FileResponse(built, media_type=media.AUDIO_MIME[format],
-                        filename="%s_%s.%s" % (j.get("project") or "project", which, format))
+    return FileResponse(built, media_type=media.AUDIO_MIME[fmt],
+                        filename="%s_%s.%s" % (j.get("project") or "project", stem, fmt))
 
 
 @router.get("/api/dub/result/{jid}/original")
