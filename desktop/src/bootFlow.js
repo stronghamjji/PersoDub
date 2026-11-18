@@ -262,7 +262,10 @@ export function createBoot({ app, ctx, appDir, shellLog, countUsage, sendReport,
         });
       } catch (err) {
         const message = errorText(err);
-        const code = classifyError(message, { install: true, step: failedStep });
+        // A download's fetch says only "fetch failed"; its reason (a refused
+        // certificate, a full disk) is the cause it carries, so both are sorted.
+        const said = [message, err?.cause?.message].filter(Boolean).join(": ");
+        const code = classifyError(said, { install: true, step: failedStep });
         const place = toRun.findIndex((s) => s.id === failedStep) + 1;
         shellLog(`INSTALL FAILED at step ${place}/${toRun.length} ${failedStep} (${secondsSince(from)}s): ${code}`, "ERROR");
         // ...and under it what the tool said: its own last lines (exec.js), or the download's error.
@@ -274,8 +277,7 @@ export function createBoot({ app, ctx, appDir, shellLog, countUsage, sendReport,
         // The title says it stopped, the line under it where, and the sentence
         // why and what to press; the tool's own words fold under Details. A
         // download's fetch says only "fetch failed", its reason (a refused
-        // certificate) is the cause it carries.
-        const said = [message, err?.cause?.message].filter(Boolean).join(": ");
+        // certificate) is the cause it carries (said, above).
         const [sentence, note] = installStopText(said, failedStep);
         await showScreen(win, "error.html", {
           title: t("The install stopped"),

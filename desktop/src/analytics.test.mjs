@@ -474,6 +474,16 @@ test("a dropped download is recognised", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+// Issue #250: the app's own download could not reach github.com, and fetch
+// says only "fetch failed" -- the install was counted as "unknown". The cause
+// it carries still decides first when it names something the table knows.
+test("the app's own download that could not connect is the network", () => {
+  assert.equal(classifyError("fetch failed", { install: true, step: "python" }), "network");
+  assert.equal(classifyError("fetch failed: Connect Timeout Error (attempted address: github.com:443, timeout: 10000ms)",
+    { install: true, step: "python" }), "network");
+  assert.equal(classifyError("fetch failed: unable to get local issuer certificate", { install: true, step: "python" }), "certificate");
+});
+
 // The twenty reports of 2026-09-11..15 that arrived as "unknown". Both
 // sentences are real: the first is app/run_errors.py's, the second is what
 // torch says when the machine has no room left to allocate in.
