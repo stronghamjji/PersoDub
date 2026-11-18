@@ -167,6 +167,21 @@ test("a blocked folder is tried again, and told apart from a connection problem"
   assert.deepEqual(log, [1]);
 });
 
+// Windows refusing to start a program the security software has not let
+// through yet: node says only "spawn UNKNOWN", the step after the Python
+// download failed with it within a second (issue #226, three times on one
+// machine). It is the same blocked folder, tried again and told as such.
+test("a program Windows would not start (spawn UNKNOWN) is a blocked folder, tried again", async () => {
+  const { classifyError } = await import("./analytics.js");
+  assert.equal(classifyError("spawn UNKNOWN", { install: true, step: "venv-app" }), "permission");
+  const blocked = (detail, stepId) => classifyError(detail, { install: true, step: stepId }) === "permission";
+  const log = [], events = [];
+  await runInstall([flaky(["spawn UNKNOWN"], log)], { ...noWait, blocked, onProgress: (e) => events.push(e) });
+  assert.deepEqual(log, [1, 2]);
+  assert.deepEqual(events.filter((e) => /retrying/.test(e.detail || "")).map((e) => e.detail), ["Folder is blocked, retrying (2/3)"]);
+  assert.equal(events.at(-1).state, "done");
+});
+
 test("a 503 twice then success runs the step three times and reports the retries", async () => {
   const log = [];
   const events = [];

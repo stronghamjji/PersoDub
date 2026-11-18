@@ -387,6 +387,11 @@ const ERROR_PATTERNS = [
   // code that need not be EACCES: a Brazilian machine failed 33 times with
   // "EIO, Acesso negado." and every one counted as "unknown" (2026-10-29).
   [new RegExp(ACCESS_REFUSED.map(unaccented).join("|"), "i"), "permission"],
+  // Windows refusing to start a program at all: node says "spawn UNKNOWN"
+  // when Smart App Control or an antivirus has not let a fresh file through
+  // yet (issue #48). The install step after the Python download failed with
+  // it within a second, counted as "unknown" and never tried again (#226).
+  [/spawn UNKNOWN/, "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // pip and Python's ssl refusing a certificate. Ahead of "network" because
   // the answer is the machine's security software, not its connection: two
