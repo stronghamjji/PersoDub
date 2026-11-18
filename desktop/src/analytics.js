@@ -401,7 +401,9 @@ const ERROR_PATTERNS = [
   // Widening a rule can only move a message from "unknown" to "network"; no
   // message that already had a code can change, because every rule above this
   // one is tried first.
-  [/ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection refused|connection reset|download failed|sha256 mismatch/i, "network"],
+  // "fetch failed" is all the app's own download says when it cannot reach
+  // the server; its reason rides in the error's cause (issue #250).
+  [/ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection refused|connection reset|download failed|fetch failed|sha256 mismatch/i, "network"],
   // A stage the machine could not finish in the time it was given. Its own
   // word, because the answer is a faster machine or a shorter video, and
   // lumping it in with a crash hid the commonest failure of all: twenty of
