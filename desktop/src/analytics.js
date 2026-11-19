@@ -387,6 +387,11 @@ const ERROR_PATTERNS = [
   // code that need not be EACCES: a Brazilian machine failed 33 times with
   // "EIO, Acesso negado." and every one counted as "unknown" (2026-10-29).
   [new RegExp(ACCESS_REFUSED.map(unaccented).join("|"), "i"), "permission"],
+  // Windows App Control (Smart App Control, a company's WDAC policy) refusing
+  // to run a program: "[WinError 4551]" in words, or the bare NTSTATUS
+  // 0xC0E90002 as an exit code. Ahead of the "exit N" rule, which read both
+  // as a failed pip step (issue #253).
+  [/WinError 4551|Application Control policy|exit 3236495362\b/i, "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // pip and Python's ssl refusing a certificate. Ahead of "network" because
   // the answer is the machine's security software, not its connection: two
