@@ -131,6 +131,18 @@ test("every other cause reads the same during an install", () => {
 // "unknown" (2026-10-29). The words name it now, and so does the step: the
 // payload step only copies the app's own files, so anything it cannot read
 // there is the folder being blocked.
+// Windows App Control (Smart App Control, a company's WDAC policy) refusing
+// to run the kit's own python.exe: first as a bare NTSTATUS exit code
+// (0xC0E90002), then in words. Both read as a failed pip step (issue #253).
+test("a program Windows App Control will not run is a permission problem", () => {
+  const exe = "~\\AppData\\Local\\PersoDub\\python\\python.exe";
+  assert.equal(classifyError(`${exe} exit 1\nError: [WinError 4551] An Application Control policy has blocked this file`,
+    { install: true, step: "venv-app" }), "permission");
+  assert.equal(classifyError(`${exe} exit 3236495362`, { install: true, step: "venv-app" }), "permission");
+  // Any other exit is still a failed step.
+  assert.equal(classifyError(`${exe} exit 1`, { install: true, step: "venv-app" }), "step-failed");
+});
+
 test("a refusal in the computer's own language, or any payload-step failure, is a permission problem", () => {
   const said = "EIO, Acesso negado. '\\\\?\\C:\\Users\\x\\AppData\\Local\\PersoDubbing\\app'";
   assert.equal(classifyError(said), "permission");
