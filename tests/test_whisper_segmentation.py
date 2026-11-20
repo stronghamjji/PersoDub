@@ -73,3 +73,42 @@ def test_split_of_empty_word_list():
 def test_korean_prompt_is_punctuated():
     # The prompt is what teaches Whisper to emit sentence marks at all.
     assert "?" in wt.SENTENCE_PROMPTS["ko"] or "." in wt.SENTENCE_PROMPTS["ko"]
+
+
+class _FakeSegment:
+    def __init__(self, start, end, text, words=None):
+        self.start, self.end, self.text, self.words = start, end, text, words
+
+
+class _FakeInfo:
+    language = "en"
+
+
+class _AlignmentCrashModel:
+    """faster-whisper 1.2.1 raises this from find_alignment when a segment
+    comes back with no alignment pairs (issue #257); without word times the
+    same audio transcribes."""
+
+    def __init__(self):
+        self.calls = []
+
+    def transcribe(self, audio_path, language=None, word_timestamps=False, **kw):
+        self.calls.append(word_timestamps)
+        if word_timestamps:
+            def crashing():
+                yield _FakeSegment(0.0, 1.0, "Hello there.")
+                raise IndexError(
+                    "boolean index did not match indexed array along axis 0; "
+                    "size of axis is 0 but size of corresponding boolean axis is 1")
+            return crashing(), _FakeInfo()
+        return iter([_FakeSegment(0.0, 1.0, "Hello there."),
+                     _FakeSegment(1.0, 2.0, "How are you?")]), _FakeInfo()
+
+
+def test_word_time_alignment_crash_falls_back_to_lines_without_word_times():
+    model = _AlignmentCrashModel()
+    cues, language = wt._transcribe_with(model, "a.wav", None, True)
+    assert model.calls == [True, False]
+    assert language == "en"
+    assert [c["text"] for c in cues] == ["Hello there.", "How are you?"]
+    assert all("words" not in c for c in cues)

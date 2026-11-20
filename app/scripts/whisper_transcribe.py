@@ -111,7 +111,17 @@ def _transcribe_with(model, audio_path, language, word_timestamps, allow_split=T
     segments, info = model.transcribe(
         audio_path, language=language, word_timestamps=word_timestamps,
     )
-    cues = _cues_from(segments, word_timestamps)
+    try:
+        cues = _cues_from(segments, word_timestamps)
+    except IndexError:
+        if not word_timestamps:
+            raise
+        # faster-whisper's find_alignment indexes an empty alignment with a
+        # one-item mask on some audio and stops the whole run (issue #257).
+        # Word times are optional: transcribe again without them.
+        word_timestamps = False
+        segments, info = model.transcribe(audio_path, language=language)
+        cues = _cues_from(segments, word_timestamps)
 
     if allow_split and needs_split(cues) and info.language in SENTENCE_PROMPTS:
         segments, info = model.transcribe(
