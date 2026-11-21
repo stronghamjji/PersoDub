@@ -408,6 +408,9 @@ const ERROR_PATTERNS = [
   // the thirty-two reports in the four days after 0.6.0 were this, every one
   // of them counted as "unknown" (2026-09-15).
   [/timed out after|timed out|TimeoutExpired/i,      "timeout"],
+  // Windows' own sentence for a connection reset (errno 10054), which none of
+  // the spellings in the network rule above match (issue #262).
+  [/forcibly closed by the remote host/i,            "network"],
   // "not enough memory" is torch's own wording (DefaultCPUAllocator), which
   // the /allocate/ rule below never matched -- it says "Allocator". Windows'
   // "paging file is too small" is os error 1455, in the computer's own

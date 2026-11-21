@@ -474,6 +474,13 @@ test("a dropped download is recognised", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+// Issue #262: Windows says a dropped connection in its own sentence, behind
+// errno 10054, and a Perso dub that lost its upload was counted as "unknown".
+test("Windows' sentence for a connection the other end dropped is the network", () => {
+  assert.equal(classifyError("Perso dubbing failed. Check Settings, or use this computer for dubbing. "
+    + "Ask Perso if it keeps happening. (Reason: [Errno 10054] An existing connection was forcibly closed by the remote host)"), "network");
+});
+
 // The twenty reports of 2026-09-11..15 that arrived as "unknown". Both
 // sentences are real: the first is app/run_errors.py's, the second is what
 // torch says when the machine has no room left to allocate in.
